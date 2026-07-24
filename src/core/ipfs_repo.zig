@@ -41,7 +41,7 @@ pub const IPFSRepo = struct {
         }
 
         pub fn toJson(self: *const Metadata, allocator: std.mem.Allocator) ![]const u8 {
-            var json: std.ArrayList(u8) = .{};
+            var json: std.ArrayList(u8) = .empty;
             errdefer json.deinit(allocator);
 
             try json.appendSlice(allocator, "{");
@@ -140,45 +140,49 @@ pub const IPFSRepo = struct {
         }
     };
 
-    pub fn packWithObjects(allocator: std.mem.Allocator, repo: *Repository) ![]const u8 {
+    pub fn packWithObjects(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) ![]const u8 {
         var metadata = Metadata.init(allocator);
         defer metadata.deinit();
 
         const head_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "HEAD" });
         defer allocator.free(head_path);
 
-        const head_file = std.fs.cwd().openFile(head_path, .{}) catch |err| {
+        const head_file = std.Io.Dir.cwd().openFile(io, head_path, .{}) catch |err| {
             if (err == error.FileNotFound) {
                 std.debug.print("Warning: HEAD file not found\n", .{});
             }
             return err;
         };
-        defer head_file.close();
+        defer head_file.close(io);
 
+        var head_read_buf: [256]u8 = undefined;
+        var head_reader = head_file.reader(io, &head_read_buf);
         var head_buf: [256]u8 = undefined;
-        const head_bytes = try head_file.read(&head_buf);
+        const head_bytes = try head_reader.interface.readSliceShort(&head_buf);
         metadata.head_ref = try allocator.dupe(u8, std.mem.trim(u8, head_buf[0..head_bytes], " \n\r\t"));
 
         const refs_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "refs", "heads" });
         defer allocator.free(refs_path);
 
-        var refs_dir = std.fs.cwd().openDir(refs_path, .{ .iterate = true }) catch |err| {
+        var refs_dir = std.Io.Dir.cwd().openDir(io, refs_path, .{ .iterate = true }) catch |err| {
             if (err == error.FileNotFound) {
                 std.debug.print("Warning: refs directory not found\n", .{});
                 return metadata.toJson(allocator);
             }
             return err;
         };
-        defer refs_dir.close();
+        defer refs_dir.close(io);
 
         var it = refs_dir.iterate();
-        while (try it.next()) |entry| {
+        while (try it.next(io)) |entry| {
             if (entry.kind == .file) {
-                const ref_file = try refs_dir.openFile(entry.name, .{});
-                defer ref_file.close();
+                const ref_file = try refs_dir.openFile(io, entry.name, .{});
+                defer ref_file.close(io);
 
+                var ref_read_buf: [65]u8 = undefined;
+                var ref_reader = ref_file.reader(io, &ref_read_buf);
                 var ref_buf: [65]u8 = undefined;
-                const ref_bytes = try ref_file.read(&ref_buf);
+                const ref_bytes = try ref_reader.interface.readSliceShort(&ref_buf);
                 const ref_hash = std.mem.trim(u8, ref_buf[0..ref_bytes], " \n\r\t");
 
                 const ref_name = try std.fmt.allocPrint(allocator, "refs/heads/{s}", .{entry.name});
@@ -205,7 +209,7 @@ pub const IPFSRepo = struct {
                 }
                 const commit_cid = cid_mod.CID{ .hash = hash };
 
-                try uploadObjectTree(allocator, repo, &ipfs_client, commit_cid, &metadata.objects, &visited);
+                try uploadObjectTree(allocator, io, repo, &ipfs_client, commit_cid, &metadata.objects, &visited);
             }
         }
 
@@ -216,6 +220,7 @@ pub const IPFSRepo = struct {
 
     fn uploadObjectTree(
         allocator: std.mem.Allocator,
+        io: std.Io,
         repo: *Repository,
         ipfs_client: *IPFSClient,
         obj_cid: cid_mod.CID,
@@ -225,10 +230,10 @@ pub const IPFSRepo = struct {
         if (visited.contains(obj_cid.hash)) return;
         try visited.put(obj_cid.hash, {});
 
-        const obj_data = try repo.store.get(obj_cid);
+        const obj_data = try repo.store.get(io, obj_cid);
         defer allocator.free(obj_data);
 
-        const ipfs_cid = try ipfs_client.add(obj_data);
+        const ipfs_cid = try ipfs_client.add(io, obj_data);
 
         const local_cid_str = try obj_cid.toString(allocator);
         try objects_map.put(local_cid_str, ipfs_cid);
@@ -238,10 +243,10 @@ pub const IPFSRepo = struct {
             defer allocator.free(commit_obj.message);
 
             if (commit_obj.parent_cid) |parent_cid| {
-                try uploadObjectTree(allocator, repo, ipfs_client, parent_cid, objects_map, visited);
+                try uploadObjectTree(allocator, io, repo, ipfs_client, parent_cid, objects_map, visited);
             }
 
-            try uploadObjectTree(allocator, repo, ipfs_client, commit_obj.tree_cid, objects_map, visited);
+            try uploadObjectTree(allocator, io, repo, ipfs_client, commit_obj.tree_cid, objects_map, visited);
             return;
         } else |_| {}
 
@@ -250,51 +255,55 @@ pub const IPFSRepo = struct {
             defer tree.deinit();
 
             for (tree.entries.items) |entry| {
-                try uploadObjectTree(allocator, repo, ipfs_client, entry.cid, objects_map, visited);
+                try uploadObjectTree(allocator, io, repo, ipfs_client, entry.cid, objects_map, visited);
             }
             return;
         } else |_| {}
     }
 
-    pub fn pack(allocator: std.mem.Allocator, repo_path: []const u8) ![]const u8 {
+    pub fn pack(allocator: std.mem.Allocator, io: std.Io, repo_path: []const u8) ![]const u8 {
         var metadata = Metadata.init(allocator);
         defer metadata.deinit();
 
         const head_path = try std.fs.path.join(allocator, &.{ repo_path, ".zev", "HEAD" });
         defer allocator.free(head_path);
 
-        const head_file = std.fs.cwd().openFile(head_path, .{}) catch |err| {
+        const head_file = std.Io.Dir.cwd().openFile(io, head_path, .{}) catch |err| {
             if (err == error.FileNotFound) {
                 std.debug.print("Warning: HEAD file not found\n", .{});
             }
             return err;
         };
-        defer head_file.close();
+        defer head_file.close(io);
 
+        var head_read_buf: [256]u8 = undefined;
+        var head_reader = head_file.reader(io, &head_read_buf);
         var head_buf: [256]u8 = undefined;
-        const head_bytes = try head_file.read(&head_buf);
+        const head_bytes = try head_reader.interface.readSliceShort(&head_buf);
         metadata.head_ref = try allocator.dupe(u8, std.mem.trim(u8, head_buf[0..head_bytes], " \n\r\t"));
 
         const refs_path = try std.fs.path.join(allocator, &.{ repo_path, ".zev", "refs", "heads" });
         defer allocator.free(refs_path);
 
-        var refs_dir = std.fs.cwd().openDir(refs_path, .{ .iterate = true }) catch |err| {
+        var refs_dir = std.Io.Dir.cwd().openDir(io, refs_path, .{ .iterate = true }) catch |err| {
             if (err == error.FileNotFound) {
                 std.debug.print("Warning: refs directory not found\n", .{});
                 return metadata.toJson(allocator);
             }
             return err;
         };
-        defer refs_dir.close();
+        defer refs_dir.close(io);
 
         var it = refs_dir.iterate();
-        while (try it.next()) |entry| {
+        while (try it.next(io)) |entry| {
             if (entry.kind == .file) {
-                const ref_file = try refs_dir.openFile(entry.name, .{});
-                defer ref_file.close();
+                const ref_file = try refs_dir.openFile(io, entry.name, .{});
+                defer ref_file.close(io);
 
+                var ref_read_buf: [65]u8 = undefined;
+                var ref_reader = ref_file.reader(io, &ref_read_buf);
                 var ref_buf: [65]u8 = undefined;
-                const ref_bytes = try ref_file.read(&ref_buf);
+                const ref_bytes = try ref_reader.interface.readSliceShort(&ref_buf);
                 const ref_hash = std.mem.trim(u8, ref_buf[0..ref_bytes], " \n\r\t");
 
                 const ref_name = try std.fmt.allocPrint(allocator, "refs/heads/{s}", .{entry.name});
@@ -307,21 +316,26 @@ pub const IPFSRepo = struct {
         return metadata.toJson(allocator);
     }
 
-    pub fn unpack(allocator: std.mem.Allocator, repo_path: []const u8, json_data: []const u8) !void {
+    pub fn unpack(allocator: std.mem.Allocator, io: std.Io, repo_path: []const u8, json_data: []const u8) !void {
         var metadata = try Metadata.fromJson(allocator, json_data);
         defer metadata.deinit();
 
         const zev_path = try std.fs.path.join(allocator, &.{ repo_path, ".zev" });
         defer allocator.free(zev_path);
 
-        try std.fs.cwd().makePath(zev_path);
+        try std.Io.Dir.cwd().createDirPath(io, zev_path);
 
         const head_path = try std.fs.path.join(allocator, &.{ repo_path, ".zev", "HEAD" });
         defer allocator.free(head_path);
 
-        const head_file = try std.fs.cwd().createFile(head_path, .{});
-        defer head_file.close();
-        try head_file.writeAll(metadata.head_ref);
+        const head_file = try std.Io.Dir.cwd().createFile(io, head_path, .{});
+        defer head_file.close(io);
+        {
+            var buf: [256]u8 = undefined;
+            var writer = head_file.writer(io, &buf);
+            try writer.interface.writeAll(metadata.head_ref);
+            try writer.flush();
+        }
 
         var refs_it = metadata.refs.iterator();
         while (refs_it.next()) |entry| {
@@ -332,14 +346,17 @@ pub const IPFSRepo = struct {
                 defer allocator.free(ref_path);
 
                 if (std.fs.path.dirname(ref_path)) |parent_dir| {
-                    try std.fs.cwd().makePath(parent_dir);
+                    try std.Io.Dir.cwd().createDirPath(io, parent_dir);
                 }
 
-                const ref_file = try std.fs.cwd().createFile(ref_path, .{});
-                defer ref_file.close();
+                const ref_file = try std.Io.Dir.cwd().createFile(io, ref_path, .{});
+                defer ref_file.close(io);
 
-                try ref_file.writeAll(entry.value_ptr.*);
-                try ref_file.writeAll("\n");
+                var buf: [128]u8 = undefined;
+                var writer = ref_file.writer(io, &buf);
+                try writer.interface.writeAll(entry.value_ptr.*);
+                try writer.interface.writeAll("\n");
+                try writer.flush();
             }
         }
 
@@ -350,22 +367,25 @@ pub const IPFSRepo = struct {
             const objects_path = try std.fs.path.join(allocator, &.{ repo_path, ".zev", "objects" });
             defer allocator.free(objects_path);
 
-            try std.fs.cwd().makePath(objects_path);
+            try std.Io.Dir.cwd().createDirPath(io, objects_path);
 
             var obj_it = metadata.objects.iterator();
             while (obj_it.next()) |entry| {
                 const local_cid = entry.key_ptr.*;
                 const ipfs_cid = entry.value_ptr.*;
 
-                const obj_data = try ipfs_client.cat(ipfs_cid);
+                const obj_data = try ipfs_client.cat(io, ipfs_cid);
                 defer allocator.free(obj_data);
 
                 const obj_file_path = try std.fs.path.join(allocator, &.{ objects_path, local_cid });
                 defer allocator.free(obj_file_path);
 
-                const obj_file = try std.fs.cwd().createFile(obj_file_path, .{});
-                defer obj_file.close();
-                try obj_file.writeAll(obj_data);
+                const obj_file = try std.Io.Dir.cwd().createFile(io, obj_file_path, .{});
+                defer obj_file.close(io);
+                var buf: [4096]u8 = undefined;
+                var writer = obj_file.writer(io, &buf);
+                try writer.interface.writeAll(obj_data);
+                try writer.flush();
             }
 
             std.debug.print("✅ Downloaded all objects\n", .{});

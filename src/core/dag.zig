@@ -104,13 +104,14 @@ fn printDagNode(
 
 pub fn dagPut(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     file_path: []const u8,
 ) !void {
     var store = try ipld.BlockStore.init(allocator, repo.path);
     defer store.deinit();
 
-    const data = std.fs.cwd().readFileAlloc(file_path, allocator, @enumFromInt(64 * 1024 * 1024)) catch |err| {
+    const data = std.Io.Dir.cwd().readFileAlloc(io, file_path, allocator, .limited(64 * 1024 * 1024)) catch |err| {
         std.debug.print("❌ Cannot read {s}: {}\n", .{ file_path, err });
         return;
     };
@@ -140,7 +141,7 @@ pub fn dagPut(
     std.debug.print("   Inspect: zev dag show {s}\n\n", .{short});
 }
 
-pub fn dagStat(allocator: std.mem.Allocator, repo: *Repository) !void {
+pub fn dagStat(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) !void {
     var store = try ipld.BlockStore.init(allocator, repo.path);
     defer store.deinit();
 
@@ -157,7 +158,7 @@ pub fn dagStat(allocator: std.mem.Allocator, repo: *Repository) !void {
     const ipld_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "ipld" });
     defer allocator.free(ipld_path);
 
-    var root_dir = std.fs.cwd().openDir(ipld_path, .{ .iterate = true }) catch {
+    var root_dir = std.Io.Dir.cwd().openDir(ipld_path, .{ .iterate = true }) catch {
         std.debug.print("📊 IPLD Block Store\n\n   No blocks yet.\n\n", .{});
         std.debug.print("   Blocks are created automatically when you use:\n", .{});
         std.debug.print("   zev dag put <file>\n", .{});
@@ -171,17 +172,17 @@ pub fn dagStat(allocator: std.mem.Allocator, repo: *Repository) !void {
         if (shard_entry.kind != .directory) continue;
         const shard_path = try std.fs.path.join(allocator, &.{ ipld_path, shard_entry.name });
         defer allocator.free(shard_path);
-        var shard_dir = std.fs.cwd().openDir(shard_path, .{ .iterate = true }) catch continue;
+        var shard_dir = std.Io.Dir.cwd().openDir(shard_path, .{ .iterate = true }) catch continue;
         defer shard_dir.close();
         var shard_it = shard_dir.iterate();
         while (try shard_it.next()) |block_entry| {
             if (block_entry.kind != .file) continue;
             const block_path = try std.fs.path.join(allocator, &.{ shard_path, block_entry.name });
             defer allocator.free(block_path);
-            const stat = std.fs.cwd().statFile(block_path) catch continue;
+            const stat = std.Io.Dir.cwd().statFile(io, block_path) catch continue;
             total_bytes += @intCast(stat.size);
 
-            const data = std.fs.cwd().readFileAlloc(block_path, allocator, @enumFromInt(4096)) catch continue;
+            const data = std.Io.Dir.cwd().readFileAlloc(io, block_path, allocator, .limited(4096)) catch continue;
             defer allocator.free(data);
             const v = ipld.decode(allocator, data) catch {
                 const e = try by_type.getOrPut("raw");
@@ -293,11 +294,11 @@ pub fn graftAdd(
     std.debug.print("   Or by alias:    zev graft resolve {s}\n\n", .{alias});
 }
 
-pub fn graftList(allocator: std.mem.Allocator, repo: *Repository) !void {
+pub fn graftList(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) !void {
     const graft_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "grafts" });
     defer allocator.free(graft_path);
 
-    var dir = std.fs.cwd().openDir(graft_path, .{ .iterate = true }) catch {
+    var dir = std.Io.Dir.cwd().openDir(graft_path, .{ .iterate = true }) catch {
         std.debug.print("No grafts yet.\n\n", .{});
         std.debug.print("Graft a foreign CID:\n", .{});
         std.debug.print("  zev graft <cid> --as dataset/imagenet-v2\n\n", .{});
@@ -307,7 +308,7 @@ pub fn graftList(allocator: std.mem.Allocator, repo: *Repository) !void {
 
     std.debug.print("🔗 Grafted External Links:\n\n", .{});
     std.debug.print("   {s:<30} {s:<20} {s}\n", .{ "Alias", "Target CID", "Description" });
-    std.debug.print("   {s}\n", .{"─" ** 72});
+    std.debug.print("   {s}\n", .{"─"**72});
 
     var count: usize = 0;
     var it = dir.iterate();
@@ -315,7 +316,7 @@ pub fn graftList(allocator: std.mem.Allocator, repo: *Repository) !void {
         if (entry.kind != .file) continue;
         const path = try std.fs.path.join(allocator, &.{ graft_path, entry.name });
         defer allocator.free(path);
-        const content = std.fs.cwd().readFileAlloc(path, allocator, @enumFromInt(4096)) catch continue;
+        const content = std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(4096)) catch continue;
         defer allocator.free(content);
 
         var alias: []u8 = try allocator.dupe(u8, "");
@@ -352,6 +353,7 @@ pub fn graftList(allocator: std.mem.Allocator, repo: *Repository) !void {
 
 pub fn graftResolve(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     alias: []const u8,
 ) !void {
@@ -363,7 +365,7 @@ pub fn graftResolve(
     const path = try std.fs.path.join(allocator, &.{ graft_path, fname });
     defer allocator.free(path);
 
-    const content = std.fs.cwd().readFileAlloc(path, allocator, @enumFromInt(4096)) catch {
+    const content = std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(4096)) catch {
         std.debug.print("❌ Alias '{s}' not found.\n", .{alias});
         std.debug.print("   List grafts: zev graft list\n\n", .{});
         return;
@@ -465,8 +467,8 @@ fn printScalar(key: []const u8, value: ipld.Value) !void {
     }
 }
 
-fn loadConfigField(allocator: std.mem.Allocator, config_path: []const u8, field: []const u8) ![]u8 {
-    const content = std.fs.cwd().readFileAlloc(config_path, allocator, @enumFromInt(4096)) catch return try allocator.dupe(u8, "unknown");
+fn loadConfigField(allocator: std.mem.Allocator, io: std.Io, config_path: []const u8, field: []const u8) ![]u8 {
+    const content = std.Io.Dir.cwd().readFileAlloc(io, config_path, allocator, .limited(4096)) catch return try allocator.dupe(u8, "unknown");
     defer allocator.free(content);
     var iter = std.mem.splitSequence(u8, content, "\n");
     while (iter.next()) |line| {
@@ -485,7 +487,7 @@ fn saveGraftAlias(
 ) !void {
     const graft_dir = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "grafts" });
     defer allocator.free(graft_dir);
-    try std.fs.cwd().makePath(graft_dir);
+    try std.Io.Dir.cwd().makePath(graft_dir);
 
     const fname = try sanitizeAlias(allocator, alias);
     defer allocator.free(fname);
@@ -500,7 +502,7 @@ fn saveGraftAlias(
     const content = try std.fmt.allocPrint(allocator, "alias={s}\ntarget={s}\ngraft_cid={s}\nts={d}\n", .{ alias, target_cid, graft_short, now });
     defer allocator.free(content);
 
-    const f = try std.fs.cwd().createFile(path, .{});
+    const f = try std.Io.Dir.cwd().createFile(io, path, .{});
     defer f.close();
     try f.writeAll(content);
 }
@@ -545,7 +547,7 @@ fn fetchFromIPFS(
 
 fn simpleJsonToValue(allocator: std.mem.Allocator, data: []const u8) !ipld.Value {
     if (!std.mem.startsWith(u8, data, "{")) return error.NotAnObject;
-    var entries: std.ArrayList(ipld.Value.MapEntry) = .{};
+    var entries: std.ArrayList(ipld.Value.MapEntry) = .empty;
     var pos: usize = 1;
     while (pos < data.len) {
         while (pos < data.len and (data[pos] == ' ' or data[pos] == '\n' or data[pos] == '\r')) pos += 1;

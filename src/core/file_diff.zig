@@ -14,13 +14,14 @@ pub const TreeEntry = struct {
 
 pub fn readTree(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo_path: []const u8,
     tree_hash: []const u8,
 ) ![]TreeEntry {
     const obj_path = try findObject(allocator, repo_path, tree_hash);
     defer allocator.free(obj_path);
 
-    const content = try std.fs.cwd().readFileAlloc(obj_path, allocator, @enumFromInt(1024 * 1024));
+    const content = try std.Io.Dir.cwd().readFileAlloc(io, obj_path, allocator, .limited(1024 * 1024));
     defer allocator.free(content);
 
     var entries = std.ArrayList(TreeEntry){};
@@ -59,12 +60,13 @@ pub fn readTree(
 
 pub fn readObject(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo_path: []const u8,
     hash: []const u8,
 ) ![]u8 {
     const path = try findObject(allocator, repo_path, hash);
     defer allocator.free(path);
-    return std.fs.cwd().readFileAlloc(path, allocator, @enumFromInt(10 * 1024 * 1024)); // 10MB max
+    return std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(10 * 1024 * 1024)); // 10MB max
 }
 
 fn findObject(
@@ -76,9 +78,9 @@ fn findObject(
     defer allocator.free(objects_dir);
 
     const exact = try std.fs.path.join(allocator, &.{ objects_dir, hash_prefix });
-    if (std.fs.cwd().access(exact, .{})) |_| return exact else |_| allocator.free(exact);
+    if (std.Io.Dir.cwd().access(exact, .{})) |_| return exact else |_| allocator.free(exact);
 
-    var dir = try std.fs.cwd().openDir(objects_dir, .{ .iterate = true });
+    var dir = try std.Io.Dir.cwd().openDir(objects_dir, .{ .iterate = true });
     defer dir.close();
     var it = dir.iterate();
     while (try it.next()) |entry| {
@@ -420,7 +422,7 @@ fn extractConfigPairs(
         const sep_pos = sep_colon orelse sep_yaml orelse sep_toml orelse continue;
         const sep_len: usize = if (sep_colon != null) 3 else if (sep_yaml != null) 2 else 3;
 
-        var key = std.mem.trim(u8, trimmed[0..sep_pos], " \t\"'");
+        const key = std.mem.trim(u8, trimmed[0..sep_pos], " \t\"'");
         if (key.len == 0 or key.len > 60) continue;
         const val = std.mem.trim(u8, trimmed[sep_pos + sep_len ..], " \t,\"'");
 

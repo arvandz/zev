@@ -4,8 +4,8 @@ const cid_mod = @import("cid.zig");
 const commit_mod = @import("commit.zig");
 const tree_mod = @import("tree.zig");
 
-fn readFile(allocator: std.mem.Allocator, path: []const u8) !?[]u8 {
-    return std.fs.cwd().readFileAlloc(path, allocator, @enumFromInt(64 * 1024)) catch |err| {
+fn readFile(allocator: std.mem.Allocator, io: std.Io, path: []const u8) !?[]u8 {
+    return std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(64 * 1024)) catch |err| {
         if (err == error.FileNotFound) return null;
         return err;
     };
@@ -51,7 +51,12 @@ fn hashFromStr(hash_str: []const u8) ![32]u8 {
 }
 
 fn printSeparator() void {
-    std.debug.print("   {s}\n", .{"─" ** 60});
+    const divider60 = comptime blk: {
+        var s: []const u8 = "";
+        for (0..60) |_| s = s ++ "─";
+        break :blk s;
+    };
+    std.debug.print("   {s}\n", .{divider60});
 }
 
 fn printRow(label: []const u8, val_a: []const u8, val_b: []const u8) void {
@@ -80,12 +85,13 @@ fn printMetricRow(key: []const u8, va: []const u8, vb: []const u8) void {
 
 fn collectTreeFiles(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     tree_cid: cid_mod.CID,
     prefix: []const u8,
     out: *std.StringHashMap(cid_mod.CID),
 ) !void {
-    const data = try repo.store.get(tree_cid);
+    const data = try repo.store.get(io, tree_cid);
     defer allocator.free(data);
     var tree = try tree_mod.Tree.deserialize(allocator, data);
     defer tree.deinit();
@@ -112,16 +118,16 @@ fn freeTreeMap(allocator: std.mem.Allocator, map: *std.StringHashMap(cid_mod.CID
     map.deinit();
 }
 
-pub fn compareCommits(allocator: std.mem.Allocator, repo: *Repository, hash_a: []const u8, hash_b: []const u8) !void {
+pub fn compareCommits(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, hash_a: []const u8, hash_b: []const u8) !void {
     const cid_a = cid_mod.CID{ .hash = try hashFromStr(hash_a) };
     const cid_b = cid_mod.CID{ .hash = try hashFromStr(hash_b) };
 
-    const data_a = repo.store.get(cid_a) catch {
+    const data_a = repo.store.get(io, cid_a) catch {
         std.debug.print("Error: Commit {s} not found\n", .{hash_a[0..8]});
         return;
     };
     defer allocator.free(data_a);
-    const data_b = repo.store.get(cid_b) catch {
+    const data_b = repo.store.get(io, cid_b) catch {
         std.debug.print("Error: Commit {s} not found\n", .{hash_b[0..8]});
         return;
     };
@@ -327,7 +333,7 @@ fn findSnapshotById(allocator: std.mem.Allocator, repo: *Repository, name: []con
     const dir_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "snapshots" });
     defer allocator.free(dir_path);
 
-    var dir = std.fs.cwd().openDir(dir_path, .{ .iterate = true }) catch return null;
+    var dir = std.Io.Dir.cwd().openDir(dir_path, .{ .iterate = true }) catch return null;
     defer dir.close();
 
     var it = dir.iterate();
@@ -440,7 +446,7 @@ pub fn compareSnapshots(allocator: std.mem.Allocator, repo: *Repository, name_a:
     std.debug.print("\n", .{});
 }
 
-pub fn compareBranches(allocator: std.mem.Allocator, repo: *Repository, branch_a: []const u8, branch_b: []const u8) !void {
+pub fn compareBranches(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, branch_a: []const u8, branch_b: []const u8) !void {
     const refs_base = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "refs", "heads" });
     defer allocator.free(refs_base);
 
@@ -486,7 +492,7 @@ pub fn compareBranches(allocator: std.mem.Allocator, repo: *Repository, branch_a
             try ancestors_a.put(try allocator.dupe(u8, hs), depth);
             depth += 1;
             if (depth > 1000) break;
-            const data = repo.store.get(cur) catch break;
+            const data = repo.store.get(io, cur) catch break;
             defer allocator.free(data);
             const c = commit_mod.Commit.deserialize(allocator, data) catch break;
             defer allocator.free(c.author);
@@ -513,7 +519,7 @@ pub fn compareBranches(allocator: std.mem.Allocator, repo: *Repository, branch_a
             commits_only_b += 1;
             depth += 1;
             if (depth > 1000) break;
-            const data = repo.store.get(cur) catch break;
+            const data = repo.store.get(io, cur) catch break;
             defer allocator.free(data);
             const c = commit_mod.Commit.deserialize(allocator, data) catch break;
             defer allocator.free(c.author);
@@ -555,7 +561,7 @@ pub fn compareBranches(allocator: std.mem.Allocator, repo: *Repository, branch_a
         if (count >= 3) break;
         const hs = try cur.toString(allocator);
         defer allocator.free(hs);
-        const data = repo.store.get(cur) catch break;
+        const data = repo.store.get(io, cur) catch break;
         defer allocator.free(data);
         const c = commit_mod.Commit.deserialize(allocator, data) catch break;
         defer allocator.free(c.author);

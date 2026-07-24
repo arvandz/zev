@@ -42,7 +42,7 @@ pub const Tree = struct {
     pub fn init(allocator: std.mem.Allocator) Tree {
         return Tree{
             .allocator = allocator,
-            .entries = .{},
+            .entries = .empty,
         };
     }
 
@@ -73,7 +73,7 @@ pub const Tree = struct {
     }
 
     pub fn serialize(self: *Tree) ![]u8 {
-        var buffer: std.ArrayList(u8) = .{};
+        var buffer: std.ArrayList(u8) = .empty;
         errdefer buffer.deinit(self.allocator);
 
         for (self.entries.items) |entry| {

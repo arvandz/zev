@@ -6,7 +6,7 @@ pub const IgnoreList = struct {
 
     pub fn init(allocator: std.mem.Allocator) IgnoreList {
         return .{
-            .patterns = .{},
+            .patterns = .empty,
             .allocator = allocator,
         };
     }
@@ -18,25 +18,24 @@ pub const IgnoreList = struct {
         self.patterns.deinit(self.allocator);
     }
 
-    pub fn loadFromFile(allocator: std.mem.Allocator, repo_path: []const u8) !IgnoreList {
+    pub fn loadFromFile(allocator: std.mem.Allocator, io: std.Io, repo_path: []const u8) !IgnoreList {
         var list = IgnoreList.init(allocator);
         errdefer list.deinit();
-
         try list.patterns.append(allocator, try allocator.dupe(u8, ".zev"));
-
         const ignore_path = try std.fs.path.join(allocator, &.{ repo_path, ".zevignore" });
         defer allocator.free(ignore_path);
-
-        const file = std.fs.cwd().openFile(ignore_path, .{}) catch |err| {
+        const file = std.Io.Dir.cwd().openFile(io, ignore_path, .{}) catch |err| {
             if (err == error.FileNotFound) return list;
             return err;
         };
-        defer file.close();
+        defer file.close(io);
 
-        const stat = try file.stat();
+        const stat = try file.stat(io);
         const content = try allocator.alloc(u8, @intCast(stat.size));
         defer allocator.free(content);
-        const bytes_read = try file.read(content);
+        var read_buf: [4096]u8 = undefined;
+        var reader = file.reader(io, &read_buf);
+        const bytes_read = try reader.interface.readSliceShort(content);
         const actual_content = content[0..bytes_read];
 
         var lines = std.mem.splitSequence(u8, actual_content, "\n");

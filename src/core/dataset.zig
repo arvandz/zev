@@ -46,19 +46,19 @@ pub const AssignmentRecord = struct {
 
 fn datasetDir(allocator: std.mem.Allocator, repo: *Repository) ![]u8 {
     const dir = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "datasets" });
-    try std.fs.cwd().makePath(dir);
+    try std.Io.Dir.cwd().makePath(dir);
     return dir;
 }
 
 fn shardsDir(allocator: std.mem.Allocator, repo: *Repository, dataset_name: []const u8) ![]u8 {
     const dir = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "datasets", dataset_name, "shards" });
-    try std.fs.cwd().makePath(dir);
+    try std.Io.Dir.cwd().makePath(dir);
     return dir;
 }
 
 fn assignDir(allocator: std.mem.Allocator, repo: *Repository, dataset_name: []const u8) ![]u8 {
     const dir = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "datasets", dataset_name, "assignments" });
-    try std.fs.cwd().makePath(dir);
+    try std.Io.Dir.cwd().makePath(dir);
     return dir;
 }
 
@@ -70,12 +70,12 @@ fn saveDatasetRecord(
     const dir = try datasetDir(allocator, repo);
     defer allocator.free(dir);
     const ds_dir = try std.fs.path.join(allocator, &.{ dir, ds.name });
-    try std.fs.cwd().makePath(ds_dir);
+    try std.Io.Dir.cwd().makePath(ds_dir);
     defer allocator.free(ds_dir);
     const path = try std.fs.path.join(allocator, &.{ ds_dir, "dataset.meta" });
     defer allocator.free(path);
 
-    var out: std.ArrayList(u8) = .{};
+    var out: std.ArrayList(u8) = .empty;
     defer out.deinit(allocator);
 
     const s = try std.fmt.allocPrint(allocator, "name={s}\nsource_path={s}\nsource_cid={s}\ntotal_rows={d}\n" ++
@@ -84,13 +84,13 @@ fn saveDatasetRecord(
     defer allocator.free(s);
     try out.appendSlice(allocator, s);
 
-    const f = try std.fs.cwd().createFile(path, .{});
+    const f = try std.Io.Dir.cwd().createFile(path, .{});
     defer f.close();
     try f.writeAll(out.items);
 }
 
-fn loadDatasetRecord(allocator: std.mem.Allocator, path: []const u8) !?DatasetRecord {
-    const content = std.fs.cwd().readFileAlloc(path, allocator, @enumFromInt(64 * 1024)) catch return null;
+fn loadDatasetRecord(allocator: std.mem.Allocator, io: std.Io, path: []const u8) !?DatasetRecord {
+    const content = std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(64 * 1024)) catch return null;
     defer allocator.free(content);
 
     var name: []u8 = try allocator.dupe(u8, "");
@@ -169,7 +169,7 @@ fn saveShardRecord(
         "checksum={s}\nstrategy={s}\ncreated={d}\n", .{ shard.id, shard.dataset_name, shard.shard_index, shard.total_shards, shard.cid, shard.row_start, shard.row_end, shard.row_count, shard.byte_size, shard.checksum, shard.strategy, shard.created });
     defer allocator.free(s);
 
-    const f = try std.fs.cwd().createFile(path, .{});
+    const f = try std.Io.Dir.cwd().createFile(path, .{});
     defer f.close();
     try f.writeAll(s);
 }
@@ -184,7 +184,7 @@ fn saveAssignment(
     const path = try std.fs.path.join(allocator, &.{ dir, assignment.commit_hash[0..@min(16, assignment.commit_hash.len)] });
     defer allocator.free(path);
 
-    var out: std.ArrayList(u8) = .{};
+    var out: std.ArrayList(u8) = .empty;
     defer out.deinit(allocator);
 
     const hdr = try std.fmt.allocPrint(allocator, "commit={s}\ndataset={s}\nassigned_at={d}\nnotes={s}\n", .{ assignment.commit_hash, assignment.dataset_name, assignment.assigned_at, assignment.notes });
@@ -197,7 +197,7 @@ fn saveAssignment(
         try out.appendSlice(allocator, sl);
     }
 
-    const f = try std.fs.cwd().createFile(path, .{});
+    const f = try std.Io.Dir.cwd().createFile(path, .{});
     defer f.close();
     try f.writeAll(out.items);
 }
@@ -210,13 +210,13 @@ fn detectFormat(path: []const u8) []const u8 {
     if (std.mem.endsWith(u8, path, ".txt")) return "text";
     if (std.mem.endsWith(u8, path, ".bin")) return "binary";
     if (std.mem.endsWith(u8, path, ".parquet")) return "parquet";
-    var stat = std.fs.cwd().statFile(path) catch return "unknown";
+    const stat = std.Io.Dir.cwd().statFile(path) catch return "unknown";
     if (stat.kind == .directory) return "directory";
     return "binary";
 }
 
-fn countLines(allocator: std.mem.Allocator, path: []const u8) !usize {
-    const content = std.fs.cwd().readFileAlloc(path, allocator, @enumFromInt(256 * 1024 * 1024)) catch return 0;
+fn countLines(allocator: std.mem.Allocator, io: std.Io, path: []const u8) !usize {
+    const content = std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(256 * 1024 * 1024)) catch return 0;
     defer allocator.free(content);
     var count: usize = 0;
     for (content) |c| {
@@ -227,18 +227,19 @@ fn countLines(allocator: std.mem.Allocator, path: []const u8) !usize {
 }
 
 fn getFileSize(path: []const u8) u64 {
-    const stat = std.fs.cwd().statFile(path) catch return 0;
+    const stat = std.Io.Dir.cwd().statFile(path) catch return 0;
     return @intCast(stat.size);
 }
 
 pub fn datasetRegister(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     source_path: []const u8,
     name: []const u8,
     description: []const u8,
 ) !void {
-    std.fs.cwd().access(source_path, .{}) catch {
+    std.Io.Dir.cwd().access(io, source_path, .{}) catch {
         std.debug.print("❌ Source not found: {s}\n", .{source_path});
         return;
     };
@@ -247,7 +248,7 @@ pub fn datasetRegister(
     const format = detectFormat(source_path);
     const byte_size = getFileSize(source_path);
 
-    const src_content = std.fs.cwd().readFileAlloc(source_path, allocator, @enumFromInt(64 * 1024 * 1024)) catch blk: {
+    const src_content = std.Io.Dir.cwd().readFileAlloc(io, source_path, allocator, .limited(64 * 1024 * 1024)) catch blk: {
         const fake = try std.fmt.allocPrint(allocator, "{s}:{d}", .{ source_path, byte_size });
         defer allocator.free(fake);
         break :blk try allocator.dupe(u8, fake);
@@ -388,7 +389,12 @@ fn splitLinesBased(
     }
 
     std.debug.print("   {s:<8} {s:<12} {s:<12} {s:<12} {s}\n", .{ "Shard", "Rows", "Start", "End", "CID" });
-    std.debug.print("   {s}\n", .{"─" ** 60});
+    const divider60 = comptime blk: {
+        var s: []const u8 = "";
+        for (0..60) |_| s = s ++ "─";
+        break :blk s;
+    };
+    std.debug.print("   {s}\n", .{divider60});
 
     var row_cursor: usize = 0;
     for (0..num_shards) |si| {
@@ -443,7 +449,12 @@ fn splitBytesBased(
     const bytes_per_shard = if (ds.total_bytes > 0) ds.total_bytes / num_shards else 0;
 
     std.debug.print("   {s:<8} {s:<16} {s:<14} {s}\n", .{ "Shard", "Bytes", "Offset", "CID" });
-    std.debug.print("   {s}\n", .{"─" ** 60});
+    const divider60 = comptime blk: {
+        var s: []const u8 = "";
+        for (0..60) |_| s = s ++ "─";
+        break :blk s;
+    };
+    std.debug.print("   {s}\n", .{divider60});
 
     for (0..num_shards) |si| {
         const byte_start = si * bytes_per_shard;
@@ -495,7 +506,7 @@ pub fn datasetAssign(
     const commit_hash = try head.toString(allocator);
     defer allocator.free(commit_hash);
 
-    var shard_ids: std.ArrayList([]u8) = .{};
+    var shard_ids: std.ArrayList([]u8) = .empty;
     defer {
         for (shard_ids.items) |s| allocator.free(s);
         shard_ids.deinit(allocator);
@@ -528,6 +539,7 @@ pub fn datasetAssign(
 
 pub fn datasetLineage(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     dataset_name: []const u8,
 ) !void {
@@ -536,7 +548,7 @@ pub fn datasetLineage(
 
     std.debug.print("🔗 Dataset Lineage: {s}\n\n", .{dataset_name});
 
-    var dir = std.fs.cwd().openDir(assign_dir_path, .{ .iterate = true }) catch {
+    var dir = std.Io.Dir.cwd().openDir(io, assign_dir_path, .{ .iterate = true }) catch {
         std.debug.print("   No assignments yet.\n", .{});
         std.debug.print("   Assign shards: zev dataset assign {s} --shards 0,1,2\n\n", .{dataset_name});
         return;
@@ -544,7 +556,12 @@ pub fn datasetLineage(
     defer dir.close();
 
     std.debug.print("   {s:<12} {s:<30} {s}\n", .{ "Commit", "Shards", "Notes" });
-    std.debug.print("   {s}\n", .{"─" ** 60});
+    const divider60 = comptime blk: {
+        var s: []const u8 = "";
+        for (0..60) |_| s = s ++ "─";
+        break :blk s;
+    };
+    std.debug.print("   {s}\n", .{divider60});
 
     var total: usize = 0;
     var it = dir.iterate();
@@ -552,12 +569,12 @@ pub fn datasetLineage(
         if (entry.kind != .file) continue;
         const path = try std.fs.path.join(allocator, &.{ assign_dir_path, entry.name });
         defer allocator.free(path);
-        const content = std.fs.cwd().readFileAlloc(path, allocator, @enumFromInt(64 * 1024)) catch continue;
+        const content = std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(64 * 1024)) catch continue;
         defer allocator.free(content);
 
         var commit: []u8 = try allocator.dupe(u8, "");
         var notes: []u8 = try allocator.dupe(u8, "");
-        var shard_list: std.ArrayList([]u8) = .{};
+        var shard_list: std.ArrayList([]u8) = .empty;
         defer allocator.free(commit);
         defer allocator.free(notes);
         defer {
@@ -578,7 +595,7 @@ pub fn datasetLineage(
             }
         }
 
-        var shards_str: std.ArrayList(u8) = .{};
+        var shards_str: std.ArrayList(u8) = .empty;
         defer shards_str.deinit(allocator);
         for (shard_list.items, 0..) |s, i| {
             if (i > 0) try shards_str.appendSlice(allocator, ", ");
@@ -599,6 +616,7 @@ pub fn datasetLineage(
 
 pub fn datasetImpact(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     dataset_name: []const u8,
     shard_index: usize,
@@ -612,7 +630,7 @@ pub fn datasetImpact(
     std.debug.print("💥 Impact Analysis: shard {d} of '{s}'\n\n", .{ shard_index, dataset_name });
     std.debug.print("   Question: if shard_{d} is corrupt/poisoned, which models are affected?\n\n", .{shard_index});
 
-    var dir = std.fs.cwd().openDir(assign_dir_path, .{ .iterate = true }) catch {
+    var dir = std.Io.Dir.cwd().openDir(io, assign_dir_path, .{ .iterate = true }) catch {
         std.debug.print("   No assignments found for dataset '{s}'.\n\n", .{dataset_name});
         return;
     };
@@ -627,7 +645,7 @@ pub fn datasetImpact(
         total += 1;
         const path = try std.fs.path.join(allocator, &.{ assign_dir_path, entry.name });
         defer allocator.free(path);
-        const content = std.fs.cwd().readFileAlloc(path, allocator, @enumFromInt(64 * 1024)) catch continue;
+        const content = std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(64 * 1024)) catch continue;
         defer allocator.free(content);
 
         var commit: []u8 = try allocator.dupe(u8, "");
@@ -668,7 +686,7 @@ pub fn datasetList(allocator: std.mem.Allocator, repo: *Repository) !void {
     const dir_path = try datasetDir(allocator, repo);
     defer allocator.free(dir_path);
 
-    var dir = std.fs.cwd().openDir(dir_path, .{ .iterate = true }) catch {
+    var dir = std.Io.Dir.cwd().openDir(dir_path, .{ .iterate = true }) catch {
         std.debug.print("No datasets registered yet.\n", .{});
         std.debug.print("Register: zev dataset register <path> --name <name>\n", .{});
         return;

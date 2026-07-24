@@ -13,10 +13,11 @@ pub const CherryPickResult = enum {
 
 pub fn cherryPick(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     pick_cid: cid_mod.CID,
 ) !CherryPickResult {
-    const pick_data = repo.store.get(pick_cid) catch {
+    const pick_data = repo.store.get(io, pick_cid) catch {
         std.debug.print("Error: Commit not found\n", .{});
         return .conflict;
     };
@@ -32,7 +33,7 @@ pub fn cherryPick(
     };
 
     const pick_parent_tree = if (pick_commit.parent_cid) |parent_cid| blk: {
-        const parent_data = repo.store.get(parent_cid) catch break :blk null;
+        const parent_data = repo.store.get(io, parent_cid) catch break :blk null;
         defer allocator.free(parent_data);
         const parent_commit = commit_mod.Commit.deserialize(allocator, parent_data) catch break :blk null;
         defer allocator.free(parent_commit.author);
@@ -46,7 +47,7 @@ pub fn cherryPick(
         t.deinit();
     }
 
-    const current_commit_data = try repo.store.get(current_head);
+    const current_commit_data = try repo.store.get(io, current_head);
     defer allocator.free(current_commit_data);
     const current_commit = try commit_mod.Commit.deserialize(allocator, current_commit_data);
     defer allocator.free(current_commit.author);
@@ -81,15 +82,15 @@ pub fn cherryPick(
 
         files_changed += 1;
 
-        const new_content = try repo.store.get(pick_entry.cid);
+        const new_content = try repo.store.get(io, pick_entry.cid);
         defer allocator.free(new_content);
 
-        const new_cid = try repo.store.put(new_content);
+        const new_cid = try repo.store.put(io, new_content);
 
         if (std.fs.path.dirname(pick_entry.name)) |dir| {
-            try std.fs.cwd().makePath(dir);
+            try std.Io.Dir.cwd().makePath(dir);
         }
-        const out_file = try std.fs.cwd().createFile(pick_entry.name, .{});
+        const out_file = try std.Io.Dir.cwd().createFile(pick_entry.name, .{});
         defer out_file.close();
         try out_file.writeAll(new_content);
 
@@ -121,7 +122,7 @@ pub fn cherryPick(
 
     const new_tree_data = try new_tree.serialize();
     defer allocator.free(new_tree_data);
-    const new_tree_cid = try repo.store.put(new_tree_data);
+    const new_tree_cid = try repo.store.put(io, new_tree_data);
 
     const author = if (repo.config) |*cfg|
         try std.fmt.allocPrint(allocator, "{s} <{s}>", .{ cfg.user_name, cfg.user_email })
@@ -145,7 +146,7 @@ pub fn cherryPick(
 
     const new_commit_data = try new_commit.serialize(allocator);
     defer allocator.free(new_commit_data);
-    const new_commit_cid = try repo.store.put(new_commit_data);
+    const new_commit_cid = try repo.store.put(io, new_commit_data);
 
     try updateHead(allocator, repo, new_commit_cid);
 
@@ -156,8 +157,8 @@ pub fn cherryPick(
     return .success;
 }
 
-fn getTree(allocator: std.mem.Allocator, repo: *Repository, tree_cid: cid_mod.CID) !tree_mod.Tree {
-    const tree_data = try repo.store.get(tree_cid);
+fn getTree(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, tree_cid: cid_mod.CID) !tree_mod.Tree {
+    const tree_data = try repo.store.get(io, tree_cid);
     defer allocator.free(tree_data);
     return try tree_mod.Tree.deserialize(allocator, tree_data);
 }
@@ -169,7 +170,7 @@ fn updateHead(allocator: std.mem.Allocator, repo: *Repository, new_cid: cid_mod.
     const head_path = try std.fs.path.join(allocator, &.{ zev_path, "HEAD" });
     defer allocator.free(head_path);
 
-    const head_file = try std.fs.cwd().openFile(head_path, .{});
+    const head_file = try std.Io.Dir.cwd().openFile(head_path, .{});
     defer head_file.close();
 
     var buf: [256]u8 = undefined;
@@ -181,7 +182,7 @@ fn updateHead(allocator: std.mem.Allocator, repo: *Repository, new_cid: cid_mod.
         const ref_path = try std.fs.path.join(allocator, &.{ zev_path, ref_rel });
         defer allocator.free(ref_path);
 
-        const ref_file = try std.fs.cwd().createFile(ref_path, .{});
+        const ref_file = try std.Io.Dir.cwd().createFile(ref_path, .{});
         defer ref_file.close();
 
         const hash = try new_cid.toString(allocator);

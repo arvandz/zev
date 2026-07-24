@@ -20,7 +20,7 @@ pub const Multihash = struct {
     }
 
     pub fn encode(self: Multihash, allocator: std.mem.Allocator) ![]u8 {
-        var out: std.ArrayList(u8) = .{};
+        var out: std.ArrayList(u8) = .empty;
         try writeVarint(&out, allocator, self.code);
         try writeVarint(&out, allocator, self.size);
         try out.appendSlice(allocator, &self.digest);
@@ -50,7 +50,7 @@ pub const CID = struct {
     }
 
     pub fn encode(self: CID, allocator: std.mem.Allocator) ![]u8 {
-        var out: std.ArrayList(u8) = .{};
+        var out: std.ArrayList(u8) = .empty;
         try writeVarint(&out, allocator, self.version);
         try writeVarint(&out, allocator, self.codec);
         const mh = try self.hash.encode(allocator);
@@ -155,7 +155,7 @@ pub const Value = union(enum) {
 };
 
 pub fn encode(allocator: std.mem.Allocator, value: Value) ![]u8 {
-    var out: std.ArrayList(u8) = .{};
+    var out: std.ArrayList(u8) = .empty;
     try encodeValue(&out, allocator, value);
     return out.toOwnedSlice(allocator);
 }
@@ -201,7 +201,7 @@ fn encodeValue(out: *std.ArrayList(u8), allocator: std.mem.Allocator, value: Val
             for (l) |item| try encodeValue(out, allocator, item);
         },
         .map => |m| {
-            var sorted = try allocator.dupe(Value.MapEntry, m);
+            const sorted = try allocator.dupe(Value.MapEntry, m);
             defer allocator.free(sorted);
             std.mem.sort(Value.MapEntry, sorted, {}, struct {
                 fn lt(_: void, a: Value.MapEntry, b: Value.MapEntry) bool {
@@ -389,7 +389,7 @@ pub const CommitNode = struct {
     branch: []const u8,
 
     pub fn toValue(self: CommitNode, allocator: std.mem.Allocator) !Value {
-        var entries: std.ArrayList(Value.MapEntry) = .{};
+        var entries: std.ArrayList(Value.MapEntry) = .empty;
         defer entries.deinit(allocator);
 
         try entries.append(allocator, .{ .key = "zev", .value = .{ .string = try allocator.dupe(u8, "commit") } });
@@ -430,7 +430,7 @@ pub const MetricsNode = struct {
     pub const MetricEntry = struct { key: []const u8, value: f64 };
 
     pub fn toValue(self: MetricsNode, allocator: std.mem.Allocator) !Value {
-        var metric_entries: std.ArrayList(Value.MapEntry) = .{};
+        var metric_entries: std.ArrayList(Value.MapEntry) = .empty;
         defer metric_entries.deinit(allocator);
         for (self.entries) |e| {
             try metric_entries.append(allocator, .{
@@ -440,7 +440,7 @@ pub const MetricsNode = struct {
         }
         const metrics_map = Value{ .map = try metric_entries.toOwnedSlice(allocator) };
 
-        var entries: std.ArrayList(Value.MapEntry) = .{};
+        var entries: std.ArrayList(Value.MapEntry) = .empty;
         defer entries.deinit(allocator);
         try entries.append(allocator, .{ .key = "zev", .value = .{ .string = try allocator.dupe(u8, "metrics") } });
         try entries.append(allocator, .{ .key = "commit", .value = .{ .link = self.commit } });
@@ -475,7 +475,7 @@ pub const SnapshotNode = struct {
         for (self.tags, 0..) |t, i|
             tag_vals[i] = .{ .string = try allocator.dupe(u8, t) };
 
-        var entries: std.ArrayList(Value.MapEntry) = .{};
+        var entries: std.ArrayList(Value.MapEntry) = .empty;
         defer entries.deinit(allocator);
         try entries.append(allocator, .{ .key = "zev", .value = .{ .string = try allocator.dupe(u8, "snapshot") } });
         try entries.append(allocator, .{ .key = "name", .value = .{ .string = try allocator.dupe(u8, self.name) } });
@@ -511,7 +511,7 @@ pub const DatasetShardNode = struct {
     timestamp: i64,
 
     pub fn toValue(self: DatasetShardNode, allocator: std.mem.Allocator) !Value {
-        var entries: std.ArrayList(Value.MapEntry) = .{};
+        var entries: std.ArrayList(Value.MapEntry) = .empty;
         defer entries.deinit(allocator);
         try entries.append(allocator, .{ .key = "zev", .value = .{ .string = try allocator.dupe(u8, "dataset_shard") } });
         try entries.append(allocator, .{ .key = "source", .value = .{ .link = self.source_cid } });
@@ -546,7 +546,7 @@ pub const ContextIPLDNode = struct {
     timestamp: i64,
 
     pub fn toValue(self: ContextIPLDNode, allocator: std.mem.Allocator) !Value {
-        var entries: std.ArrayList(Value.MapEntry) = .{};
+        var entries: std.ArrayList(Value.MapEntry) = .empty;
         defer entries.deinit(allocator);
         try entries.append(allocator, .{ .key = "zev", .value = .{ .string = try allocator.dupe(u8, "context") } });
         try entries.append(allocator, .{ .key = "file", .value = .{ .link = self.file_cid } });
@@ -579,7 +579,7 @@ pub const GraftNode = struct {
     grafted_by: []const u8,
 
     pub fn toValue(self: GraftNode, allocator: std.mem.Allocator) !Value {
-        var entries: std.ArrayList(Value.MapEntry) = .{};
+        var entries: std.ArrayList(Value.MapEntry) = .empty;
         defer entries.deinit(allocator);
         try entries.append(allocator, .{ .key = "zev", .value = .{ .string = try allocator.dupe(u8, "graft") } });
         try entries.append(allocator, .{ .key = "target", .value = .{ .link = self.target_cid } });
@@ -609,7 +609,7 @@ pub const BlockStore = struct {
 
     pub fn init(allocator: std.mem.Allocator, repo_path: []const u8) !BlockStore {
         const base = try std.fs.path.join(allocator, &.{ repo_path, ".zev", "ipld" });
-        try std.fs.cwd().makePath(base);
+        try std.Io.Dir.cwd().makePath(base);
         return .{ .base_path = base, .allocator = allocator };
     }
 
@@ -622,7 +622,7 @@ pub const BlockStore = struct {
         defer self.allocator.free(short);
         const prefix = short[0..@min(2, short.len)];
         const sub_dir = try std.fs.path.join(self.allocator, &.{ self.base_path, prefix });
-        try std.fs.cwd().makePath(sub_dir);
+        try std.Io.Dir.cwd().makePath(sub_dir);
         defer self.allocator.free(sub_dir);
         return std.fs.path.join(self.allocator, &.{ sub_dir, short });
     }
@@ -630,24 +630,24 @@ pub const BlockStore = struct {
     pub fn put(self: BlockStore, c: CID, data: []const u8) !void {
         const path = try self.blockPath(c);
         defer self.allocator.free(path);
-        std.fs.cwd().access(path, .{}) catch {
-            const f = try std.fs.cwd().createFile(path, .{});
+        std.Io.Dir.cwd().access(path, .{}) catch {
+            const f = try std.Io.Dir.cwd().createFile(path, .{});
             defer f.close();
             try f.writeAll(data);
             return;
         };
     }
 
-    pub fn get(self: BlockStore, c: CID) ![]u8 {
+    pub fn get(self: BlockStore, io: std.Io, c: CID) ![]u8 {
         const path = try self.blockPath(c);
         defer self.allocator.free(path);
-        return std.fs.cwd().readFileAlloc(path, self.allocator, @enumFromInt(64 * 1024 * 1024)) catch error.BlockNotFound;
+        return std.Io.Dir.cwd().readFileAlloc(io, path, self.allocator, .limited(64 * 1024 * 1024)) catch error.BlockNotFound;
     }
 
     pub fn has(self: BlockStore, c: CID) bool {
         const path = self.blockPath(c) catch return false;
         defer self.allocator.free(path);
-        std.fs.cwd().access(path, .{}) catch return false;
+        std.Io.Dir.cwd().access(path, .{}) catch return false;
         return true;
     }
 
@@ -679,14 +679,14 @@ pub const BlockStore = struct {
 
     pub fn count(self: BlockStore) usize {
         var total: usize = 0;
-        var dir = std.fs.cwd().openDir(self.base_path, .{ .iterate = true }) catch return 0;
+        var dir = std.Io.Dir.cwd().openDir(self.base_path, .{ .iterate = true }) catch return 0;
         defer dir.close();
         var it = dir.iterate();
         while (it.next() catch null) |entry| {
             if (entry.kind == .directory) {
                 const sub_path = std.fs.path.join(self.allocator, &.{ self.base_path, entry.name }) catch continue;
                 defer self.allocator.free(sub_path);
-                var sub = std.fs.cwd().openDir(sub_path, .{ .iterate = true }) catch continue;
+                var sub = std.Io.Dir.cwd().openDir(sub_path, .{ .iterate = true }) catch continue;
                 defer sub.close();
                 var sub_it = sub.iterate();
                 while (sub_it.next() catch null) |e| {
@@ -729,7 +729,7 @@ fn walkDagInner(
     const value = store.getNode(allocator, c) catch
         return DagNode{ .cid = c, .value = .null, .children = &.{} };
 
-    var children: std.ArrayList(DagNode) = .{};
+    var children: std.ArrayList(DagNode) = .empty;
     if (depth < max_depth) {
         try collectLinks(allocator, store, value, &children, max_depth, depth + 1);
     }

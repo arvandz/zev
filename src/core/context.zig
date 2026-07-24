@@ -24,7 +24,7 @@ pub const ContextRecord = struct {
 
 fn contextDir(allocator: std.mem.Allocator, repo: *Repository) ![]u8 {
     const dir = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "context" });
-    try std.fs.cwd().makePath(dir);
+    try std.Io.Dir.cwd().makePath(dir);
     return dir;
 }
 
@@ -54,7 +54,7 @@ fn saveRecord(
     const path = try std.fs.path.join(allocator, &.{ dir, rec.record_id });
     defer allocator.free(path);
 
-    var out: std.ArrayList(u8) = .{};
+    var out: std.ArrayList(u8) = .empty;
     defer out.deinit(allocator);
 
     const fields = [_]struct { k: []const u8, v: []const u8 }{
@@ -82,13 +82,13 @@ fn saveRecord(
         try out.appendSlice(allocator, prompt_s);
     }
 
-    const f = try std.fs.cwd().createFile(path, .{});
+    const f = try std.Io.Dir.cwd().createFile(path, .{});
     defer f.close();
     try f.writeAll(out.items);
 }
 
-fn loadRecord(allocator: std.mem.Allocator, path: []const u8) !?ContextRecord {
-    const content = std.fs.cwd().readFileAlloc(path, allocator, @enumFromInt(1024 * 1024)) catch |err| {
+fn loadRecord(allocator: std.mem.Allocator, io: std.Io, path: []const u8) !?ContextRecord {
+    const content = std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(1024 * 1024)) catch |err| {
         if (err == error.FileNotFound) return null;
         return err;
     };
@@ -179,8 +179,8 @@ fn freeRecord(allocator: std.mem.Allocator, rec: ContextRecord) void {
     allocator.free(rec.notes);
 }
 
-fn computeFileCid(allocator: std.mem.Allocator, file_path: []const u8) ![]u8 {
-    const content = std.fs.cwd().readFileAlloc(file_path, allocator, @enumFromInt(64 * 1024 * 1024)) catch
+fn computeFileCid(allocator: std.mem.Allocator, io: std.Io, file_path: []const u8) ![]u8 {
+    const content = std.Io.Dir.cwd().readFileAlloc(io, file_path, allocator, .limited(64 * 1024 * 1024)) catch
         return try allocator.dupe(u8, "unknown");
     defer allocator.free(content);
     const c = cid_mod.CID.fromBytes(content);
@@ -232,7 +232,7 @@ fn iterateRecords(
     const dir_path = try contextDir(allocator, repo);
     defer allocator.free(dir_path);
 
-    var dir = std.fs.cwd().openDir(dir_path, .{ .iterate = true }) catch return;
+    var dir = std.Io.Dir.cwd().openDir(dir_path, .{ .iterate = true }) catch return;
     defer dir.close();
 
     var it = dir.iterate();
@@ -259,7 +259,7 @@ pub fn contextAdd(
 ) !void {
     const now = (std.time.Instant.now() catch unreachable).timestamp.sec;
 
-    std.fs.cwd().access(file_path, .{}) catch {
+    std.Io.Dir.cwd().access(file_path, .{}) catch {
         std.debug.print("Error: file '{s}' not found\n", .{file_path});
         return;
     };
@@ -319,7 +319,7 @@ pub fn contextShow(
     const dir_path = try contextDir(allocator, repo);
     defer allocator.free(dir_path);
 
-    var dir = std.fs.cwd().openDir(dir_path, .{ .iterate = true }) catch {
+    var dir = std.Io.Dir.cwd().openDir(dir_path, .{ .iterate = true }) catch {
         std.debug.print("No context records yet.\n", .{});
         return;
     };
@@ -328,7 +328,7 @@ pub fn contextShow(
     std.debug.print("🔍 Context for '{s}':\n\n", .{file_path});
     var found: usize = 0;
 
-    var records: std.ArrayList(ContextRecord) = .{};
+    var records: std.ArrayList(ContextRecord) = .empty;
     defer {
         for (records.items) |r| freeRecord(allocator, r);
         records.deinit(allocator);
@@ -372,7 +372,7 @@ pub fn contextShow(
         std.debug.print("  Add one: zev context add {s} --model claude-3-5-sonnet\n\n", .{file_path});
     }
 
-    if (std.fs.cwd().access(file_path, .{}) catch null == null or true) {
+    if (std.Io.Dir.cwd().access(file_path, .{}) catch null == null or true) {
         const cur_cid = computeFileCid(allocator, file_path) catch null;
         if (cur_cid) |cid| {
             defer allocator.free(cid);
@@ -406,7 +406,7 @@ pub fn contextBlame(
         latest.deinit();
     }
 
-    var dir = std.fs.cwd().openDir(dir_path, .{ .iterate = true }) catch {
+    var dir = std.Io.Dir.cwd().openDir(dir_path, .{ .iterate = true }) catch {
         std.debug.print("No context records yet.\n", .{});
         std.debug.print("Add context: zev context add <file> --model <model>\n", .{});
         return;
@@ -439,7 +439,11 @@ pub fn contextBlame(
 
     std.debug.print("🔍 AI Authorship Blame:\n\n", .{});
     std.debug.print("   {s:<30} {s:<20} {s:<12} {s}\n", .{ "File", "Model", "Kind", "Prompt" });
-    std.debug.print("   {s}\n", .{"─" ** 78});
+    const divider = comptime blk: {
+        var s: []const u8 = "";
+        for (0..78) |_| s = s ++ "─";
+        break :blk s;
+    };
 
     var mit = latest.iterator();
     while (mit.next()) |entry| {
@@ -453,7 +457,7 @@ pub fn contextBlame(
             rec.prompt_hash[0..@min(12, rec.prompt_hash.len)],
         });
     }
-    std.debug.print("\n", .{});
+    std.debug.print("   {s}\n", .{divider});
 
     if (latest.count() == 0) {
         std.debug.print("  No files with context records.\n\n", .{});
@@ -474,7 +478,7 @@ pub fn contextStats(
         model_counts.deinit();
     }
 
-    var kind_counts = [_]usize{0} ** 4;
+    var kind_counts: [4]usize = @splat(0);
     var total: usize = 0;
 
     var file_models = std.StringHashMap([]u8).init(allocator);
@@ -499,7 +503,7 @@ pub fn contextStats(
         file_ts.deinit();
     }
 
-    var dir = std.fs.cwd().openDir(dir_path, .{ .iterate = true }) catch {
+    var dir = std.Io.Dir.cwd().openDir(dir_path, .{ .iterate = true }) catch {
         std.debug.print("No context records yet.\n", .{});
         return;
     };
@@ -581,7 +585,7 @@ pub fn contextQuery(
     const dir_path = try contextDir(allocator, repo);
     defer allocator.free(dir_path);
 
-    var dir = std.fs.cwd().openDir(dir_path, .{ .iterate = true }) catch {
+    var dir = std.Io.Dir.cwd().openDir(dir_path, .{ .iterate = true }) catch {
         std.debug.print("No context records.\n", .{});
         return;
     };
@@ -653,7 +657,7 @@ pub fn contextList(allocator: std.mem.Allocator, repo: *Repository) !void {
     const dir_path = try contextDir(allocator, repo);
     defer allocator.free(dir_path);
 
-    var dir = std.fs.cwd().openDir(dir_path, .{ .iterate = true }) catch {
+    var dir = std.Io.Dir.cwd().openDir(dir_path, .{ .iterate = true }) catch {
         std.debug.print("No context records yet.\n", .{});
         std.debug.print("Add context: zev context add <file> --model <model>\n", .{});
         return;
@@ -680,4 +684,163 @@ pub fn contextList(allocator: std.mem.Allocator, repo: *Repository) !void {
     } else {
         std.debug.print("\n  Total: {d} record(s)\n\n", .{count});
     }
+}
+
+pub fn contextAutoDetect(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    repo: Repository,
+    file_path: []const u8,
+) !void {
+    std.Io.Dir.cwd().access(io, file_path, .{}) catch {
+        std.debug.print("Error: file not found: {s}\n", .{file_path});
+        return;
+    };
+
+    var detected_model: []const u8 = "unknown";
+    var detected_kind: []const u8 = "unknown";
+    var source: []const u8 = "none";
+
+    const env_vars = [_]struct { env: []const u8, model: []const u8 }{
+        .{ .env = "CLAUDE_CODE", .model = "claude" },
+        .{ .env = "CURSOR_TRACE", .model = "cursor" },
+        .{ .env = "COPILOT_AGENT", .model = "github-copilot" },
+        .{ .env = "CODY_AGENT", .model = "sourcegraph-cody" },
+        .{ .env = "ZEV_AI_MODEL", .model = "" },
+        .{ .env = "AI_MODEL", .model = "" },
+        .{ .env = "OPENAI_API_KEY", .model = "openai" },
+        .{ .env = "ANTHROPIC_API_KEY", .model = "anthropic" },
+        .{ .env = "GEMINI_API_KEY", .model = "gemini" },
+    };
+
+    for (env_vars) |ev| {
+        const val = std.process.getEnvVarOwned(allocator, ev.env) catch continue;
+        defer allocator.free(val);
+        if (val.len == 0) continue;
+        if (ev.model.len > 0) {
+            detected_model = ev.model;
+        } else {
+            detected_model = val;
+        }
+        detected_kind = "llm";
+        source = ev.env;
+        break;
+    }
+
+    if (std.mem.eql(u8, detected_kind, "unknown")) {
+        const file_data = std.Io.Dir.cwd().readFileAlloc(io, file_path, allocator, .limited(512 * 1024)) catch {
+            std.debug.print("Could not read file: {s}\n", .{file_path});
+            return;
+        };
+        defer allocator.free(file_data);
+
+        const ai_patterns = [_][]const u8{
+            "# Generated by",
+            "# This code was generated",
+            "# AI-generated",
+            "# Created by Claude",
+            "# Created by GPT",
+            "// Generated by",
+            "// This code was generated",
+            "<!-- Generated by",
+            "Generated by",
+            "This function was generated",
+        };
+
+        for (ai_patterns) |pat| {
+            if (std.mem.indexOf(u8, file_data, pat) != null) {
+                detected_kind = "llm";
+                detected_model = "unknown-ai";
+                source = "file-header-pattern";
+                break;
+            }
+        }
+    }
+
+    if (std.mem.eql(u8, detected_kind, "unknown")) {
+        detected_kind = "human";
+        detected_model = "none";
+        source = "default";
+    }
+
+    std.debug.print("🔍 Auto-detecting context for '{s}'\n\n", .{file_path});
+    std.debug.print("   Model:  {s}\n", .{detected_model});
+    std.debug.print("   Kind:   {s}\n", .{detected_kind});
+    std.debug.print("   Source: {s}\n\n", .{source});
+
+    try contextAdd(allocator, repo, file_path, detected_model, null, null, detected_kind);
+}
+
+pub fn contextAutoDetectAll(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    repo: *Repository,
+) !void {
+    const head_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "HEAD" });
+    defer allocator.free(head_path);
+    const head = std.Io.Dir.cwd().readFileAlloc(io, head_path, allocator, .limited(256)) catch {
+        std.debug.print("No commits yet.\n", .{});
+        return;
+    };
+    defer allocator.free(head);
+
+    var ref_hash: []const u8 = std.mem.trim(u8, head, "\n\r ");
+    var resolved: []u8 = undefined;
+    var should_free = false;
+
+    if (std.mem.startsWith(u8, ref_hash, "ref: ")) {
+        const ref = ref_hash[5..];
+        const ref_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", ref });
+        defer allocator.free(ref_path);
+        resolved = std.Io.Dir.cwd().readFileAlloc(io, ref_path, allocator, .limited(256)) catch {
+            std.debug.print("Could not resolve HEAD.\n", .{});
+            return;
+        };
+        ref_hash = std.mem.trim(u8, resolved, "\n\r ");
+        should_free = true;
+    }
+    defer if (should_free) allocator.free(resolved);
+
+    const obj_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "objects", ref_hash });
+    defer allocator.free(obj_path);
+    const obj = std.Io.Dir.cwd().readFileAlloc(io, obj_path, allocator, .limited(64 * 1024)) catch {
+        std.debug.print("Could not read commit object.\n", .{});
+        return;
+    };
+    defer allocator.free(obj);
+
+    var tree_hash: []const u8 = "";
+    var lines = std.mem.splitSequence(u8, obj, "\n");
+    while (lines.next()) |line| {
+        if (std.mem.startsWith(u8, line, "tree ")) {
+            tree_hash = line[5..];
+            break;
+        }
+    }
+    if (tree_hash.len == 0) return;
+
+    const tree_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "objects", tree_hash });
+    defer allocator.free(tree_path);
+    const tree_data = std.Io.Dir.cwd().readFileAlloc(io, tree_path, allocator, .limited(64 * 1024)) catch return;
+    defer allocator.free(tree_data);
+
+    std.debug.print("🔍 Auto-detecting context for all files in HEAD commit\n\n", .{});
+
+    var file_lines = std.mem.splitSequence(u8, tree_data, "\n");
+    var count: usize = 0;
+    while (file_lines.next()) |line| {
+        if (line.len == 0) continue;
+        var parts = std.mem.splitSequence(u8, line, " ");
+        const fname = parts.next() orelse continue;
+        if (fname.len == 0) continue;
+        var valid = true;
+        for (fname) |c| if (c == '=' or c == ':') {
+            valid = false;
+            break;
+        };
+        if (!valid) continue;
+        try contextAutoDetect(allocator, repo, fname);
+        count += 1;
+    }
+    std.debug.print("Processed {d} file(s).\n", .{count});
 }

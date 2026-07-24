@@ -10,12 +10,13 @@ pub const MergeResult = enum {
 
 pub fn merge(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *repository.Repository,
     source_branch: []const u8,
 ) !MergeResult {
     const head_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "HEAD" });
     defer allocator.free(head_path);
-    const head = std.fs.cwd().readFileAlloc(head_path, allocator, @enumFromInt(256)) catch return error.NoHEAD;
+    const head = std.Io.Dir.cwd().readFileAlloc(io, head_path, allocator, .limited(256)) catch return error.NoHEAD;
     defer allocator.free(head);
 
     const src_ref = try std.fmt.allocPrint(allocator, ".zev/refs/heads/{s}", .{source_branch});
@@ -23,7 +24,7 @@ pub fn merge(
     const src_path = try std.fs.path.join(allocator, &.{ repo.path, src_ref });
     defer allocator.free(src_path);
 
-    const src_hash = std.fs.cwd().readFileAlloc(src_path, allocator, @enumFromInt(256)) catch {
+    const src_hash = std.Io.Dir.cwd().readFileAlloc(io, src_path, allocator, .limited(256)) catch {
         std.debug.print("Branch '{s}' not found.\n", .{source_branch});
         return error.BranchNotFound;
     };
@@ -35,7 +36,7 @@ pub fn merge(
         const ref = trimmed_head[5..];
         const cur_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", ref });
         defer allocator.free(cur_path);
-        const cur = std.fs.cwd().readFileAlloc(cur_path, allocator, @enumFromInt(256)) catch return .AlreadyUpToDate;
+        const cur = std.Io.Dir.cwd().readFileAlloc(io, cur_path, allocator, .limited(256)) catch return .AlreadyUpToDate;
         defer allocator.free(cur);
         current_hash = std.mem.trim(u8, cur, "\n\r ");
     }
@@ -47,7 +48,7 @@ pub fn merge(
         const ref = trimmed_head[5..];
         const cur_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", ref });
         defer allocator.free(cur_path);
-        const f = std.fs.cwd().createFile(cur_path, .{}) catch return .ConflictDetected;
+        const f = std.Io.Dir.cwd().createFile(cur_path, .{}) catch return .ConflictDetected;
         defer f.close();
         try f.writeAll(src_trimmed);
     }

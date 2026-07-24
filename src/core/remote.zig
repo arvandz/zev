@@ -53,37 +53,37 @@ pub const Remote = struct {
     }
 };
 
-pub fn addRemote(allocator: std.mem.Allocator, repo: *Repository, name: []const u8, url: []const u8) !void {
+pub fn addRemote(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, name: []const u8, url: []const u8) !void {
     const zev_path = try std.fs.path.join(allocator, &[_][]const u8{ repo.path, ".zev" });
     defer allocator.free(zev_path);
 
     const remotes_dir = try std.fs.path.join(allocator, &[_][]const u8{ zev_path, "remotes" });
     defer allocator.free(remotes_dir);
 
-    try std.fs.cwd().makePath(remotes_dir);
+    try std.Io.Dir.cwd().createDirPath(io, remotes_dir);
 
     const remote_file_path = try std.fs.path.join(allocator, &[_][]const u8{ remotes_dir, name });
     defer allocator.free(remote_file_path);
 
-    const remote_file = try std.fs.cwd().createFile(remote_file_path, .{});
-    defer remote_file.close();
-
-    try remote_file.writeAll(url);
+    const remote_file = try std.Io.Dir.cwd().createFile(io, remote_file_path, .{});
+    defer remote_file.close(io);
+    var buffer: [512]u8 = undefined;
+    var writer = remote_file.writer(io, &buffer);
+    try writer.interface.writeAll(url);
+    try writer.flush();
 }
 
-pub fn getRemote(allocator: std.mem.Allocator, repo: *Repository, name: []const u8) ![]const u8 {
+pub fn getRemote(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, name: []const u8) ![]const u8 {
     const zev_path = try std.fs.path.join(allocator, &[_][]const u8{ repo.path, ".zev" });
     defer allocator.free(zev_path);
-
     const remote_file_path = try std.fs.path.join(allocator, &[_][]const u8{ zev_path, "remotes", name });
     defer allocator.free(remote_file_path);
-
-    const remote_file = try std.fs.cwd().openFile(remote_file_path, .{});
-    defer remote_file.close();
-
-    var buffer: [1024]u8 = undefined;
-    const bytes_read = try remote_file.read(&buffer);
-    const url = std.mem.trim(u8, buffer[0..bytes_read], " \n\r\t");
+    const remote_file = try std.Io.Dir.cwd().openFile(io, remote_file_path, .{});
+    defer remote_file.close(io);
+    var read_buffer: [1024]u8 = undefined;
+    var reader = remote_file.reader(io, &read_buffer);
+    const bytes_read = try reader.interface.readSliceShort(&read_buffer);
+    const url = std.mem.trim(u8, read_buffer[0..bytes_read], " \n\r\t");
 
     return try allocator.dupe(u8, url);
 }
@@ -95,7 +95,7 @@ pub fn removeRemote(allocator: std.mem.Allocator, repo: *Repository, name: []con
     const remote_file_path = try std.fs.path.join(allocator, &[_][]const u8{ zev_path, "remotes", name });
     defer allocator.free(remote_file_path);
 
-    try std.fs.cwd().deleteFile(remote_file_path);
+    try std.Io.Dir.cwd().deleteFile(remote_file_path);
 }
 
 pub fn listRemotes(allocator: std.mem.Allocator, repo: *Repository) !void {
@@ -105,7 +105,7 @@ pub fn listRemotes(allocator: std.mem.Allocator, repo: *Repository) !void {
     const remotes_dir_path = try std.fs.path.join(allocator, &[_][]const u8{ zev_path, "remotes" });
     defer allocator.free(remotes_dir_path);
 
-    var remotes_dir = std.fs.cwd().openDir(remotes_dir_path, .{ .iterate = true }) catch |err| {
+    var remotes_dir = std.Io.Dir.cwd().openDir(remotes_dir_path, .{ .iterate = true }) catch |err| {
         if (err == error.FileNotFound) {
             std.debug.print("No remotes configured\n", .{});
             return;
@@ -133,8 +133,8 @@ pub fn listRemotes(allocator: std.mem.Allocator, repo: *Repository) !void {
     }
 }
 
-pub fn push(allocator: std.mem.Allocator, repo: *Repository, remote_name: []const u8, branch_name: []const u8) !void {
-    const remote_url = try getRemote(allocator, repo, remote_name);
+pub fn push(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, remote_name: []const u8, branch_name: []const u8) !void {
+    const remote_url = try getRemote(allocator, io, repo, remote_name);
     defer allocator.free(remote_url);
 
     const protocol = try RemoteProtocol.fromUri(remote_url);
@@ -149,8 +149,8 @@ pub fn push(allocator: std.mem.Allocator, repo: *Repository, remote_name: []cons
     }
 }
 
-pub fn pull(allocator: std.mem.Allocator, repo: *Repository, remote_name: []const u8, branch_name: []const u8) !void {
-    const remote_url = try getRemote(allocator, repo, remote_name);
+pub fn pull(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, remote_name: []const u8, branch_name: []const u8) !void {
+    const remote_url = try getRemote(allocator, io, repo, remote_name);
     defer allocator.free(remote_url);
 
     const protocol = try RemoteProtocol.fromUri(remote_url);
@@ -165,27 +165,25 @@ pub fn pull(allocator: std.mem.Allocator, repo: *Repository, remote_name: []cons
     }
 }
 
-pub fn cloneWithDepth(allocator: std.mem.Allocator, url: []const u8, dest_path: []const u8, depth: usize) !void {
+pub fn cloneWithDepth(allocator: std.mem.Allocator, io: std.Io, url: []const u8, dest_path: []const u8, depth: usize) !void {
     const protocol = try RemoteProtocol.fromUri(url);
     std.debug.print("📦 Cloning from {s} into {s} (depth={})\n", .{ url, dest_path, depth });
     switch (protocol) {
-        .file => try cloneFileShallow(allocator, url, dest_path, depth),
+        .file => try cloneFileShallow(allocator, io, url, dest_path, depth),
         .http, .https => try cloneHTTP(allocator, url, dest_path),
         .ssh => try cloneSSH(allocator, url, dest_path),
-        .ipfs => try cloneIPFS(allocator, url, dest_path),
+        .ipfs => try cloneIPFS(allocator, io, url, dest_path),
     }
 }
 
-pub fn clone(allocator: std.mem.Allocator, url: []const u8, dest_path: []const u8) !void {
+pub fn clone(allocator: std.mem.Allocator, io: std.Io, url: []const u8, dest_path: []const u8) !void {
     const protocol = try RemoteProtocol.fromUri(url);
-
     std.debug.print("📦 Cloning from {s} into {s}\n", .{ url, dest_path });
-
     switch (protocol) {
-        .file => try cloneFile(allocator, url, dest_path),
+        .file => try cloneFile(allocator, io, url, dest_path),
         .http, .https => try cloneHTTP(allocator, url, dest_path),
         .ssh => try cloneSSH(allocator, url, dest_path),
-        .ipfs => try cloneIPFS(allocator, url, dest_path),
+        .ipfs => try cloneIPFS(allocator, io, url, dest_path),
     }
 }
 
@@ -208,7 +206,7 @@ fn pushFile(allocator: std.mem.Allocator, repo: *Repository, remote_url: []const
     const branch_path = try std.fs.path.join(allocator, &[_][]const u8{ zev_path, "refs", "heads", branch_name });
     defer allocator.free(branch_path);
 
-    const branch_file = try std.fs.cwd().openFile(branch_path, .{});
+    const branch_file = try std.Io.Dir.cwd().openFile(branch_path, .{});
     defer branch_file.close();
 
     var buffer: [256]u8 = undefined;
@@ -228,7 +226,7 @@ fn pushFile(allocator: std.mem.Allocator, repo: *Repository, remote_url: []const
     const remote_branch_path = try std.fs.path.join(allocator, &[_][]const u8{ remote_path, ".zev", "refs", "heads", branch_name });
     defer allocator.free(remote_branch_path);
 
-    const remote_branch_file = try std.fs.cwd().createFile(remote_branch_path, .{});
+    const remote_branch_file = try std.Io.Dir.cwd().createFile(remote_branch_path, .{});
     defer remote_branch_file.close();
 
     try remote_branch_file.writeAll(commit_hash);
@@ -252,7 +250,7 @@ fn pullFile(allocator: std.mem.Allocator, repo: *Repository, remote_url: []const
     const remote_branch_path = try std.fs.path.join(allocator, &[_][]const u8{ remote_path, ".zev", "refs", "heads", branch_name });
     defer allocator.free(remote_branch_path);
 
-    const remote_branch_file = try std.fs.cwd().openFile(remote_branch_path, .{});
+    const remote_branch_file = try std.Io.Dir.cwd().openFile(remote_branch_path, .{});
     defer remote_branch_file.close();
 
     var buffer: [256]u8 = undefined;
@@ -275,7 +273,7 @@ fn pullFile(allocator: std.mem.Allocator, repo: *Repository, remote_url: []const
     const local_branch_path = try std.fs.path.join(allocator, &[_][]const u8{ zev_path, "refs", "heads", branch_name });
     defer allocator.free(local_branch_path);
 
-    const local_branch_file = try std.fs.cwd().createFile(local_branch_path, .{});
+    const local_branch_file = try std.Io.Dir.cwd().createFile(local_branch_path, .{});
     defer local_branch_file.close();
 
     try local_branch_file.writeAll(commit_hash);
@@ -283,92 +281,92 @@ fn pullFile(allocator: std.mem.Allocator, repo: *Repository, remote_url: []const
     std.debug.print("✅ Pulled {s} successfully\n", .{branch_name});
 }
 
-fn cloneFileShallow(allocator: std.mem.Allocator, url: []const u8, dest_path: []const u8, depth: usize) !void {
+fn cloneFileShallow(allocator: std.mem.Allocator, io: std.Io, url: []const u8, dest_path: []const u8, depth: usize) !void {
     const source_path = if (std.mem.startsWith(u8, url, "file://")) url[7..] else url;
-    if (!Repository.exists(allocator, source_path)) return error.RemoteNotFound;
-
-    var dest_repo = try Repository.init(allocator, dest_path, false);
+    if (!Repository.exists(allocator, io, source_path)) return error.RemoteNotFound;
+    var dest_repo = try Repository.init(allocator, io, dest_path, false);
     defer dest_repo.deinit();
-    try addRemote(allocator, &dest_repo, "origin", url);
-
-    var source_repo = try Repository.open(allocator, source_path);
+    try addRemote(allocator, io, &dest_repo, "origin", url);
+    var source_repo = try Repository.open(allocator, io, source_path);
     defer source_repo.deinit();
 
-    const source_head = source_repo.getHeadCommit() catch {
+    const source_head = source_repo.getHeadCommit(io) catch {
         std.debug.print("⚠️  Remote has no commits\n", .{});
         return;
     };
 
     std.debug.print("📥 Copying last {} commit(s)...\n", .{depth});
-    try shallow_mod.shallowCopy(allocator, &source_repo, &dest_repo, source_head, depth);
+    try shallow_mod.shallowCopy(allocator, io, &source_repo, &dest_repo, source_head, depth);
 
     const zev_path = try std.fs.path.join(allocator, &.{ dest_path, ".zev" });
     defer allocator.free(zev_path);
     const main_path = try std.fs.path.join(allocator, &.{ zev_path, "refs", "heads", "main" });
     defer allocator.free(main_path);
-    try std.fs.cwd().makePath(try std.fs.path.join(allocator, &.{ zev_path, "refs", "heads" }));
-    const main_file = try std.fs.cwd().createFile(main_path, .{});
-    defer main_file.close();
+    const heads_dir = try std.fs.path.join(allocator, &.{ zev_path, "refs", "heads" });
+    defer allocator.free(heads_dir);
+    try std.Io.Dir.cwd().createDirPath(io, heads_dir);
+    const main_file = try std.Io.Dir.cwd().createFile(io, main_path, .{});
+    defer main_file.close(io);
     const head_str = try source_head.toString(allocator);
     defer allocator.free(head_str);
-    try main_file.writeAll(head_str);
-
+    var main_buffer: [128]u8 = undefined;
+    var main_writer = main_file.writer(io, &main_buffer);
+    try main_writer.interface.writeAll(head_str);
+    try main_writer.flush();
     const checkout_mod = @import("checkout.zig");
-    checkout_mod.checkoutCommit(allocator, &dest_repo, source_head) catch |err| {
+    checkout_mod.checkoutCommit(allocator, io, &dest_repo, source_head) catch |err| {
         std.debug.print("⚠️  Warning: Could not checkout files: {}\n", .{err});
     };
 
     std.debug.print("✅ Shallow clone complete (depth={})\n", .{depth});
-    if (shallow_mod.isShallow(allocator, dest_path)) {
+    if (shallow_mod.isShallow(io, allocator, dest_path)) {
         std.debug.print("⚠️  This is a shallow clone - history is limited\n", .{});
     }
 }
 
-fn cloneFile(allocator: std.mem.Allocator, url: []const u8, dest_path: []const u8) !void {
+fn cloneFile(allocator: std.mem.Allocator, io: std.Io, url: []const u8, dest_path: []const u8) !void {
     const source_path = if (std.mem.startsWith(u8, url, "file://"))
         url[7..]
     else
         url;
 
-    if (!Repository.exists(allocator, source_path)) {
+    if (!Repository.exists(allocator, io, source_path)) {
         return error.RemoteNotFound;
     }
 
-    var dest_repo = try Repository.init(allocator, dest_path, false);
+    var dest_repo = try Repository.init(allocator, io, dest_path, false);
     defer dest_repo.deinit();
 
-    try addRemote(allocator, &dest_repo, "origin", url);
+    try addRemote(allocator, io, &dest_repo, "origin", url);
 
-    var source_repo = try Repository.open(allocator, source_path);
+    var source_repo = try Repository.open(allocator, io, source_path);
     defer source_repo.deinit();
 
-    const source_head = source_repo.getHeadCommit() catch {
+    const source_head = source_repo.getHeadCommit(io) catch {
         std.debug.print("⚠️  Remote repository has no commits\n", .{});
         return;
     };
-
-    try copyCommitHistory(allocator, &source_repo, &dest_repo, source_head);
-
+    try copyCommitHistory(allocator, io, &source_repo, &dest_repo, source_head);
     const zev_path = try std.fs.path.join(allocator, &[_][]const u8{ dest_path, ".zev" });
     defer allocator.free(zev_path);
-
+    const heads_dir = try std.fs.path.join(allocator, &[_][]const u8{ zev_path, "refs", "heads" });
+    defer allocator.free(heads_dir);
+    try std.Io.Dir.cwd().createDirPath(io, heads_dir);
     const main_path = try std.fs.path.join(allocator, &[_][]const u8{ zev_path, "refs", "heads", "main" });
     defer allocator.free(main_path);
-
-    const main_file = try std.fs.cwd().createFile(main_path, .{});
-    defer main_file.close();
-
+    const main_file = try std.Io.Dir.cwd().createFile(io, main_path, .{});
+    defer main_file.close(io);
     const head_str = try source_head.toString(allocator);
     defer allocator.free(head_str);
-
-    try main_file.writeAll(head_str);
-
+    var buffer: [128]u8 = undefined;
+    var writer = main_file.writer(io, &buffer);
+    try writer.interface.writeAll(head_str);
+    try writer.flush();
     const checkout_mod = @import("checkout.zig");
     std.debug.print("📂 Checking out files...\n", .{});
-    checkout_mod.checkoutCommit(allocator, &dest_repo, source_head) catch |err| {
+    checkout_mod.checkoutCommit(allocator, io, &dest_repo, source_head) catch |err| {
         std.debug.print("⚠️  Warning: Could not checkout files: {}\n", .{err});
     };
-
     std.debug.print("✅ Cloned successfully\n", .{});
 }
 
@@ -430,7 +428,7 @@ fn cloneSSH(allocator: std.mem.Allocator, url: []const u8, dest_path: []const u8
     return error.NotImplemented;
 }
 
-fn pushIPFS(allocator: std.mem.Allocator, repo: *Repository, remote_name: []const u8, branch_name: []const u8) !void {
+fn pushIPFS(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, remote_name: []const u8, branch_name: []const u8) !void {
     _ = remote_name;
     _ = branch_name;
 
@@ -438,13 +436,13 @@ fn pushIPFS(allocator: std.mem.Allocator, repo: *Repository, remote_name: []cons
 
     const ipfs_repo = @import("ipfs_repo.zig");
 
-    const metadata_json = try ipfs_repo.IPFSRepo.packWithObjects(allocator, repo);
+    const metadata_json = try ipfs_repo.IPFSRepo.packWithObjects(allocator, io, repo);
     defer allocator.free(metadata_json);
 
     std.debug.print("📄 Packed repository metadata and objects ({} bytes)\n", .{metadata_json.len});
 
     var ipfs_client = IPFSClient.init(allocator, "http://127.0.0.1:5001");
-    const metadata_cid = try ipfs_client.add(metadata_json);
+    const metadata_cid = try ipfs_client.add(io, metadata_json);
     defer allocator.free(metadata_cid);
 
     std.debug.print("✅ Repository pushed to IPFS!\n", .{});
@@ -455,7 +453,7 @@ fn pushIPFS(allocator: std.mem.Allocator, repo: *Repository, remote_name: []cons
     std.debug.print("   https://ipfs.io/ipfs/{s}\n", .{metadata_cid});
 }
 
-fn pullIPFS(allocator: std.mem.Allocator, repo: *Repository, remote_url: []const u8, branch_name: []const u8) !void {
+fn pullIPFS(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, remote_url: []const u8, branch_name: []const u8) !void {
     _ = branch_name;
 
     const ipfs_cid = if (std.mem.startsWith(u8, remote_url, "ipfs://"))
@@ -468,7 +466,7 @@ fn pullIPFS(allocator: std.mem.Allocator, repo: *Repository, remote_url: []const
     const ipfs_repo = @import("ipfs_repo.zig");
 
     var ipfs_client = IPFSClient.init(allocator, "http://127.0.0.1:5001");
-    const metadata_json = try ipfs_client.cat(ipfs_cid);
+    const metadata_json = try ipfs_client.cat(io, ipfs_cid);
     defer allocator.free(metadata_json);
 
     std.debug.print("📄 Retrieved repository metadata\n", .{});
@@ -484,10 +482,10 @@ fn pullIPFS(allocator: std.mem.Allocator, repo: *Repository, remote_url: []const
             defer allocator.free(ref_path);
 
             if (std.fs.path.dirname(ref_path)) |parent_dir| {
-                try std.fs.cwd().makePath(parent_dir);
+                try std.Io.Dir.cwd().makePath(parent_dir);
             }
 
-            const ref_file = try std.fs.cwd().createFile(ref_path, .{});
+            const ref_file = try std.Io.Dir.cwd().createFile(io, ref_path, .{});
             defer ref_file.close();
             try ref_file.writeAll(entry.value_ptr.*);
 
@@ -498,7 +496,7 @@ fn pullIPFS(allocator: std.mem.Allocator, repo: *Repository, remote_url: []const
     std.debug.print("✅ Pull completed successfully!\n", .{});
 }
 
-fn cloneIPFS(allocator: std.mem.Allocator, url: []const u8, dest_path: []const u8) !void {
+fn cloneIPFS(allocator: std.mem.Allocator, io: std.Io, url: []const u8, dest_path: []const u8) !void {
     const ipfs_cid = if (std.mem.startsWith(u8, url, "ipfs://"))
         url[7..]
     else
@@ -509,23 +507,23 @@ fn cloneIPFS(allocator: std.mem.Allocator, url: []const u8, dest_path: []const u
 
     const ipfs_repo = @import("ipfs_repo.zig");
 
-    try std.fs.cwd().makePath(dest_path);
+    try std.Io.Dir.cwd().createDirPath(io, dest_path);
 
     var ipfs_client = IPFSClient.init(allocator, "http://127.0.0.1:5001");
-    const metadata_json = try ipfs_client.cat(ipfs_cid);
+    const metadata_json = try ipfs_client.cat(io, ipfs_cid);
     defer allocator.free(metadata_json);
 
     std.debug.print("📄 Retrieved repository metadata ({} bytes)\n", .{metadata_json.len});
 
-    try ipfs_repo.IPFSRepo.unpack(allocator, dest_path, metadata_json);
+    try ipfs_repo.IPFSRepo.unpack(allocator, io, dest_path, metadata_json);
 
-    var repo = try Repository.init(allocator, dest_path, false);
+    var repo = try Repository.init(allocator, io, dest_path, false);
     defer repo.deinit();
 
     const checkout_mod = @import("checkout.zig");
-    if (repo.getHeadCommit()) |commit_cid| {
+    if (repo.getHeadCommit(io)) |commit_cid| {
         std.debug.print("\xf0\x9f\x93\x82 Checking out files...\n", .{});
-        checkout_mod.checkoutCommit(allocator, &repo, commit_cid) catch |err| {
+        checkout_mod.checkoutCommit(allocator, io, &repo, commit_cid) catch |err| {
             std.debug.print("Warning: Could not checkout files: {}\n", .{err});
         };
     } else |_| {}
@@ -535,14 +533,14 @@ fn cloneIPFS(allocator: std.mem.Allocator, url: []const u8, dest_path: []const u
 
     const origin_url = try std.fmt.allocPrint(allocator, "ipfs://{s}", .{ipfs_cid});
     defer allocator.free(origin_url);
-    try addRemote(allocator, &repo, "origin", origin_url);
+    try addRemote(allocator, io, &repo, "origin", origin_url);
 }
 
-fn copyCommitHistory(allocator: std.mem.Allocator, from_repo: *Repository, to_repo: *Repository, head: cid.CID) !void {
+fn copyCommitHistory(allocator: std.mem.Allocator, io: std.Io, from_repo: *Repository, to_repo: *Repository, head: cid.CID) !void {
     var visited = std.AutoHashMap([32]u8, void).init(allocator);
     defer visited.deinit();
 
-    var to_process: std.ArrayList(cid.CID) = .{};
+    var to_process: std.ArrayList(cid.CID) = .empty;
     defer to_process.deinit(allocator);
 
     try to_process.append(allocator, head);
@@ -553,12 +551,12 @@ fn copyCommitHistory(allocator: std.mem.Allocator, from_repo: *Repository, to_re
         if (visited.contains(current.hash)) continue;
         try visited.put(current.hash, {});
 
-        if (try to_repo.store.has(current)) continue;
+        if (try to_repo.store.has(io, current)) continue;
 
-        const data = try from_repo.store.get(current);
+        const data = try from_repo.store.get(io, current);
         defer allocator.free(data);
 
-        _ = try to_repo.store.put(data);
+        _ = try to_repo.store.put(io, data);
 
         const commit_obj = commit.Commit.deserialize(allocator, data) catch continue;
         defer allocator.free(commit_obj.author);

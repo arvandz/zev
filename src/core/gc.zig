@@ -47,7 +47,7 @@ fn collectAllReachable(
     const heads_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "refs", "heads" });
     defer allocator.free(heads_path);
 
-    var dir = std.fs.cwd().openDir(heads_path, .{ .iterate = true }) catch return;
+    var dir = std.Io.Dir.cwd().openDir(heads_path, .{ .iterate = true }) catch return;
     defer dir.close();
 
     var it = dir.iterate();
@@ -57,7 +57,7 @@ fn collectAllReachable(
         const ref_path = try std.fs.path.join(allocator, &.{ heads_path, entry.name });
         defer allocator.free(ref_path);
 
-        const file = std.fs.cwd().openFile(ref_path, .{}) catch continue;
+        const file = std.Io.Dir.cwd().openFile(ref_path, .{}) catch continue;
         defer file.close();
 
         var buf: [128]u8 = undefined;
@@ -79,7 +79,7 @@ fn collectAllReachable(
     const tags_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "refs", "tags" });
     defer allocator.free(tags_path);
 
-    var tags_dir = std.fs.cwd().openDir(tags_path, .{ .iterate = true }) catch return;
+    var tags_dir = std.Io.Dir.cwd().openDir(tags_path, .{ .iterate = true }) catch return;
     defer tags_dir.close();
 
     var tags_it = tags_dir.iterate();
@@ -89,7 +89,7 @@ fn collectAllReachable(
         const tag_path = try std.fs.path.join(allocator, &.{ tags_path, entry.name });
         defer allocator.free(tag_path);
 
-        const file = std.fs.cwd().openFile(tag_path, .{}) catch continue;
+        const file = std.Io.Dir.cwd().openFile(tag_path, .{}) catch continue;
         defer file.close();
 
         var buf: [256]u8 = undefined;
@@ -138,7 +138,7 @@ pub fn runGC(allocator: std.mem.Allocator, repo: *Repository, dry_run: bool) !GC
     const objects_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "objects" });
     defer allocator.free(objects_path);
 
-    var objects_dir = std.fs.cwd().openDir(objects_path, .{ .iterate = true }) catch {
+    var objects_dir = std.Io.Dir.cwd().openDir(objects_path, .{ .iterate = true }) catch {
         return result;
     };
     defer objects_dir.close();
@@ -168,7 +168,7 @@ pub fn runGC(allocator: std.mem.Allocator, repo: *Repository, dry_run: bool) !GC
             const obj_path = try std.fs.path.join(allocator, &.{ objects_path, obj_entry.name });
             defer allocator.free(obj_path);
 
-            const file = std.fs.cwd().openFile(obj_path, .{}) catch continue;
+            const file = std.Io.Dir.cwd().openFile(obj_path, .{}) catch continue;
             const stat = file.stat() catch {
                 file.close();
                 continue;
@@ -181,7 +181,7 @@ pub fn runGC(allocator: std.mem.Allocator, repo: *Repository, dry_run: bool) !GC
             if (dry_run) {
                 std.debug.print("  [dry-run] would remove: {s}\n", .{obj_entry.name[0..12]});
             } else {
-                std.fs.cwd().deleteFile(obj_path) catch {};
+                std.Io.Dir.cwd().deleteFile(obj_path) catch {};
                 std.debug.print("  removed: {s}\n", .{obj_entry.name[0..12]});
             }
         }

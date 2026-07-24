@@ -23,7 +23,7 @@ pub const NotarizationRecord = struct {
 
 fn notarizeDir(allocator: std.mem.Allocator, repo: *Repository) ![]u8 {
     const dir = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "notarizations" });
-    try std.fs.cwd().makePath(dir);
+    try std.Io.Dir.cwd().makePath(dir);
     return dir;
 }
 
@@ -33,7 +33,7 @@ fn saveRecord(allocator: std.mem.Allocator, repo: *Repository, rec: Notarization
     const path = try std.fs.path.join(allocator, &.{ dir, rec.id });
     defer allocator.free(path);
 
-    const f = try std.fs.cwd().createFile(path, .{});
+    const f = try std.Io.Dir.cwd().createFile(path, .{});
     defer f.close();
 
     const verified_str: []const u8 = if (rec.verified) "true" else "false";
@@ -42,13 +42,13 @@ fn saveRecord(allocator: std.mem.Allocator, repo: *Repository, rec: Notarization
     try f.writeAll(content);
 }
 
-fn loadRecord(allocator: std.mem.Allocator, repo: *Repository, id: []const u8) !?NotarizationRecord {
+fn loadRecord(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, id: []const u8) !?NotarizationRecord {
     const dir = try notarizeDir(allocator, repo);
     defer allocator.free(dir);
     const path = try std.fs.path.join(allocator, &.{ dir, id });
     defer allocator.free(path);
 
-    const content = std.fs.cwd().readFileAlloc(path, allocator, @enumFromInt(64 * 1024)) catch |err| {
+    const content = std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(64 * 1024)) catch |err| {
         if (err == error.FileNotFound) return null;
         return err;
     };
@@ -133,10 +133,10 @@ fn freeRecord(allocator: std.mem.Allocator, rec: NotarizationRecord) void {
     allocator.free(rec.block);
 }
 
-fn getAuthor(allocator: std.mem.Allocator, repo: *Repository) ![]u8 {
+fn getAuthor(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) ![]u8 {
     const config_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "config" });
     defer allocator.free(config_path);
-    const content = std.fs.cwd().readFileAlloc(config_path, allocator, @enumFromInt(4096)) catch
+    const content = std.Io.Dir.cwd().readFileAlloc(io, config_path, allocator, .limited(4096)) catch
         return try allocator.dupe(u8, "unknown");
     defer allocator.free(content);
     var iter = std.mem.splitSequence(u8, content, "\n");
@@ -187,14 +187,14 @@ fn runCmd(allocator: std.mem.Allocator, argv: []const []const u8) ![]u8 {
     return try allocator.dupe(u8, buf[0..n]);
 }
 
-fn loadEthConfig(allocator: std.mem.Allocator, repo: *Repository) !struct {
+fn loadEthConfig(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) !struct {
     rpc_url: []u8,
     private_key: []u8,
     from_addr: []u8,
 } {
     const config_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "config" });
     defer allocator.free(config_path);
-    const content = std.fs.cwd().readFileAlloc(config_path, allocator, @enumFromInt(64 * 1024)) catch
+    const content = std.Io.Dir.cwd().readFileAlloc(io, config_path, allocator, .limited(64 * 1024)) catch
         return error.NoConfig;
     defer allocator.free(content);
 
@@ -268,7 +268,7 @@ fn submitEthereum(allocator: std.mem.Allocator, repo: *Repository, payload: []co
     defer allocator.free(nonce_req);
 
     const tmp = "/tmp/zev_eth_req.json";
-    const tf = try std.fs.cwd().createFile(tmp, .{});
+    const tf = try std.Io.Dir.cwd().createFile(tmp, .{});
     try tf.writeAll(nonce_req);
     tf.close();
 
@@ -309,10 +309,10 @@ fn extractJsonFieldRaw(allocator: std.mem.Allocator, json: []const u8, field: []
     return try allocator.dupe(u8, std.mem.trim(u8, after[0..end], " \t\r\n"));
 }
 
-fn submitArweave(allocator: std.mem.Allocator, repo: *Repository, payload: []const u8) !NotarizeResult {
+fn submitArweave(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, payload: []const u8) !NotarizeResult {
     const config_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "config" });
     defer allocator.free(config_path);
-    const config = std.fs.cwd().readFileAlloc(config_path, allocator, @enumFromInt(64 * 1024)) catch
+    const config = std.Io.Dir.cwd().readFileAlloc(io, config_path, allocator, .limited(64 * 1024)) catch
         return error.NoConfig;
     defer allocator.free(config);
 
@@ -330,7 +330,7 @@ fn submitArweave(allocator: std.mem.Allocator, repo: *Repository, payload: []con
     if (arweave_key.len == 0) return error.ArweaveNotConfigured;
 
     const tmp_payload = "/tmp/zev_arweave_payload.json";
-    const tf = try std.fs.cwd().createFile(tmp_payload, .{});
+    const tf = try std.Io.Dir.cwd().createFile(io, tmp_payload, .{});
     try tf.writeAll(payload);
     tf.close();
 
@@ -361,7 +361,7 @@ fn notarizeLocal(
     const fingerprint = try fingerprint_cid.toString(allocator);
 
     const proof_path = "/tmp/zev_notarization_proof.json";
-    const pf = try std.fs.cwd().createFile(proof_path, .{});
+    const pf = try std.Io.Dir.cwd().createFile(io, proof_path, .{});
     defer pf.close();
 
     const proof = try std.fmt.allocPrint(allocator, "{{\n  \"proof\": \"{s}\",\n  \"timestamp\": {d},\n  \"payload\": {s}\n}}\n", .{ fingerprint, timestamp, payload });
@@ -374,21 +374,19 @@ fn notarizeLocal(
     };
 }
 
-fn findSnapshotCid(allocator: std.mem.Allocator, repo: *Repository, name: []const u8) !?struct { cid: []u8, metrics: []u8, commit: []u8 } {
+fn findSnapshotCid(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, name: []const u8) !?struct { cid: []u8, metrics: []u8, commit: []u8 } {
     const dir_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "snapshots" });
     defer allocator.free(dir_path);
-
-    var dir = std.fs.cwd().openDir(dir_path, .{ .iterate = true }) catch return null;
-    defer dir.close();
-
+    var dir = std.Io.Dir.cwd().openDir(io, dir_path, .{ .iterate = true }) catch return null;
+    defer dir.close(io);
     var it = dir.iterate();
-    while (try it.next()) |entry| {
+    while (try it.next(io)) |entry| {
         if (entry.kind != .file) continue;
         if (std.mem.endsWith(u8, entry.name, ".name")) continue;
 
         const path = try std.fs.path.join(allocator, &.{ dir_path, entry.name });
         defer allocator.free(path);
-        const content = std.fs.cwd().readFileAlloc(path, allocator, @enumFromInt(64 * 1024)) catch continue;
+        const content = std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(64 * 1024)) catch continue;
         defer allocator.free(content);
 
         var snap_name: []u8 = try allocator.dupe(u8, "");
@@ -425,12 +423,13 @@ fn findSnapshotCid(allocator: std.mem.Allocator, repo: *Repository, name: []cons
 
 pub fn notarizeSnapshot(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     snap_name: []const u8,
     chain: []const u8,
     dry_run: bool,
 ) !void {
-    const snap = (try findSnapshotCid(allocator, repo, snap_name)) orelse {
+    const snap = (try findSnapshotCid(allocator, io, repo, snap_name)) orelse {
         std.debug.print("Error: Snapshot '{s}' not found\n", .{snap_name});
         return;
     };
@@ -525,11 +524,12 @@ pub fn notarizeSnapshot(
 
 pub fn notarizeCommit(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     chain: []const u8,
     dry_run: bool,
 ) !void {
-    const head = repo.getHeadCommit() catch {
+    const head = repo.getHeadCommit(io) catch {
         std.debug.print("Error: No commits yet.\n", .{});
         return;
     };
@@ -541,12 +541,12 @@ pub fn notarizeCommit(
     var metrics_str: []u8 = try allocator.dupe(u8, "");
     defer allocator.free(metrics_str);
 
-    const metrics_content = std.fs.cwd().readFileAlloc(metrics_path, allocator, @enumFromInt(64 * 1024)) catch
+    const metrics_content = std.Io.Dir.cwd().readFileAlloc(io, metrics_path, allocator, .limited(64 * 1024)) catch
         try allocator.dupe(u8, "");
     defer allocator.free(metrics_content);
 
     if (metrics_content.len > 0) {
-        var result: std.ArrayList(u8) = .{};
+        var result: std.ArrayList(u8) = .empty;
         var first = true;
         var miter = std.mem.splitSequence(u8, metrics_content, "\n");
         while (miter.next()) |line| {
@@ -611,7 +611,7 @@ pub fn notarizeVerify(allocator: std.mem.Allocator, repo: *Repository, rec_id_pr
     defer allocator.free(dir);
 
     var found_rec: ?NotarizationRecord = null;
-    var d = std.fs.cwd().openDir(dir, .{ .iterate = true }) catch {
+    var d = std.Io.Dir.cwd().openDir(dir, .{ .iterate = true }) catch {
         std.debug.print("No notarizations yet.\n", .{});
         return;
     };
@@ -663,7 +663,7 @@ pub fn notarizeList(allocator: std.mem.Allocator, repo: *Repository) !void {
     const dir = try notarizeDir(allocator, repo);
     defer allocator.free(dir);
 
-    var d = std.fs.cwd().openDir(dir, .{ .iterate = true }) catch {
+    var d = std.Io.Dir.cwd().openDir(dir, .{ .iterate = true }) catch {
         std.debug.print("No notarizations yet.\n", .{});
         std.debug.print("Create one: zev notarize snapshot <name>\n", .{});
         return;
@@ -699,6 +699,7 @@ pub fn notarizeList(allocator: std.mem.Allocator, repo: *Repository) !void {
 
 pub fn notarizeConfig(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     chain: []const u8,
     rpc_url: ?[]const u8,
@@ -709,11 +710,11 @@ pub fn notarizeConfig(
     const config_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "config" });
     defer allocator.free(config_path);
 
-    const existing = std.fs.cwd().readFileAlloc(config_path, allocator, @enumFromInt(64 * 1024)) catch
+    const existing = std.Io.Dir.cwd().readFileAlloc(io, config_path, allocator, .limited(64 * 1024)) catch
         try allocator.dupe(u8, "");
     defer allocator.free(existing);
 
-    var lines: std.ArrayList(u8) = .{};
+    var lines: std.ArrayList(u8) = .empty;
     defer lines.deinit(allocator);
 
     var iter = std.mem.splitSequence(u8, existing, "\n");
@@ -754,7 +755,7 @@ pub fn notarizeConfig(
         }
     }
 
-    const f = try std.fs.cwd().createFile(config_path, .{});
+    const f = try std.Io.Dir.cwd().createFile(config_path, .{});
     defer f.close();
     try f.writeAll(lines.items);
 

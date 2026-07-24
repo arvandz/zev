@@ -17,12 +17,13 @@ pub const ThresholdConfig = struct {
 
 pub fn loadThresholds(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
 ) ![]ThresholdConfig {
     const path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "regression_config" });
     defer allocator.free(path);
 
-    const content = std.fs.cwd().readFileAlloc(path, allocator, @enumFromInt(64 * 1024)) catch return try allocator.alloc(ThresholdConfig, 0);
+    const content = std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(64 * 1024)) catch return try allocator.alloc(ThresholdConfig, 0);
     defer allocator.free(content);
 
     var configs = std.ArrayList(ThresholdConfig){};
@@ -56,6 +57,7 @@ pub fn loadThresholds(
 
 pub fn saveThreshold(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     cfg: ThresholdConfig,
 ) !void {
@@ -65,7 +67,7 @@ pub fn saveThreshold(
     var lines = std.ArrayList(u8){};
     defer lines.deinit(allocator);
 
-    const existing = std.fs.cwd().readFileAlloc(path, allocator, @enumFromInt(64 * 1024)) catch "";
+    const existing = std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(64 * 1024)) catch "";
     defer if (existing.len > 0) allocator.free(existing);
 
     var found = false;
@@ -85,7 +87,7 @@ pub fn saveThreshold(
     }
     if (!found) try appendThresholdLine(allocator, &lines, cfg);
 
-    const f = try std.fs.cwd().createFile(path, .{});
+    const f = try std.Io.Dir.cwd().createFile(path, .{});
     defer f.close();
     try f.writeAll(lines.items);
 }
@@ -143,10 +145,10 @@ pub fn appendMetricHistory(
 
     const now = (std.time.Instant.now() catch unreachable).timestamp.sec;
     const f = blk: {
-        if (std.fs.cwd().openFile(path, .{ .mode = .read_write })) |file| {
+        if (std.Io.Dir.cwd().openFile(path, .{ .mode = .read_write })) |file| {
             break :blk file;
         } else |_| {}
-        break :blk try std.fs.cwd().createFile(path, .{});
+        break :blk try std.Io.Dir.cwd().createFile(path, .{});
     };
     defer f.close();
     try f.seekFromEnd(0);
@@ -157,13 +159,14 @@ pub fn appendMetricHistory(
 
 pub fn loadMetricHistory(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     metric: []const u8,
 ) ![]MetricRecord {
     const path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "metric_history" });
     defer allocator.free(path);
 
-    const content = std.fs.cwd().readFileAlloc(path, allocator, @enumFromInt(1024 * 1024)) catch return try allocator.alloc(MetricRecord, 0);
+    const content = std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(1024 * 1024)) catch return try allocator.alloc(MetricRecord, 0);
     defer allocator.free(content);
 
     var records = std.ArrayList(MetricRecord){};
@@ -384,6 +387,7 @@ pub fn printRegressions(regressions: []const Regression) void {
 
 pub fn recordMetricsToHistory(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     store: *ipld.BlockStore,
     commit_cid: ipld.CID,
@@ -403,7 +407,7 @@ pub fn recordMetricsToHistory(
     {
         const cd_path = try std.fs.path.join(allocator, &.{ repo_path, ".zev", "ipld_commits" });
         defer allocator.free(cd_path);
-        if (std.fs.cwd().openDir(cd_path, .{ .iterate = true })) |*dir| {
+        if (std.Io.Dir.cwd().openDir(cd_path, .{ .iterate = true })) |*dir| {
             var cdir = dir.*;
             defer cdir.close();
             var cit = cdir.iterate();
@@ -411,7 +415,7 @@ pub fn recordMetricsToHistory(
                 if (entry.kind != .file) continue;
                 const ep = try std.fs.path.join(allocator, &.{ cd_path, entry.name });
                 defer allocator.free(ep);
-                const stored = std.fs.cwd().readFileAlloc(ep, allocator, @enumFromInt(64)) catch continue;
+                const stored = std.Io.Dir.cwd().readFileAlloc(io, ep, allocator, .limited(64)) catch continue;
                 defer allocator.free(stored);
                 const trimmed = std.mem.trim(u8, stored, "\n\r ");
 
@@ -424,7 +428,7 @@ pub fn recordMetricsToHistory(
         } else |_| {}
     }
 
-    var root_dir = std.fs.cwd().openDir(store.base_path, .{ .iterate = true }) catch return;
+    var root_dir = std.Io.Dir.cwd().openDir(store.base_path, .{ .iterate = true }) catch return;
     defer root_dir.close();
 
     var rit = root_dir.iterate();
@@ -432,7 +436,7 @@ pub fn recordMetricsToHistory(
         if (shard.kind != .directory) continue;
         const sp = try std.fs.path.join(allocator, &.{ store.base_path, shard.name });
         defer allocator.free(sp);
-        var sd = std.fs.cwd().openDir(sp, .{ .iterate = true }) catch continue;
+        var sd = std.Io.Dir.cwd().openDir(sp, .{ .iterate = true }) catch continue;
         defer sd.close();
         var si = sd.iterate();
         while (try si.next()) |block| {
@@ -534,7 +538,7 @@ pub fn cmdThresholdList(
 
     std.debug.print("📏 Configured thresholds:\n\n", .{});
     std.debug.print("   {s:<20} {s:<12} {s:<12} {s:<12} {s}\n", .{ "metric", "min", "max", "warn_delta", "warn_pct%" });
-    std.debug.print("   {s}\n", .{"─" ** 65});
+    std.debug.print("   {s}\n", .{"─"**65});
     for (thresholds) |t| {
         std.debug.print("   {s:<20}", .{t.metric});
         if (t.min_value) |v| std.debug.print(" {d:<11.4}", .{v}) else std.debug.print(" {s:<11}", .{"-"});
@@ -685,7 +689,7 @@ pub fn cmdHistory(
     std.debug.print("\n\n", .{});
 
     std.debug.print("   {s:<12} {s:<10} {s}\n", .{ "commit", "value", "trend" });
-    std.debug.print("   {s}\n", .{"─" ** 35});
+    std.debug.print("   {s}\n", .{"─"**35});
 
     var prev: ?f64 = null;
     for (records) |r| {

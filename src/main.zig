@@ -45,19 +45,16 @@ const merge_mod = @import("core/fedmerge.zig");
 const sdiff = @import("core/semantic_diff.zig");
 const regression = @import("core/regression.zig");
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+pub fn main(init: std.process.Init) !void {
+    const io = init.io;
+    const allocator = init.gpa;
+    const arena = init.arena.allocator();
 
-    const args = try std.process.argsAlloc(allocator);
-    defer std.process.argsFree(allocator, args);
-
+    const args = try init.minimal.args.toSlice(arena);
     if (args.len < 2) {
         try printUsage();
         return;
     }
-
     const command = args[1];
 
     if (std.mem.eql(u8, command, "init")) {
@@ -70,7 +67,8 @@ pub fn main() !void {
             use_ipfs = true;
         }
 
-        var repo = try repository.Repository.init(allocator, path, use_ipfs);
+        var repo = try repository.Repository.init(allocator, io, path, use_ipfs);
+
         defer repo.deinit();
 
         std.debug.print("Initialized empty Zev repository in {s}/.zev/\n", .{path});
@@ -111,17 +109,17 @@ pub fn main() !void {
         }
 
         if (depth > 0) {
-            try remote.cloneWithDepth(allocator, url, dest, depth);
+            try remote.cloneWithDepth(allocator, io, url, dest, depth);
         } else {
-            try remote.clone(allocator, url, dest);
+            try remote.clone(allocator, io, url, dest);
         }
     } else if (std.mem.eql(u8, command, "config")) {
-        if (!repository.Repository.exists(allocator, ".")) {
+        if (!repository.Repository.exists(allocator, io, ".")) {
             std.debug.print("Not a zev repository.\n", .{});
             return;
         }
 
-        var config = try config_mod.Config.load(allocator, ".");
+        var config = try config_mod.Config.load(allocator, io, ".");
 
         if (args.len < 3) {
             std.debug.print("Usage: zev config <get|set|list> [key] [value]\n", .{});
@@ -175,7 +173,7 @@ pub fn main() !void {
                 config.deinit();
                 return;
             };
-            try config.save(".");
+            try config.save(io, ".");
             config.deinit();
 
             std.debug.print("✅ Set {s} = {s}\n", .{ key, value });
@@ -208,40 +206,40 @@ pub fn main() !void {
             return;
         }
 
-        if (!repository.Repository.exists(allocator, ".")) {
+        if (!repository.Repository.exists(allocator, io, ".")) {
             std.debug.print("Not a zev repository. Run 'zev init' first.\n", .{});
             return;
         }
 
-        var repo = try repository.Repository.open(allocator, ".");
+        var repo = try repository.Repository.open(allocator, io, ".");
         defer repo.deinit();
 
         const filename = args[2];
 
         const ignore_mod = @import("core/ignore.zig");
-        var ignore_list = try ignore_mod.IgnoreList.loadFromFile(allocator, ".");
+        var ignore_list = try ignore_mod.IgnoreList.loadFromFile(allocator, io, ".");
         defer ignore_list.deinit();
         if (ignore_list.isIgnored(filename)) {
             std.debug.print("Ignored '{s}' (matches .zevignore pattern)\n", .{filename});
             return;
         }
 
-        const file_data = try std.fs.cwd().readFileAlloc(filename, allocator, @enumFromInt(10 * 1024 * 1024));
+        const file_data = try std.Io.Dir.cwd().readFileAlloc(io, filename, allocator, .unlimited);
         defer allocator.free(file_data);
 
-        const file = try std.fs.cwd().openFile(filename, .{});
-        defer file.close();
-        const file_stat = try file.stat();
+        const file = try std.Io.Dir.cwd().openFile(io, filename, .{});
+        defer file.close(io);
+        const file_stat = try file.stat(io);
 
-        const content_id = try repo.store.put(file_data);
+        const content_id = try repo.store.put(io, file_data);
 
         if (repo.storage) |*storage| {
-            const ipfs_cid = try storage.storeObject(file_data);
+            const ipfs_cid = try storage.storeObject(io, file_data);
             defer allocator.free(ipfs_cid);
             std.debug.print("📦 Blob stored in IPFS: {s}\n", .{ipfs_cid});
         }
 
-        try repo.index.addEntry(filename, content_id, file_data.len, @intCast(file_stat.mode));
+        try repo.index.addEntry(filename, content_id, file_data.len, @intCast(file_stat.permissions.toMode()));
         try repo.index.write();
 
         std.debug.print("Added '{s}' to staging area\n", .{filename});
@@ -251,12 +249,12 @@ pub fn main() !void {
             return;
         }
 
-        if (!repository.Repository.exists(allocator, ".")) {
+        if (!repository.Repository.exists(allocator, io, ".")) {
             std.debug.print("Not a zev repository.\n", .{});
             return;
         }
 
-        var repo = try repository.Repository.open(allocator, ".");
+        var repo = try repository.Repository.open(allocator, io, ".");
         defer repo.deinit();
 
         if (repo.index.entries.items.len == 0) {
@@ -283,12 +281,12 @@ pub fn main() !void {
         var file_tree = tree.Tree.init(allocator);
         defer file_tree.deinit();
 
-        const commit_cid = try repo.createCommit(author, message, &file_tree);
+        const commit_cid = try repo.createCommit(io, author, message, &file_tree);
         const cid_str = try commit_cid.toString(allocator);
         defer allocator.free(cid_str);
 
         repo.index.clear();
-        try repo.index.write();
+        try repo.index.write(io);
 
         std.debug.print("Created commit: {s}\n", .{cid_str});
         std.debug.print("Committed {} file(s)\n", .{staged_count});
@@ -296,12 +294,12 @@ pub fn main() !void {
 
         _ = try hooks_mod.runHook(allocator, ".", .post_commit, &.{});
     } else if (std.mem.eql(u8, command, "remote")) {
-        if (!repository.Repository.exists(allocator, ".")) {
+        if (!repository.Repository.exists(allocator, io, ".")) {
             std.debug.print("Not a zev repository.\n", .{});
             return;
         }
 
-        var repo = try repository.Repository.open(allocator, ".");
+        var repo = try repository.Repository.open(allocator, io, ".");
         defer repo.deinit();
 
         if (args.len < 3) {
@@ -320,7 +318,7 @@ pub fn main() !void {
             }
             const name = args[3];
             const url = args[4];
-            try remote.addRemote(allocator, &repo, name, url);
+            try remote.addRemote(allocator, io, &repo, name, url);
             std.debug.print("✅ Added remote '{s}' -> {s}\n", .{ name, url });
         } else if (std.mem.eql(u8, args[2], "remove") or std.mem.eql(u8, args[2], "rm")) {
             if (args.len < 4) {
@@ -353,12 +351,12 @@ pub fn main() !void {
             return;
         }
 
-        if (!repository.Repository.exists(allocator, ".")) {
+        if (!repository.Repository.exists(allocator, io, ".")) {
             std.debug.print("Not a zev repository.\n", .{});
             return;
         }
 
-        var repo = try repository.Repository.open(allocator, ".");
+        var repo = try repository.Repository.open(allocator, io, ".");
         defer repo.deinit();
 
         const remote_name = args[2];
@@ -369,31 +367,31 @@ pub fn main() !void {
             std.debug.print("Push aborted by pre-push hook\n", .{});
             return;
         }
-        try remote.push(allocator, &repo, remote_name, branch_name);
+        try remote.push(allocator, io, &repo, remote_name, branch_name);
     } else if (std.mem.eql(u8, command, "pull")) {
         if (args.len < 3) {
             std.debug.print("Usage: zev pull <remote> [branch]\n", .{});
             return;
         }
 
-        if (!repository.Repository.exists(allocator, ".")) {
+        if (!repository.Repository.exists(allocator, io, ".")) {
             std.debug.print("Not a zev repository.\n", .{});
             return;
         }
 
-        var repo = try repository.Repository.open(allocator, ".");
+        var repo = try repository.Repository.open(allocator, io, ".");
         defer repo.deinit();
 
         const remote_name = args[2];
         const branch_name = if (args.len >= 4) args[3] else "main";
 
-        try remote.pull(allocator, &repo, remote_name, branch_name);
+        try remote.pull(allocator, io, &repo, remote_name, branch_name);
     } else if (std.mem.eql(u8, command, "sdiff")) {
-        if (!repository.Repository.exists(allocator, ".")) {
+        if (!repository.Repository.exists(allocator, io, ".")) {
             std.debug.print("Not a zev repository.\n", .{});
             return;
         }
-        var repo = try repository.Repository.open(allocator, ".");
+        var repo = try repository.Repository.open(allocator, io, ".");
         defer repo.deinit();
 
         var ref_a: []const u8 = "HEAD~1";
@@ -416,12 +414,12 @@ pub fn main() !void {
         }
         try sdiff.cmdSemanticDiff(allocator, &repo, ref_a, ref_b, metric_filter, fmt);
     } else if (std.mem.eql(u8, command, "diff")) {
-        if (!repository.Repository.exists(allocator, ".")) {
+        if (!repository.Repository.exists(allocator, io, ".")) {
             std.debug.print("Not a zev repository.\n", .{});
             return;
         }
 
-        var repo = try repository.Repository.open(allocator, ".");
+        var repo = try repository.Repository.open(allocator, io, ".");
         defer repo.deinit();
 
         if (args.len >= 3) {
@@ -436,12 +434,12 @@ pub fn main() !void {
             try diff.diffUnstaged(allocator, &repo);
         }
     } else if (std.mem.eql(u8, command, "branch")) {
-        if (!repository.Repository.exists(allocator, ".")) {
+        if (!repository.Repository.exists(allocator, io, ".")) {
             std.debug.print("Not a zev repository.\n", .{});
             return;
         }
 
-        var repo = try repository.Repository.open(allocator, ".");
+        var repo = try repository.Repository.open(allocator, io, ".");
         defer repo.deinit();
 
         if (args.len < 3) {
@@ -482,12 +480,12 @@ pub fn main() !void {
             return;
         }
 
-        if (!repository.Repository.exists(allocator, ".")) {
+        if (!repository.Repository.exists(allocator, io, ".")) {
             std.debug.print("Not a zev repository.\n", .{});
             return;
         }
 
-        var repo = try repository.Repository.open(allocator, ".");
+        var repo = try repository.Repository.open(allocator, io, ".");
         defer repo.deinit();
 
         const branch_name = args[2];
@@ -513,12 +511,12 @@ pub fn main() !void {
             return;
         }
 
-        if (!repository.Repository.exists(allocator, ".")) {
+        if (!repository.Repository.exists(allocator, io, ".")) {
             std.debug.print("Not a zev repository.\n", .{});
             return;
         }
 
-        var repo = try repository.Repository.open(allocator, ".");
+        var repo = try repository.Repository.open(allocator, io, ".");
         defer repo.deinit();
 
         const source_branch = args[2];
@@ -582,7 +580,7 @@ pub fn main() !void {
             }
 
             const filename = args[3];
-            const file_data = try std.fs.cwd().readFileAlloc(filename, allocator, @enumFromInt(100 * 1024 * 1024));
+            const file_data = try std.Io.Dir.cwd().readFileAlloc(io, filename, allocator, .limited(100 * 1024 * 1024));
             defer allocator.free(file_data);
 
             std.debug.print("📤 Adding {s} to IPFS...\n", .{filename});
@@ -602,7 +600,7 @@ pub fn main() !void {
             const ipfs_cid = args[3];
             std.debug.print("📥 Retrieving {s} from IPFS...\n", .{ipfs_cid});
 
-            const data = try ipfs_client.cat(ipfs_cid);
+            const data = try ipfs_client.cat(io, ipfs_cid);
             defer allocator.free(data);
 
             std.debug.print("\n--- Content ---\n", .{});
@@ -617,11 +615,11 @@ pub fn main() !void {
             const filename = args[3];
             const should_pin = if (args.len >= 5) std.mem.eql(u8, args[4], "--pin") else false;
 
-            const file_data = try std.fs.cwd().readFileAlloc(filename, allocator, @enumFromInt(100 * 1024 * 1024));
+            const file_data = try std.Io.Dir.cwd().readFileAlloc(io, filename, allocator, .limited(100 * 1024 * 1024));
             defer allocator.free(file_data);
 
             std.debug.print("📦 Storing {s} as IPFS block...\n", .{filename});
-            const block_cid = try ipfs_client.blockPut(file_data, should_pin);
+            const block_cid = try ipfs_client.blockPut(io, file_data, should_pin);
             defer allocator.free(block_cid);
 
             std.debug.print("✅ Block stored!\n", .{});
@@ -639,7 +637,7 @@ pub fn main() !void {
             const block_cid = args[3];
             std.debug.print("📥 Getting block {s}...\n", .{block_cid});
 
-            const data = try ipfs_client.blockGet(block_cid);
+            const data = try ipfs_client.blockGet(io, block_cid);
             defer allocator.free(data);
 
             std.debug.print("\n--- Block Data ---\n", .{});
@@ -683,12 +681,12 @@ pub fn main() !void {
             std.debug.print("Run 'zev ipfs' for usage\n", .{});
         }
     } else if (std.mem.eql(u8, command, "log")) {
-        if (!repository.Repository.exists(allocator, ".")) {
+        if (!repository.Repository.exists(allocator, io, ".")) {
             std.debug.print("Not a zev repository.\n", .{});
             return;
         }
 
-        var repo = try repository.Repository.open(allocator, ".");
+        var repo = try repository.Repository.open(allocator, io, ".");
         defer repo.deinit();
 
         const head_cid = repo.getHeadCommit() catch {
@@ -700,22 +698,22 @@ pub fn main() !void {
 
         try log.printLog(allocator, &repo.store, head_cid, max_count);
     } else if (std.mem.eql(u8, command, "status")) {
-        if (!repository.Repository.exists(allocator, ".")) {
+        if (!repository.Repository.exists(allocator, io, ".")) {
             std.debug.print("Not a zev repository.\n", .{});
             return;
         }
 
-        var repo = try repository.Repository.open(allocator, ".");
+        var repo = try repository.Repository.open(allocator, io, ".");
         defer repo.deinit();
 
-        try status.showStatus(allocator, &repo);
+        try status.showStatus(allocator, io, &repo);
     } else if (std.mem.eql(u8, command, "cat")) {
         if (args.len < 3) {
             std.debug.print("Usage: zev cat <cid>\n", .{});
             return;
         }
 
-        if (!repository.Repository.exists(allocator, ".")) {
+        if (!repository.Repository.exists(allocator, io, ".")) {
             std.debug.print("Not a zev repository.\n", .{});
             return;
         }
@@ -734,18 +732,18 @@ pub fn main() !void {
         }
 
         const content_id = cid.CID{ .hash = hash };
-        var repo = try repository.Repository.open(allocator, ".");
+        var repo = try repository.Repository.open(allocator, io, ".");
         defer repo.deinit();
 
-        const data = try repo.store.get(content_id);
+        const data = try repo.store.get(io, content_id);
         defer allocator.free(data);
         std.debug.print("{s}\n", .{data});
     } else if (std.mem.eql(u8, command, "hook")) {
-        if (!repository.Repository.exists(allocator, ".")) {
+        if (!repository.Repository.exists(allocator, io, ".")) {
             std.debug.print("Not a zev repository.\n", .{});
             return;
         }
-        var repo = try repository.Repository.open(allocator, ".");
+        var repo = try repository.Repository.open(allocator, io, ".");
         defer repo.deinit();
 
         if (args.len < 3) {
@@ -770,7 +768,7 @@ pub fn main() !void {
                 std.debug.print("Valid types: pre-commit, post-commit, pre-push, post-merge, commit-msg\n", .{});
                 return;
             };
-            const script = try std.fs.cwd().readFileAlloc(args[4], allocator, @enumFromInt(1024 * 1024));
+            const script = try std.Io.Dir.cwd().readFileAlloc(io, args[4], allocator, .limited(1024 * 1024));
             defer allocator.free(script);
             try hooks_mod.installHook(allocator, ".", hook_type, script);
         } else if (std.mem.eql(u8, args[2], "remove")) {
@@ -792,12 +790,12 @@ pub fn main() !void {
             std.debug.print("Unknown hook subcommand: {s}\n", .{args[2]});
         }
     } else if (std.mem.eql(u8, command, "tag")) {
-        if (!repository.Repository.exists(allocator, ".")) {
+        if (!repository.Repository.exists(allocator, io, ".")) {
             std.debug.print("Not a zev repository.\n", .{});
             return;
         }
 
-        var repo = try repository.Repository.open(allocator, ".");
+        var repo = try repository.Repository.open(allocator, io, ".");
         defer repo.deinit();
 
         if (args.len < 3) {
@@ -840,11 +838,11 @@ pub fn main() !void {
             std.debug.print("Created tag '{s}'\n", .{tag_name});
         }
     } else if (std.mem.eql(u8, command, "stash")) {
-        if (!repository.Repository.exists(allocator, ".")) {
+        if (!repository.Repository.exists(allocator, io, ".")) {
             std.debug.print("Not a zev repository.\n", .{});
             return;
         }
-        var repo = try repository.Repository.open(allocator, ".");
+        var repo = try repository.Repository.open(allocator, io, ".");
         defer repo.deinit();
 
         if (args.len < 3 or std.mem.eql(u8, args[2], "save")) {
@@ -888,11 +886,11 @@ pub fn main() !void {
             std.debug.print("  zev bisect reset              End bisect session\n", .{});
             return;
         }
-        if (!repository.Repository.exists(allocator, ".")) {
+        if (!repository.Repository.exists(allocator, io, ".")) {
             std.debug.print("Not a zev repository.\n", .{});
             return;
         }
-        var repo = try repository.Repository.open(allocator, ".");
+        var repo = try repository.Repository.open(allocator, io, ".");
         defer repo.deinit();
 
         if (std.mem.eql(u8, args[2], "start")) {
@@ -913,11 +911,11 @@ pub fn main() !void {
             std.debug.print("Usage: zev cherry-pick <commit-hash>\n", .{});
             return;
         }
-        if (!repository.Repository.exists(allocator, ".")) {
+        if (!repository.Repository.exists(allocator, io, ".")) {
             std.debug.print("Not a zev repository.\n", .{});
             return;
         }
-        var repo = try repository.Repository.open(allocator, ".");
+        var repo = try repository.Repository.open(allocator, io, ".");
         defer repo.deinit();
 
         const hash_str = args[2];
@@ -944,11 +942,11 @@ pub fn main() !void {
             std.debug.print("\nShows who last modified each line of a file\n", .{});
             return;
         }
-        if (!repository.Repository.exists(allocator, ".")) {
+        if (!repository.Repository.exists(allocator, io, ".")) {
             std.debug.print("Not a zev repository.\n", .{});
             return;
         }
-        var repo = try repository.Repository.open(allocator, ".");
+        var repo = try repository.Repository.open(allocator, io, ".");
         defer repo.deinit();
         try blame_mod.blame(allocator, &repo, args[2]);
     } else if (std.mem.eql(u8, command, "rebase")) {
@@ -957,11 +955,11 @@ pub fn main() !void {
             std.debug.print("\nReplays commits from current branch on top of <branch>\n", .{});
             return;
         }
-        if (!repository.Repository.exists(allocator, ".")) {
+        if (!repository.Repository.exists(allocator, io, ".")) {
             std.debug.print("Not a zev repository.\n", .{});
             return;
         }
-        var repo = try repository.Repository.open(allocator, ".");
+        var repo = try repository.Repository.open(allocator, io, ".");
         defer repo.deinit();
 
         const onto = args[2];
@@ -972,11 +970,11 @@ pub fn main() !void {
             .nothing_to_rebase => {},
         }
     } else if (std.mem.eql(u8, command, "gc")) {
-        if (!repository.Repository.exists(allocator, ".")) {
+        if (!repository.Repository.exists(allocator, io, ".")) {
             std.debug.print("Not a zev repository.\n", .{});
             return;
         }
-        var repo = try repository.Repository.open(allocator, ".");
+        var repo = try repository.Repository.open(allocator, io, ".");
         defer repo.deinit();
 
         const dry_run = args.len >= 3 and std.mem.eql(u8, args[2], "--dry-run");
@@ -996,11 +994,11 @@ pub fn main() !void {
             std.debug.print("✅ Garbage collection complete\n", .{});
         }
     } else if (std.mem.eql(u8, command, "ipld")) {
-        if (!repository.Repository.exists(allocator, ".")) {
+        if (!repository.Repository.exists(allocator, io, ".")) {
             std.debug.print("Not a zev repository.\n", .{});
             return;
         }
-        var repo = try repository.Repository.open(allocator, ".");
+        var repo = try repository.Repository.open(allocator, io, ".");
         defer repo.deinit();
 
         if (args.len < 3) {
@@ -1023,11 +1021,11 @@ pub fn main() !void {
             std.debug.print("Unknown ipld subcommand: {s}\n", .{sub});
         }
     } else if (std.mem.eql(u8, command, "dag")) {
-        if (!repository.Repository.exists(allocator, ".")) {
+        if (!repository.Repository.exists(allocator, io, ".")) {
             std.debug.print("Not a zev repository.\n", .{});
             return;
         }
-        var repo = try repository.Repository.open(allocator, ".");
+        var repo = try repository.Repository.open(allocator, io, ".");
         defer repo.deinit();
 
         if (args.len < 3) {
@@ -1068,6 +1066,12 @@ pub fn main() !void {
             try dag_mod.dagPut(allocator, &repo, args[3]);
         } else if (std.mem.eql(u8, sub, "stat")) {
             try dag_mod.dagStat(allocator, &repo);
+        } else if (std.mem.eql(u8, sub, "auto")) {
+            if (args.len >= 4) {
+                try context_mod.contextAutoDetect(allocator, &repo, args[3]);
+            } else {
+                try context_mod.contextAutoDetectAll(allocator, &repo);
+            }
         } else if (std.mem.eql(u8, sub, "export")) {
             if (args.len < 4) {
                 std.debug.print("Usage: zev dag export <HEAD|all|cid> --output <file.car> [--depth N] [--to-ipfs]\n", .{});
@@ -1132,11 +1136,11 @@ pub fn main() !void {
             std.debug.print("Unknown dag subcommand: {s}\n", .{sub});
         }
     } else if (std.mem.eql(u8, command, "graft")) {
-        if (!repository.Repository.exists(allocator, ".")) {
+        if (!repository.Repository.exists(allocator, io, ".")) {
             std.debug.print("Not a zev repository.\n", .{});
             return;
         }
-        var repo = try repository.Repository.open(allocator, ".");
+        var repo = try repository.Repository.open(allocator, io, ".");
         defer repo.deinit();
 
         if (args.len < 3) {
@@ -1179,11 +1183,11 @@ pub fn main() !void {
             try dag_mod.graftAdd(allocator, &repo, sub, alias, desc, fetch);
         }
     } else if (std.mem.eql(u8, command, "dataset")) {
-        if (!repository.Repository.exists(allocator, ".")) {
+        if (!repository.Repository.exists(allocator, io, ".")) {
             std.debug.print("Not a zev repository.\n", .{});
             return;
         }
-        var repo = try repository.Repository.open(allocator, ".");
+        var repo = try repository.Repository.open(allocator, io, ".");
         defer repo.deinit();
 
         if (args.len < 3) {
@@ -1256,7 +1260,7 @@ pub fn main() !void {
                     notes = args[i];
                 }
             }
-            var shard_indices: std.ArrayList(usize) = .{};
+            var shard_indices: std.ArrayList(usize) = .empty;
             defer shard_indices.deinit(allocator);
             var sit = std.mem.splitSequence(u8, shards_str, ",");
             while (sit.next()) |tok| {
@@ -1290,11 +1294,11 @@ pub fn main() !void {
             std.debug.print("Unknown dataset subcommand: {s}\n", .{sub});
         }
     } else if (std.mem.eql(u8, command, "context")) {
-        if (!repository.Repository.exists(allocator, ".")) {
+        if (!repository.Repository.exists(allocator, io, ".")) {
             std.debug.print("Not a zev repository.\n", .{});
             return;
         }
-        var repo = try repository.Repository.open(allocator, ".");
+        var repo = try repository.Repository.open(allocator, io, ".");
         defer repo.deinit();
 
         if (args.len < 3) {
@@ -1356,6 +1360,12 @@ pub fn main() !void {
             try context_mod.contextStats(allocator, &repo);
         } else if (std.mem.eql(u8, sub, "list")) {
             try context_mod.contextList(allocator, &repo);
+        } else if (std.mem.eql(u8, sub, "auto")) {
+            if (args.len >= 4) {
+                try context_mod.contextAutoDetect(allocator, &repo, args[3]);
+            } else {
+                try context_mod.contextAutoDetectAll(allocator, &repo);
+            }
         } else if (std.mem.eql(u8, sub, "export")) {
             if (args.len < 4) {
                 std.debug.print("Usage: zev dag export <HEAD|all|cid> --output <file.car> [--depth N] [--to-ipfs]\n", .{});
@@ -1404,11 +1414,11 @@ pub fn main() !void {
             std.debug.print("Unknown context subcommand: {s}\n", .{sub});
         }
     } else if (std.mem.eql(u8, command, "audit")) {
-        if (!repository.Repository.exists(allocator, ".")) {
+        if (!repository.Repository.exists(allocator, io, ".")) {
             std.debug.print("Not a zev repository.\n", .{});
             return;
         }
-        var repo = try repository.Repository.open(allocator, ".");
+        var repo = try repository.Repository.open(allocator, io, ".");
         defer repo.deinit();
         var filter_snapshot: ?[]const u8 = null;
         var format: []const u8 = "terminal";
@@ -1444,11 +1454,11 @@ pub fn main() !void {
             std.debug.print("  zev export meta.zev-archive --no-objects\n", .{});
             return;
         }
-        if (!repository.Repository.exists(allocator, ".")) {
+        if (!repository.Repository.exists(allocator, io, ".")) {
             std.debug.print("Not a zev repository.\n", .{});
             return;
         }
-        var repo = try repository.Repository.open(allocator, ".");
+        var repo = try repository.Repository.open(allocator, io, ".");
         defer repo.deinit();
         var snapshot_filter: ?[]const u8 = null;
         var since_hash: ?[]const u8 = null;
@@ -1489,11 +1499,11 @@ pub fn main() !void {
         }
         try export_mod.archiveInfo(allocator, args[2]);
     } else if (std.mem.eql(u8, command, "reproduce")) {
-        if (!repository.Repository.exists(allocator, ".")) {
+        if (!repository.Repository.exists(allocator, io, ".")) {
             std.debug.print("Not a zev repository.\n", .{});
             return;
         }
-        var repo = try repository.Repository.open(allocator, ".");
+        var repo = try repository.Repository.open(allocator, io, ".");
         defer repo.deinit();
 
         if (args.len < 3) {
@@ -1555,11 +1565,11 @@ pub fn main() !void {
             }
         }
     } else if (std.mem.eql(u8, command, "drift")) {
-        if (!repository.Repository.exists(allocator, ".")) {
+        if (!repository.Repository.exists(allocator, io, ".")) {
             std.debug.print("Not a zev repository.\n", .{});
             return;
         }
-        var repo = try repository.Repository.open(allocator, ".");
+        var repo = try repository.Repository.open(allocator, io, ".");
         defer repo.deinit();
 
         if (args.len < 3) {
@@ -1652,11 +1662,11 @@ pub fn main() !void {
             std.debug.print("Unknown drift subcommand: {s}\n", .{sub});
         }
     } else if (std.mem.eql(u8, command, "notarize")) {
-        if (!repository.Repository.exists(allocator, ".")) {
+        if (!repository.Repository.exists(allocator, io, ".")) {
             std.debug.print("Not a zev repository.\n", .{});
             return;
         }
-        var repo = try repository.Repository.open(allocator, ".");
+        var repo = try repository.Repository.open(allocator, io, ".");
         defer repo.deinit();
 
         if (args.len < 3) {
@@ -1689,7 +1699,7 @@ pub fn main() !void {
                     dry_run = true;
                 }
             }
-            try notarize_mod.notarizeSnapshot(allocator, &repo, args[3], chain, dry_run);
+            try notarize_mod.notarizeSnapshot(allocator, io, &repo, args[3], chain, dry_run);
         } else if (std.mem.eql(u8, sub, "commit")) {
             var chain: []const u8 = "local";
             var dry_run = false;
@@ -1754,19 +1764,19 @@ pub fn main() !void {
         }
         const sub = args[2];
         if (std.mem.eql(u8, sub, "status")) {
-            if (!repository.Repository.exists(allocator, ".")) {
+            if (!repository.Repository.exists(allocator, io, ".")) {
                 std.debug.print("Not a zev repository.\n", .{});
                 return;
             }
-            var repo = try repository.Repository.open(allocator, ".");
+            var repo = try repository.Repository.open(allocator, io, ".");
             defer repo.deinit();
             try peer_mod.peerStatus(allocator, &repo);
         } else if (std.mem.eql(u8, sub, "announce")) {
-            if (!repository.Repository.exists(allocator, ".")) {
+            if (!repository.Repository.exists(allocator, io, ".")) {
                 std.debug.print("Not a zev repository.\n", .{});
                 return;
             }
-            var repo = try repository.Repository.open(allocator, ".");
+            var repo = try repository.Repository.open(allocator, io, ".");
             defer repo.deinit();
             var topic: []const u8 = "zev-repos";
             var i: usize = 3;
@@ -1778,11 +1788,11 @@ pub fn main() !void {
             }
             try peer_mod.peerAnnounce(allocator, &repo, topic);
         } else if (std.mem.eql(u8, sub, "listen")) {
-            if (!repository.Repository.exists(allocator, ".")) {
+            if (!repository.Repository.exists(allocator, io, ".")) {
                 std.debug.print("Not a zev repository.\n", .{});
                 return;
             }
-            var repo = try repository.Repository.open(allocator, ".");
+            var repo = try repository.Repository.open(allocator, io, ".");
             defer repo.deinit();
             var topic: []const u8 = "zev-repos";
             var timeout: u32 = 30;
@@ -1808,11 +1818,11 @@ pub fn main() !void {
                 std.debug.print("Usage: zev peer sync <meta-cid>\n", .{});
                 return;
             }
-            if (!repository.Repository.exists(allocator, ".")) {
+            if (!repository.Repository.exists(allocator, io, ".")) {
                 std.debug.print("Not a zev repository.\n", .{});
                 return;
             }
-            var repo = try repository.Repository.open(allocator, ".");
+            var repo = try repository.Repository.open(allocator, io, ".");
             defer repo.deinit();
             try peer_mod.peerSync(allocator, &repo, args[3]);
         } else {
@@ -1827,11 +1837,11 @@ pub fn main() !void {
         }
         try peer_mod.forkRepo(allocator, args[2], args[3]);
     } else if (std.mem.eql(u8, command, "compare")) {
-        if (!repository.Repository.exists(allocator, ".")) {
+        if (!repository.Repository.exists(allocator, io, ".")) {
             std.debug.print("Not a zev repository.\n", .{});
             return;
         }
-        var repo = try repository.Repository.open(allocator, ".");
+        var repo = try repository.Repository.open(allocator, io, ".");
         defer repo.deinit();
 
         if (args.len < 5) {
@@ -1857,11 +1867,11 @@ pub fn main() !void {
             std.debug.print("Unknown compare subcommand: {s}\n", .{sub});
         }
     } else if (std.mem.eql(u8, command, "search")) {
-        if (!repository.Repository.exists(allocator, ".")) {
+        if (!repository.Repository.exists(allocator, io, ".")) {
             std.debug.print("Not a zev repository.\n", .{});
             return;
         }
-        var repo = try repository.Repository.open(allocator, ".");
+        var repo = try repository.Repository.open(allocator, io, ".");
         defer repo.deinit();
 
         if (args.len < 3) {
@@ -1933,11 +1943,11 @@ pub fn main() !void {
             std.debug.print("Unknown search subcommand: {s}\n", .{sub});
         }
     } else if (std.mem.eql(u8, command, "publish")) {
-        if (!repository.Repository.exists(allocator, ".")) {
+        if (!repository.Repository.exists(allocator, io, ".")) {
             std.debug.print("Not a zev repository.\n", .{});
             return;
         }
-        var repo = try repository.Repository.open(allocator, ".");
+        var repo = try repository.Repository.open(allocator, io, ".");
         defer repo.deinit();
 
         if (args.len < 3) {
@@ -1975,7 +1985,7 @@ pub fn main() !void {
                 }
             }
             if (show_config) {
-                try publish_mod.publishConfigShow(allocator, &repo);
+                try publish_mod.publishConfigShow(allocator, io, &repo);
             } else {
                 try publish_mod.publishConfig(allocator, &repo, endpoint, token, username);
             }
@@ -2038,11 +2048,11 @@ pub fn main() !void {
             std.debug.print("Unknown publish subcommand: {s}\n", .{sub});
         }
     } else if (std.mem.eql(u8, command, "snapshot")) {
-        if (!repository.Repository.exists(allocator, ".")) {
+        if (!repository.Repository.exists(allocator, io, ".")) {
             std.debug.print("Not a zev repository.\n", .{});
             return;
         }
-        var repo = try repository.Repository.open(allocator, ".");
+        var repo = try repository.Repository.open(allocator, io, ".");
         defer repo.deinit();
 
         if (args.len < 3) {
@@ -2111,11 +2121,11 @@ pub fn main() !void {
             std.debug.print("Unknown snapshot subcommand: {s}\n", .{sub});
         }
     } else if (std.mem.eql(u8, command, "lineage")) {
-        if (!repository.Repository.exists(allocator, ".")) {
+        if (!repository.Repository.exists(allocator, io, ".")) {
             std.debug.print("Not a zev repository.\n", .{});
             return;
         }
-        var repo = try repository.Repository.open(allocator, ".");
+        var repo = try repository.Repository.open(allocator, io, ".");
         defer repo.deinit();
 
         if (args.len < 3) {
@@ -2187,11 +2197,11 @@ pub fn main() !void {
             std.debug.print("Unknown lineage subcommand: {s}\n", .{sub});
         }
     } else if (std.mem.eql(u8, command, "experiment")) {
-        if (!repository.Repository.exists(allocator, ".")) {
+        if (!repository.Repository.exists(allocator, io, ".")) {
             std.debug.print("Not a zev repository.\n", .{});
             return;
         }
-        var repo = try repository.Repository.open(allocator, ".");
+        var repo = try repository.Repository.open(allocator, io, ".");
         defer repo.deinit();
 
         if (args.len < 3) {
@@ -2249,11 +2259,11 @@ pub fn main() !void {
             std.debug.print("Unknown experiment subcommand: {s}\n", .{sub});
         }
     } else if (std.mem.eql(u8, command, "metrics")) {
-        if (!repository.Repository.exists(allocator, ".")) {
+        if (!repository.Repository.exists(allocator, io, ".")) {
             std.debug.print("Not a zev repository.\n", .{});
             return;
         }
-        var repo = try repository.Repository.open(allocator, ".");
+        var repo = try repository.Repository.open(allocator, io, ".");
         defer repo.deinit();
 
         if (args.len < 3) {
@@ -2298,11 +2308,11 @@ pub fn main() !void {
             std.debug.print("Unknown metrics subcommand: {s}\n", .{sub});
         }
     } else if (std.mem.eql(u8, command, "fedmerge")) {
-        if (!repository.Repository.exists(allocator, ".")) {
+        if (!repository.Repository.exists(allocator, io, ".")) {
             std.debug.print("Not a zev repository.\n", .{});
             return;
         }
-        var repo = try repository.Repository.open(allocator, ".");
+        var repo = try repository.Repository.open(allocator, io, ".");
         defer repo.deinit();
 
         var from_path: []const u8 = "";
@@ -2335,11 +2345,11 @@ pub fn main() !void {
         const strategy = merge_mod.MergeStrategy.fromStr(strategy_str);
         try merge_mod.mergeFromCar(allocator, &repo, from_path, strategy, dry_run, sign_result);
     } else if (std.mem.eql(u8, command, "sign")) {
-        if (!repository.Repository.exists(allocator, ".")) {
+        if (!repository.Repository.exists(allocator, io, ".")) {
             std.debug.print("Not a zev repository.\n", .{});
             return;
         }
-        var repo = try repository.Repository.open(allocator, ".");
+        var repo = try repository.Repository.open(allocator, io, ".");
         defer repo.deinit();
         if (args.len < 3) {
             std.debug.print("Usage: zev sign <cid>\n", .{});
@@ -2347,11 +2357,11 @@ pub fn main() !void {
         }
         try crypto_mod.cmdSign(allocator, &repo, args[2]);
     } else if (std.mem.eql(u8, command, "verify")) {
-        if (!repository.Repository.exists(allocator, ".")) {
+        if (!repository.Repository.exists(allocator, io, ".")) {
             std.debug.print("Not a zev repository.\n", .{});
             return;
         }
-        var repo = try repository.Repository.open(allocator, ".");
+        var repo = try repository.Repository.open(allocator, io, ".");
         defer repo.deinit();
         if (args.len < 3) {
             std.debug.print("Usage: zev verify <cid>\n", .{});
@@ -2359,19 +2369,19 @@ pub fn main() !void {
         }
         try crypto_mod.cmdVerify(allocator, &repo, args[2]);
     } else if (std.mem.eql(u8, command, "identity")) {
-        if (!repository.Repository.exists(allocator, ".")) {
+        if (!repository.Repository.exists(allocator, io, ".")) {
             std.debug.print("Not a zev repository.\n", .{});
             return;
         }
-        var repo = try repository.Repository.open(allocator, ".");
+        var repo = try repository.Repository.open(allocator, io, ".");
         defer repo.deinit();
         try crypto_mod.cmdIdentity(allocator, &repo);
     } else if (std.mem.eql(u8, command, "threshold")) {
-        if (!repository.Repository.exists(allocator, ".")) {
+        if (!repository.Repository.exists(allocator, io, ".")) {
             std.debug.print("Not a zev repository.\n", .{});
             return;
         }
-        var repo = try repository.Repository.open(allocator, ".");
+        var repo = try repository.Repository.open(allocator, io, ".");
         defer repo.deinit();
         if (args.len < 3) {
             std.debug.print("Usage: zev threshold <set|list>\n", .{});
@@ -2390,21 +2400,21 @@ pub fn main() !void {
             try regression.cmdThresholdSet(allocator, &repo, args[3], args[4..]);
         }
     } else if (std.mem.eql(u8, command, "check")) {
-        if (!repository.Repository.exists(allocator, ".")) {
+        if (!repository.Repository.exists(allocator, io, ".")) {
             std.debug.print("Not a zev repository.\n", .{});
             return;
         }
-        var repo = try repository.Repository.open(allocator, ".");
+        var repo = try repository.Repository.open(allocator, io, ".");
         defer repo.deinit();
         const ref = if (args.len >= 3) args[2] else "HEAD";
         const exit_code = try regression.cmdCheck(allocator, &repo, ref);
         if (exit_code != 0) std.process.exit(exit_code);
     } else if (std.mem.eql(u8, command, "history")) {
-        if (!repository.Repository.exists(allocator, ".")) {
+        if (!repository.Repository.exists(allocator, io, ".")) {
             std.debug.print("Not a zev repository.\n", .{});
             return;
         }
-        var repo = try repository.Repository.open(allocator, ".");
+        var repo = try repository.Repository.open(allocator, io, ".");
         defer repo.deinit();
         if (args.len < 3) {
             std.debug.print("Usage: zev history <metric>\n", .{});
@@ -2420,16 +2430,16 @@ pub fn main() !void {
     }
 }
 
-fn resolveCurrentHEAD(allocator: std.mem.Allocator, repo: *repository.Repository) ![]u8 {
+fn resolveCurrentHEAD(allocator: std.mem.Allocator, io: std.Io, repo: *repository.Repository) ![]u8 {
     const head_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "HEAD" });
     defer allocator.free(head_path);
-    const head = try std.fs.cwd().readFileAlloc(head_path, allocator, @enumFromInt(256));
+    const head = try std.Io.Dir.cwd().readFileAlloc(io, head_path, allocator, .limited(256));
     defer allocator.free(head);
     if (std.mem.startsWith(u8, head, "ref: ")) {
         const ref = std.mem.trim(u8, head[5..], "\n\r ");
         const rp = try std.fs.path.join(allocator, &.{ repo.path, ".zev", ref });
         defer allocator.free(rp);
-        const rc = try std.fs.cwd().readFileAlloc(rp, allocator, @enumFromInt(256));
+        const rc = try std.Io.Dir.cwd().readFileAlloc(io, rp, allocator, .limited(256));
         defer allocator.free(rc);
         return allocator.dupe(u8, std.mem.trim(u8, rc, "\n\r "));
     }

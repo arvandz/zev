@@ -76,14 +76,14 @@ fn collectMetrics(
     const root_short = try root_cid.toShort(allocator);
     defer allocator.free(root_short);
 
-    var root_dir = std.fs.cwd().openDir(store.base_path, .{ .iterate = true }) catch return;
+    var root_dir = std.Io.Dir.cwd().openDir(store.base_path, .{ .iterate = true }) catch return;
     defer root_dir.close();
     var rit = root_dir.iterate();
     while (try rit.next()) |shard| {
         if (shard.kind != .directory) continue;
         const sp = try std.fs.path.join(allocator, &.{ store.base_path, shard.name });
         defer allocator.free(sp);
-        var sd = std.fs.cwd().openDir(sp, .{ .iterate = true }) catch continue;
+        var sd = std.Io.Dir.cwd().openDir(sp, .{ .iterate = true }) catch continue;
         defer sd.close();
         var si = sd.iterate();
         while (try si.next()) |block| {
@@ -187,14 +187,14 @@ fn findHeadCommit(
     var best: ?ipld.CID = null;
     var best_ts: i64 = -1;
 
-    var root_dir = std.fs.cwd().openDir(store.base_path, .{ .iterate = true }) catch return null;
+    var root_dir = std.Io.Dir.cwd().openDir(store.base_path, .{ .iterate = true }) catch return null;
     defer root_dir.close();
     var rit = root_dir.iterate();
     while (try rit.next()) |shard| {
         if (shard.kind != .directory) continue;
         const sp = try std.fs.path.join(allocator, &.{ store.base_path, shard.name });
         defer allocator.free(sp);
-        var sd = std.fs.cwd().openDir(sp, .{ .iterate = true }) catch continue;
+        var sd = std.Io.Dir.cwd().openDir(sp, .{ .iterate = true }) catch continue;
         defer sd.close();
         var si = sd.iterate();
         while (try si.next()) |block| {
@@ -259,6 +259,7 @@ pub const MergeResult = struct {
 
 pub fn mergeFromCar(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     car_path: []const u8,
     strategy: MergeStrategy,
@@ -277,7 +278,7 @@ pub fn mergeFromCar(
     const head_a = blk: {
         const hp = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "ipld_head" });
         defer allocator.free(hp);
-        if (std.fs.cwd().readFileAlloc(hp, allocator, @enumFromInt(64))) |content| {
+        if (std.Io.Dir.cwd().readFileAlloc(io, hp, allocator, .limited(64))) |content| {
             defer allocator.free(content);
             const trimmed = std.mem.trim(u8, content, "\n\r ");
             if (ipld.CID.fromHex(trimmed)) |c| break :blk c else |_| {}
@@ -291,7 +292,7 @@ pub fn mergeFromCar(
     std.debug.print("📥 Importing foreign blocks...\n", .{});
     var imported_count: usize = 0;
     {
-        const car_data = try std.fs.cwd().readFileAlloc(car_path, allocator, @enumFromInt(512 * 1024 * 1024));
+        const car_data = try std.Io.Dir.cwd().readFileAlloc(io, car_path, allocator, .limited(512 * 1024 * 1024));
         defer allocator.free(car_data);
 
         var pos: usize = 0;
@@ -443,7 +444,7 @@ pub fn mergeFromCar(
     const merge_short = try merge_cid.toShort(allocator);
     defer allocator.free(merge_short);
     {
-        const f = try std.fs.cwd().createFile(head_path, .{});
+        const f = try std.Io.Dir.cwd().createFile(head_path, .{});
         defer f.close();
         try f.writeAll(merge_short);
     }
@@ -476,10 +477,11 @@ pub fn mergeFromCar(
 
 fn findHeadInCar(
     allocator: std.mem.Allocator,
+    io: std.Io,
     store: *ipld.BlockStore,
     car_path: []const u8,
 ) !?ipld.CID {
-    const car_data = std.fs.cwd().readFileAlloc(car_path, allocator, @enumFromInt(512 * 1024 * 1024)) catch return null;
+    const car_data = std.Io.Dir.cwd().readFileAlloc(io, car_path, allocator, .limited(512 * 1024 * 1024)) catch return null;
     defer allocator.free(car_data);
 
     var pos: usize = 0;

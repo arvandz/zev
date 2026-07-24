@@ -9,11 +9,11 @@ pub const PublishConfig = struct {
     username: []const u8,
 };
 
-fn loadPublishConfig(allocator: std.mem.Allocator, repo: *Repository) !?PublishConfig {
+fn loadPublishConfig(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) !?PublishConfig {
     const config_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "config" });
     defer allocator.free(config_path);
 
-    const content = std.fs.cwd().readFileAlloc(config_path, allocator, @enumFromInt(64 * 1024)) catch return null;
+    const content = std.Io.Dir.cwd().readFileAlloc(io, config_path, allocator, .limited(64 * 1024)) catch return null;
     defer allocator.free(content);
 
     var endpoint: []u8 = try allocator.dupe(u8, "");
@@ -54,10 +54,10 @@ fn freePublishConfig(allocator: std.mem.Allocator, cfg: PublishConfig) void {
     allocator.free(cfg.username);
 }
 
-fn getCurrentBranch(allocator: std.mem.Allocator, repo: *Repository) ![]u8 {
+fn getCurrentBranch(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) ![]u8 {
     const head_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "HEAD" });
     defer allocator.free(head_path);
-    const content = std.fs.cwd().readFileAlloc(head_path, allocator, @enumFromInt(256)) catch
+    const content = std.Io.Dir.cwd().readFileAlloc(io, head_path, allocator, .limited(256)) catch
         return try allocator.dupe(u8, "main");
     defer allocator.free(content);
     const trimmed = std.mem.trim(u8, content, " \n\r\t");
@@ -67,14 +67,14 @@ fn getCurrentBranch(allocator: std.mem.Allocator, repo: *Repository) ![]u8 {
     return try allocator.dupe(u8, trimmed);
 }
 
-fn readMetrics(allocator: std.mem.Allocator, repo: *Repository, hash: []const u8) ![]u8 {
+fn readMetrics(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, hash: []const u8) ![]u8 {
     const metrics_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "metrics", hash });
     defer allocator.free(metrics_path);
-    const content = std.fs.cwd().readFileAlloc(metrics_path, allocator, @enumFromInt(64 * 1024)) catch
+    const content = std.Io.Dir.cwd().readFileAlloc(io, metrics_path, allocator, .limited(64 * 1024)) catch
         return try allocator.dupe(u8, "");
     defer allocator.free(content);
 
-    var result: std.ArrayList(u8) = .{};
+    var result: std.ArrayList(u8) = .empty;
     var first = true;
     var iter = std.mem.splitSequence(u8, content, "\n");
     while (iter.next()) |line| {
@@ -89,10 +89,10 @@ fn readMetrics(allocator: std.mem.Allocator, repo: *Repository, hash: []const u8
     return result.toOwnedSlice(allocator);
 }
 
-fn getAuthor(allocator: std.mem.Allocator, repo: *Repository) ![]u8 {
+fn getAuthor(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) ![]u8 {
     const config_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "config" });
     defer allocator.free(config_path);
-    const content = std.fs.cwd().readFileAlloc(config_path, allocator, @enumFromInt(4096)) catch
+    const content = std.Io.Dir.cwd().readFileAlloc(io, config_path, allocator, .limited(4096)) catch
         return try allocator.dupe(u8, "unknown");
     defer allocator.free(content);
     var iter = std.mem.splitSequence(u8, content, "\n");
@@ -105,7 +105,7 @@ fn getAuthor(allocator: std.mem.Allocator, repo: *Repository) ![]u8 {
 }
 
 fn jsonEscape(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
-    var out: std.ArrayList(u8) = .{};
+    var out: std.ArrayList(u8) = .empty;
     for (input) |c| {
         switch (c) {
             '"' => try out.appendSlice(allocator, "\\\""),
@@ -220,7 +220,7 @@ fn buildSnapshotPayload(
 
 fn httpPost(allocator: std.mem.Allocator, endpoint: []const u8, token: []const u8, payload: []const u8) !struct { status: u32, body: []u8 } {
     const tmp_path = "/tmp/zev_publish_payload.json";
-    const tmp_file = try std.fs.cwd().createFile(tmp_path, .{});
+    const tmp_file = try std.Io.Dir.cwd().createFile(tmp_path, .{});
     try tmp_file.writeAll(payload);
     tmp_file.close();
 
@@ -230,7 +230,7 @@ fn httpPost(allocator: std.mem.Allocator, endpoint: []const u8, token: []const u
         try allocator.dupe(u8, "");
     defer allocator.free(auth_header);
 
-    var argv: std.ArrayList([]const u8) = .{};
+    var argv: std.ArrayList([]const u8) = .empty;
     defer argv.deinit(allocator);
     try argv.appendSlice(allocator, &.{
         "curl", "-s",                                                   "-w", "\n__STATUS__%{http_code}",
@@ -271,13 +271,14 @@ fn dryRunPublish(payload: []const u8, endpoint: []const u8) void {
 
 pub fn publishCommit(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     tags: []const u8,
     note: []const u8,
     dry_run: bool,
     repo_name: []const u8,
 ) !void {
-    const cfg = (try loadPublishConfig(allocator, repo)) orelse {
+    const cfg = (try loadPublishConfig(allocator, io, repo)) orelse {
         std.debug.print("Error: No publish endpoint configured.\n", .{});
         std.debug.print("Set it with: zev publish config --endpoint https://yourplatform.com/api/zev\n", .{});
         std.debug.print("             zev publish config --token YOUR_TOKEN\n", .{});
@@ -292,7 +293,7 @@ pub fn publishCommit(
     const commit_hash = try head.toString(allocator);
     defer allocator.free(commit_hash);
 
-    const commit_data = try repo.store.get(head);
+    const commit_data = try repo.store.get(io, head);
     defer allocator.free(commit_data);
     const commit = try commit_mod.Commit.deserialize(allocator, commit_data);
     defer allocator.free(commit.author);
@@ -344,12 +345,13 @@ pub fn publishCommit(
 
 pub fn publishExperiment(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     exp_name: []const u8,
     dry_run: bool,
     repo_name: []const u8,
 ) !void {
-    const cfg = (try loadPublishConfig(allocator, repo)) orelse {
+    const cfg = (try loadPublishConfig(allocator, io, repo)) orelse {
         std.debug.print("Error: No publish endpoint configured.\n", .{});
         std.debug.print("Set it: zev publish config --endpoint https://yourplatform.com/api/zev\n", .{});
         return;
@@ -358,7 +360,7 @@ pub fn publishExperiment(
 
     const exp_dir = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "experiments", exp_name });
     defer allocator.free(exp_dir);
-    const exp_content = std.fs.cwd().readFileAlloc(exp_dir, allocator, @enumFromInt(64 * 1024)) catch {
+    const exp_content = std.Io.Dir.cwd().readFileAlloc(io, exp_dir, allocator, .limited(64 * 1024)) catch {
         std.debug.print("Error: Experiment '{s}' not found\n", .{exp_name});
         return;
     };
@@ -401,7 +403,7 @@ pub fn publishExperiment(
 
     const refs_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "refs", "heads", exp_branch });
     defer allocator.free(refs_path);
-    const branch_head = std.fs.cwd().readFileAlloc(refs_path, allocator, @enumFromInt(128)) catch
+    const branch_head = std.Io.Dir.cwd().readFileAlloc(io, refs_path, allocator, .limited(128)) catch
         try allocator.dupe(u8, "");
     defer allocator.free(branch_head);
     const head_hash = std.mem.trim(u8, branch_head, " \n\r\t");
@@ -442,12 +444,13 @@ pub fn publishExperiment(
 
 pub fn publishSnapshot(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     snap_name: []const u8,
     dry_run: bool,
     repo_name: []const u8,
 ) !void {
-    const cfg = (try loadPublishConfig(allocator, repo)) orelse {
+    const cfg = (try loadPublishConfig(allocator, io, repo)) orelse {
         std.debug.print("Error: No publish endpoint configured.\n", .{});
         std.debug.print("Set it: zev publish config --endpoint https://yourplatform.com/api/zev\n", .{});
         return;
@@ -457,7 +460,7 @@ pub fn publishSnapshot(
     const snap_dir_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "snapshots" });
     defer allocator.free(snap_dir_path);
 
-    var snap_dir = std.fs.cwd().openDir(snap_dir_path, .{ .iterate = true }) catch {
+    var snap_dir = std.Io.Dir.cwd().openDir(snap_dir_path, .{ .iterate = true }) catch {
         std.debug.print("Error: No snapshots found\n", .{});
         return;
     };
@@ -469,11 +472,11 @@ pub fn publishSnapshot(
         if (!std.mem.endsWith(u8, entry.name, ".name")) continue;
         const full = try std.fs.path.join(allocator, &.{ snap_dir_path, entry.name });
         defer allocator.free(full);
-        const stored_id = std.fs.cwd().readFileAlloc(full, allocator, @enumFromInt(128)) catch continue;
+        const stored_id = std.Io.Dir.cwd().readFileAlloc(io, full, allocator, .limited(128)) catch continue;
         defer allocator.free(stored_id);
         const snap_path = try std.fs.path.join(allocator, &.{ snap_dir_path, stored_id });
         defer allocator.free(snap_path);
-        const snap_content = std.fs.cwd().readFileAlloc(snap_path, allocator, @enumFromInt(64 * 1024)) catch continue;
+        const snap_content = std.Io.Dir.cwd().readFileAlloc(io, snap_path, allocator, .limited(64 * 1024)) catch continue;
         defer allocator.free(snap_content);
         var name_check = std.mem.splitSequence(u8, snap_content, "\n");
         while (name_check.next()) |line| {
@@ -494,7 +497,7 @@ pub fn publishSnapshot(
 
     const snap_path = try std.fs.path.join(allocator, &.{ snap_dir_path, snap_id });
     defer allocator.free(snap_path);
-    const snap_content = try std.fs.cwd().readFileAlloc(snap_path, allocator, @enumFromInt(64 * 1024));
+    const snap_content = try std.Io.Dir.cwd().readFileAlloc(io, snap_path, allocator, .limited(64 * 1024));
     defer allocator.free(snap_content);
 
     var description: []u8 = try allocator.dupe(u8, "");
@@ -570,6 +573,7 @@ pub fn publishSnapshot(
 
 pub fn publishConfig(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     endpoint: ?[]const u8,
     token: ?[]const u8,
@@ -578,11 +582,11 @@ pub fn publishConfig(
     const config_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "config" });
     defer allocator.free(config_path);
 
-    const existing = std.fs.cwd().readFileAlloc(config_path, allocator, @enumFromInt(64 * 1024)) catch
+    const existing = std.Io.Dir.cwd().readFileAlloc(io, config_path, allocator, .limited(64 * 1024)) catch
         try allocator.dupe(u8, "");
     defer allocator.free(existing);
 
-    var lines: std.ArrayList(u8) = .{};
+    var lines: std.ArrayList(u8) = .empty;
     defer lines.deinit(allocator);
 
     var endpoint_written = false;
@@ -630,7 +634,7 @@ pub fn publishConfig(
         try lines.appendSlice(allocator, new);
     }
 
-    const file = try std.fs.cwd().createFile(config_path, .{});
+    const file = try std.Io.Dir.cwd().createFile(config_path, .{});
     defer file.close();
     try file.writeAll(lines.items);
 
@@ -640,8 +644,8 @@ pub fn publishConfig(
     if (username) |u| std.debug.print("   username: {s}\n", .{u});
 }
 
-pub fn publishConfigShow(allocator: std.mem.Allocator, repo: *Repository) !void {
-    const cfg = (try loadPublishConfig(allocator, repo)) orelse {
+pub fn publishConfigShow(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) !void {
+    const cfg = (try loadPublishConfig(allocator, io, repo)) orelse {
         std.debug.print("No publish config set.\n", .{});
         std.debug.print("Set endpoint: zev publish config --endpoint https://yourplatform.com/api/zev\n", .{});
         return;

@@ -21,7 +21,7 @@ pub const Snapshot = struct {
 
 fn snapshotDir(allocator: std.mem.Allocator, repo: *Repository) ![]u8 {
     const dir = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "snapshots" });
-    try std.fs.cwd().makePath(dir);
+    try std.Io.Dir.cwd().makePath(dir);
     return dir;
 }
 
@@ -42,7 +42,7 @@ fn saveSnapshot(allocator: std.mem.Allocator, repo: *Repository, snap: Snapshot)
     const path = try snapshotPath(allocator, repo, snap.id);
     defer allocator.free(path);
 
-    const file = try std.fs.cwd().createFile(path, .{});
+    const file = try std.Io.Dir.cwd().createFile(path, .{});
     defer file.close();
 
     const permanent_str: []const u8 = if (snap.permanent) "true" else "false";
@@ -52,16 +52,16 @@ fn saveSnapshot(allocator: std.mem.Allocator, repo: *Repository, snap: Snapshot)
 
     const index_path = try std.fmt.allocPrint(allocator, "{s}.name", .{path});
     defer allocator.free(index_path);
-    const idx = try std.fs.cwd().createFile(index_path, .{});
+    const idx = try std.Io.Dir.cwd().createFile(index_path, .{});
     defer idx.close();
     try idx.writeAll(snap.id);
 }
 
-fn loadSnapshot(allocator: std.mem.Allocator, repo: *Repository, id: []const u8) !?Snapshot {
+fn loadSnapshot(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, id: []const u8) !?Snapshot {
     const path = try snapshotPath(allocator, repo, id);
     defer allocator.free(path);
 
-    const content = std.fs.cwd().readFileAlloc(path, allocator, @enumFromInt(64 * 1024)) catch |err| {
+    const content = std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(64 * 1024)) catch |err| {
         if (err == error.FileNotFound) return null;
         return err;
     };
@@ -152,7 +152,7 @@ fn freeSnapshot(allocator: std.mem.Allocator, snap: Snapshot) void {
     allocator.free(snap.metrics_snapshot);
 }
 
-fn resolveSnapshotId(allocator: std.mem.Allocator, repo: *Repository, name_or_id: []const u8) !?[]u8 {
+fn resolveSnapshotId(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, name_or_id: []const u8) !?[]u8 {
     const direct = try loadSnapshot(allocator, repo, name_or_id);
     if (direct != null) {
         freeSnapshot(allocator, direct.?);
@@ -162,7 +162,7 @@ fn resolveSnapshotId(allocator: std.mem.Allocator, repo: *Repository, name_or_id
     const dir_path = try snapshotDir(allocator, repo);
     defer allocator.free(dir_path);
 
-    var dir = std.fs.cwd().openDir(dir_path, .{ .iterate = true }) catch return null;
+    var dir = std.Io.Dir.cwd().openDir(dir_path, .{ .iterate = true }) catch return null;
     defer dir.close();
 
     var it = dir.iterate();
@@ -170,7 +170,7 @@ fn resolveSnapshotId(allocator: std.mem.Allocator, repo: *Repository, name_or_id
         if (!std.mem.endsWith(u8, entry.name, ".name")) continue;
         const full_path = try std.fs.path.join(allocator, &.{ dir_path, entry.name });
         defer allocator.free(full_path);
-        const stored_id = std.fs.cwd().readFileAlloc(full_path, allocator, @enumFromInt(128)) catch continue;
+        const stored_id = std.Io.Dir.cwd().readFileAlloc(io, full_path, allocator, .limited(128)) catch continue;
         defer allocator.free(stored_id);
         const snap = (try loadSnapshot(allocator, repo, stored_id)) orelse continue;
         defer freeSnapshot(allocator, snap);
@@ -181,7 +181,7 @@ fn resolveSnapshotId(allocator: std.mem.Allocator, repo: *Repository, name_or_id
     return null;
 }
 
-fn captureMetrics(allocator: std.mem.Allocator, repo: *Repository) ![]u8 {
+fn captureMetrics(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) ![]u8 {
     const head = repo.getHeadCommit() catch return try allocator.dupe(u8, "");
     const hash_str = head.toString(allocator) catch return try allocator.dupe(u8, "");
     defer allocator.free(hash_str);
@@ -189,10 +189,10 @@ fn captureMetrics(allocator: std.mem.Allocator, repo: *Repository) ![]u8 {
     const metrics_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "metrics", hash_str });
     defer allocator.free(metrics_path);
 
-    const content = std.fs.cwd().readFileAlloc(metrics_path, allocator, @enumFromInt(64 * 1024)) catch
+    const content = std.Io.Dir.cwd().readFileAlloc(io, metrics_path, allocator, .limited(64 * 1024)) catch
         return try allocator.dupe(u8, "");
 
-    var result: std.ArrayList(u8) = .{};
+    var result: std.ArrayList(u8) = .empty;
     var first = true;
     var iter = std.mem.splitSequence(u8, content, "\n");
     while (iter.next()) |line| {
@@ -208,11 +208,11 @@ fn captureMetrics(allocator: std.mem.Allocator, repo: *Repository) ![]u8 {
     return result.toOwnedSlice(allocator);
 }
 
-fn getCurrentBranch(allocator: std.mem.Allocator, repo: *Repository) ![]u8 {
+fn getCurrentBranch(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) ![]u8 {
     const head_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "HEAD" });
     defer allocator.free(head_path);
 
-    const content = std.fs.cwd().readFileAlloc(head_path, allocator, @enumFromInt(256)) catch
+    const content = std.Io.Dir.cwd().readFileAlloc(io, head_path, allocator, .limited(256)) catch
         return try allocator.dupe(u8, "main");
     defer allocator.free(content);
 
@@ -225,6 +225,7 @@ fn getCurrentBranch(allocator: std.mem.Allocator, repo: *Repository) ![]u8 {
 
 pub fn snapshotCreate(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     name: []const u8,
     description: []const u8,
@@ -233,7 +234,7 @@ pub fn snapshotCreate(
     lineage_refs: []const u8,
     permanent: bool,
 ) !void {
-    const head = repo.getHeadCommit() catch {
+    const head = repo.getHeadCommit(io) catch {
         std.debug.print("Error: No commits yet. Make a commit before creating a snapshot.\n", .{});
         return;
     };
@@ -260,7 +261,7 @@ pub fn snapshotCreate(
 
     const config_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "config" });
     defer allocator.free(config_path);
-    const config_content = std.fs.cwd().readFileAlloc(config_path, allocator, @enumFromInt(4096)) catch
+    const config_content = std.Io.Dir.cwd().readFileAlloc(io, config_path, allocator, .limited(4096)) catch
         try allocator.dupe(u8, "");
     defer allocator.free(config_content);
 
@@ -311,7 +312,7 @@ pub fn snapshotList(allocator: std.mem.Allocator, repo: *Repository) !void {
     const dir_path = try snapshotDir(allocator, repo);
     defer allocator.free(dir_path);
 
-    var dir = std.fs.cwd().openDir(dir_path, .{ .iterate = true }) catch {
+    var dir = std.Io.Dir.cwd().openDir(dir_path, .{ .iterate = true }) catch {
         std.debug.print("No snapshots yet.\n", .{});
         std.debug.print("Create one: zev snapshot create <name> [description]\n", .{});
         return;

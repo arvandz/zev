@@ -5,11 +5,11 @@ const cid_mod = @import("cid.zig");
 fn metricsPath(allocator: std.mem.Allocator, repo: *Repository, commit_hash: []const u8) ![]u8 {
     const metrics_dir = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "metrics" });
     defer allocator.free(metrics_dir);
-    try std.fs.cwd().makePath(metrics_dir);
+    try std.Io.Dir.cwd().makePath(metrics_dir);
     return try std.fs.path.join(allocator, &.{ repo.path, ".zev", "metrics", commit_hash });
 }
 
-pub fn setMetric(allocator: std.mem.Allocator, repo: *Repository, key: []const u8, value: []const u8) !void {
+pub fn setMetric(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, key: []const u8, value: []const u8) !void {
     const head = try repo.getHeadCommit();
     const hash_str = try head.toString(allocator);
     defer allocator.free(hash_str);
@@ -17,10 +17,10 @@ pub fn setMetric(allocator: std.mem.Allocator, repo: *Repository, key: []const u
     const path = try metricsPath(allocator, repo, hash_str);
     defer allocator.free(path);
 
-    var lines: std.ArrayList(u8) = .{};
+    var lines: std.ArrayList(u8) = .empty;
     defer lines.deinit(allocator);
 
-    const existing = std.fs.cwd().readFileAlloc(path, allocator, @enumFromInt(64 * 1024)) catch |err| blk: {
+    const existing = std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(64 * 1024)) catch |err| blk: {
         if (err == error.FileNotFound) break :blk try allocator.dupe(u8, "");
         return err;
     };
@@ -55,7 +55,7 @@ pub fn setMetric(allocator: std.mem.Allocator, repo: *Repository, key: []const u
         try lines.appendSlice(allocator, new_line);
     }
 
-    const file = try std.fs.cwd().createFile(path, .{});
+    const file = try std.Io.Dir.cwd().createFile(io, path, .{});
     defer file.close();
     try file.writeAll(lines.items);
 
@@ -63,7 +63,7 @@ pub fn setMetric(allocator: std.mem.Allocator, repo: *Repository, key: []const u
     std.debug.print("   Commit: {s}\n", .{hash_str[0..8]});
 }
 
-pub fn showMetrics(allocator: std.mem.Allocator, repo: *Repository, hash_opt: ?[]const u8) !void {
+pub fn showMetrics(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, hash_opt: ?[]const u8) !void {
     const hash_str = if (hash_opt) |h|
         try allocator.dupe(u8, h)
     else blk: {
@@ -75,7 +75,7 @@ pub fn showMetrics(allocator: std.mem.Allocator, repo: *Repository, hash_opt: ?[
     const path = try metricsPath(allocator, repo, hash_str);
     defer allocator.free(path);
 
-    const content = std.fs.cwd().readFileAlloc(path, allocator, @enumFromInt(64 * 1024)) catch |err| {
+    const content = std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(64 * 1024)) catch |err| {
         if (err == error.FileNotFound) {
             std.debug.print("No metrics for commit {s}\n", .{hash_str[0..8]});
             return;
@@ -105,7 +105,7 @@ pub fn showMetrics(allocator: std.mem.Allocator, repo: *Repository, hash_opt: ?[
     }
 }
 
-pub fn listMetrics(allocator: std.mem.Allocator, repo: *Repository) !void {
+pub fn listMetrics(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) !void {
     const commit_mod = @import("commit.zig");
 
     const head = repo.getHeadCommit() catch {
@@ -124,10 +124,10 @@ pub fn listMetrics(allocator: std.mem.Allocator, repo: *Repository) !void {
         const path = try metricsPath(allocator, repo, hash_str);
         defer allocator.free(path);
 
-        const content = std.fs.cwd().readFileAlloc(path, allocator, @enumFromInt(64 * 1024)) catch null;
+        const content = std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(64 * 1024)) catch null;
         defer if (content) |c| allocator.free(c);
 
-        const cdata = repo.store.get(current) catch break;
+        const cdata = repo.store.get(io, current) catch break;
         defer allocator.free(cdata);
         const commit = commit_mod.Commit.deserialize(allocator, cdata) catch break;
         defer allocator.free(commit.author);
@@ -158,13 +158,13 @@ pub fn listMetrics(allocator: std.mem.Allocator, repo: *Repository) !void {
     }
 }
 
-pub fn compareMetrics(allocator: std.mem.Allocator, repo: *Repository, hash_a: []const u8, hash_b: []const u8) !void {
+pub fn compareMetrics(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, hash_a: []const u8, hash_b: []const u8) !void {
     const path_a = try metricsPath(allocator, repo, hash_a);
     defer allocator.free(path_a);
     const path_b = try metricsPath(allocator, repo, hash_b);
     defer allocator.free(path_b);
 
-    const content_a = std.fs.cwd().readFileAlloc(path_a, allocator, @enumFromInt(64 * 1024)) catch |err| {
+    const content_a = std.Io.Dir.cwd().readFileAlloc(io, path_a, allocator, .limited(64 * 1024)) catch |err| {
         if (err == error.FileNotFound) {
             std.debug.print("No metrics for {s}\n", .{hash_a[0..8]});
             return;
@@ -173,7 +173,7 @@ pub fn compareMetrics(allocator: std.mem.Allocator, repo: *Repository, hash_a: [
     };
     defer allocator.free(content_a);
 
-    const content_b = std.fs.cwd().readFileAlloc(path_b, allocator, @enumFromInt(64 * 1024)) catch |err| {
+    const content_b = std.Io.Dir.cwd().readFileAlloc(io, path_b, allocator, .limited(64 * 1024)) catch |err| {
         if (err == error.FileNotFound) {
             std.debug.print("No metrics for {s}\n", .{hash_b[0..8]});
             return;

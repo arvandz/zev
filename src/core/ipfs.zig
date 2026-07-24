@@ -11,13 +11,16 @@ pub const IPFSClient = struct {
         };
     }
 
-    fn readAllStdout(allocator: std.mem.Allocator, file: std.fs.File, max_size: usize) ![]u8 {
+    fn readAllStdout(io: std.Io, allocator: std.mem.Allocator, file: std.Io.File, max_size: usize) ![]u8 {
         var buf: std.ArrayList(u8) = .empty;
         errdefer buf.deinit(allocator);
 
+        var read_buf: [4096]u8 = undefined;
+        var reader = file.reader(io, &read_buf);
+
         var chunk: [4096]u8 = undefined;
         while (true) {
-            const bytes_read = try file.read(&chunk);
+            const bytes_read = try reader.interface.readSliceShort(&chunk);
             if (bytes_read == 0) break;
             if (buf.items.len + bytes_read > max_size) return error.StreamTooLong;
             try buf.appendSlice(allocator, chunk[0..bytes_read]);
@@ -26,25 +29,28 @@ pub const IPFSClient = struct {
         return try buf.toOwnedSlice(allocator);
     }
 
-    pub fn add(self: *IPFSClient, data: []const u8) ![]const u8 {
+    pub fn add(self: *IPFSClient, io: std.Io, data: []const u8) ![]const u8 {
         const temp_path = "/tmp/zev_ipfs_temp";
-        const temp_file = try std.fs.cwd().createFile(temp_path, .{});
-        defer temp_file.close();
-        try temp_file.writeAll(data);
-
+        const temp_file = try std.Io.Dir.cwd().createFile(io, temp_path, .{});
+        defer temp_file.close(io);
+        var write_buf: [4096]u8 = undefined;
+        var writer = temp_file.writer(io, &write_buf);
+        try writer.interface.writeAll(data);
+        try writer.flush();
         const url = try std.fmt.allocPrint(self.allocator, "{s}/api/v0/add?pin=true", .{self.api_url});
         defer self.allocator.free(url);
-
-        var child = std.process.Child.init(&.{ "curl", "-s", "-X", "POST", "-F", "file=@/tmp/zev_ipfs_temp", url }, self.allocator);
-        child.stdout_behavior = .Pipe;
-        child.stderr_behavior = .Ignore;
-
-        try child.spawn();
-        const stdout = try readAllStdout(self.allocator, child.stdout.?, 1024 * 1024);
+        var child = try std.process.spawn(io, .{
+            .argv = &.{ "curl", "-s", "-X", "POST", "-F", "file=@/tmp/zev_ipfs_temp", url },
+            .stdout = .pipe,
+            .stderr = .ignore,
+        });
+        const stdout = try readAllStdout(io, self.allocator, child.stdout.?, 1024 * 1024);
         defer self.allocator.free(stdout);
-
-        const term = try child.wait();
-        if (term.Exited != 0) return error.IPFSFailed;
+        const term = try child.wait(io);
+        if (term != .exited or term.exited != 0) {
+            self.allocator.free(stdout);
+            return error.IPFSFailed;
+        }
 
         const parsed = try std.json.parseFromSlice(std.json.Value, self.allocator, stdout, .{});
         defer parsed.deinit();
@@ -53,39 +59,34 @@ pub const IPFSClient = struct {
         return try self.allocator.dupe(u8, hash.string);
     }
 
-    pub fn cat(self: *IPFSClient, ipfs_cid: []const u8) ![]u8 {
+    pub fn cat(self: *IPFSClient, io: std.Io, ipfs_cid: []const u8) ![]u8 {
         const url = try std.fmt.allocPrint(self.allocator, "{s}/api/v0/cat?arg={s}", .{ self.api_url, ipfs_cid });
         defer self.allocator.free(url);
-
-        var child = std.process.Child.init(&.{ "curl", "-s", "-X", "POST", url }, self.allocator);
-        child.stdout_behavior = .Pipe;
-        child.stderr_behavior = .Ignore;
-
-        try child.spawn();
-        const stdout = try readAllStdout(self.allocator, child.stdout.?, 10 * 1024 * 1024);
-
-        const term = try child.wait();
-        if (term.Exited != 0) {
+        var child = try std.process.spawn(io, .{
+            .argv = &.{ "curl", "-s", "-X", "POST", url },
+            .stdout = .pipe,
+            .stderr = .ignore,
+        });
+        const stdout = try readAllStdout(io, self.allocator, child.stdout.?, 10 * 1024 * 1024);
+        const term = try child.wait(io);
+        if (term != .exited or term.exited != 0) {
             self.allocator.free(stdout);
             return error.IPFSFailed;
         }
-
         return stdout;
     }
 
-    pub fn blockGet(self: *IPFSClient, ipfs_cid: []const u8) ![]u8 {
+    pub fn blockGet(self: *IPFSClient, io: std.Io, ipfs_cid: []const u8) ![]u8 {
         const url = try std.fmt.allocPrint(self.allocator, "{s}/api/v0/block/get?arg={s}", .{ self.api_url, ipfs_cid });
         defer self.allocator.free(url);
-
-        var child = std.process.Child.init(&.{ "curl", "-s", "-X", "POST", url }, self.allocator);
-        child.stdout_behavior = .Pipe;
-        child.stderr_behavior = .Ignore;
-
-        try child.spawn();
-        const stdout = try readAllStdout(self.allocator, child.stdout.?, 10 * 1024 * 1024);
-
-        const term = try child.wait();
-        if (term.Exited != 0) {
+        var child = try std.process.spawn(io, .{
+            .argv = &.{ "curl", "-s", "-X", "POST", url },
+            .stdout = .pipe,
+            .stderr = .ignore,
+        });
+        const stdout = try readAllStdout(io, self.allocator, child.stdout.?, 10 * 1024 * 1024);
+        const term = try child.wait(io);
+        if (term != .exited or term.exited != 0) {
             self.allocator.free(stdout);
             return error.IPFSFailed;
         }
@@ -93,26 +94,26 @@ pub const IPFSClient = struct {
         return stdout;
     }
 
-    pub fn blockPut(self: *IPFSClient, data: []const u8, should_pin: bool) ![]const u8 {
+    pub fn blockPut(self: *IPFSClient, io: std.Io, data: []const u8, should_pin: bool) ![]const u8 {
         const temp_path = "/tmp/zev_ipfs_temp";
-        const temp_file = try std.fs.cwd().createFile(temp_path, .{});
-        defer temp_file.close();
-        try temp_file.writeAll(data);
-
+        const temp_file = try std.Io.Dir.cwd().createFile(io, temp_path, .{});
+        defer temp_file.close(io);
+        var write_buf: [4096]u8 = undefined;
+        var writer = temp_file.writer(io, &write_buf);
+        try writer.interface.writeAll(data);
+        try writer.flush();
         const pin_str = if (should_pin) "true" else "false";
         const url = try std.fmt.allocPrint(self.allocator, "{s}/api/v0/block/put?pin={s}", .{ self.api_url, pin_str });
         defer self.allocator.free(url);
-
-        var child = std.process.Child.init(&.{ "curl", "-s", "-X", "POST", "-F", "file=@/tmp/zev_ipfs_temp", url }, self.allocator);
-        child.stdout_behavior = .Pipe;
-        child.stderr_behavior = .Ignore;
-
-        try child.spawn();
-        const stdout = try readAllStdout(self.allocator, child.stdout.?, 1024 * 1024);
+        var child = try std.process.spawn(io, .{
+            .argv = &.{ "curl", "-s", "-X", "POST", "-F", "file=@/tmp/zev_ipfs_temp", url },
+            .stdout = .pipe,
+            .stderr = .ignore,
+        });
+        const stdout = try readAllStdout(io, self.allocator, child.stdout.?, 1024 * 1024);
         defer self.allocator.free(stdout);
-
-        const term = try child.wait();
-        if (term.Exited != 0) return error.IPFSFailed;
+        const term = try child.wait(io);
+        if (term != .exited or term.exited != 0) return error.IPFSFailed;
 
         const parsed = try std.json.parseFromSlice(std.json.Value, self.allocator, stdout, .{});
         defer parsed.deinit();
@@ -134,7 +135,7 @@ pub const IPFSClient = struct {
         defer self.allocator.free(stdout);
 
         const term = try child.wait();
-        if (term.Exited != 0) return error.IPFSFailed;
+        if (term != .exited or term.exited != 0) return error.IPFSFailed;
 
         const parsed = try std.json.parseFromSlice(std.json.Value, self.allocator, stdout, .{});
         defer parsed.deinit();
@@ -158,7 +159,7 @@ pub const IPFSClient = struct {
 
         try child.spawn();
         const term = try child.wait();
-        if (term.Exited != 0) return error.IPFSFailed;
+        if (term != .exited or term.exited != 0) return error.IPFSFailed;
     }
 
     pub fn unpin(self: *IPFSClient, ipfs_cid: []const u8) !void {
@@ -171,7 +172,7 @@ pub const IPFSClient = struct {
 
         try child.spawn();
         const term = try child.wait();
-        if (term.Exited != 0) return error.IPFSFailed;
+        if (term != .exited or term.exited != 0) return error.IPFSFailed;
     }
 
     pub fn version(self: *IPFSClient) ![]const u8 {
@@ -187,7 +188,7 @@ pub const IPFSClient = struct {
         defer self.allocator.free(stdout);
 
         const term = try child.wait();
-        if (term.Exited != 0) return error.IPFSFailed;
+        if (term != .exited or term.exited != 0) return error.IPFSFailed;
 
         const parsed = try std.json.parseFromSlice(std.json.Value, self.allocator, stdout, .{});
         defer parsed.deinit();
@@ -209,7 +210,7 @@ pub const IPFSClient = struct {
         defer self.allocator.free(stdout);
 
         const term = try child.wait();
-        if (term.Exited != 0) return error.IPFSFailed;
+        if (term != .exited or term.exited != 0) return error.IPFSFailed;
 
         const parsed = try std.json.parseFromSlice(std.json.Value, self.allocator, stdout, .{});
         defer parsed.deinit();

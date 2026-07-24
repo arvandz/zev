@@ -17,7 +17,7 @@ fn collectCommits(
     start: cid_mod.CID,
     base: cid_mod.CID,
 ) !std.ArrayList(cid_mod.CID) {
-    var commits: std.ArrayList(cid_mod.CID) = .{};
+    var commits: std.ArrayList(cid_mod.CID) = .empty;
     var current = start;
 
     while (true) {
@@ -83,11 +83,12 @@ fn findCommonAncestor(
 
 fn replayCommit(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     commit_cid: cid_mod.CID,
     new_parent: cid_mod.CID,
 ) !cid_mod.CID {
-    const data = try repo.store.get(commit_cid);
+    const data = try repo.store.get(io, commit_cid);
     defer allocator.free(data);
 
     const c = try commit_mod.Commit.deserialize(allocator, data);
@@ -107,41 +108,43 @@ fn replayCommit(
 
     try copyTreeObjects(allocator, repo, c.tree_cid);
 
-    return try repo.store.put(new_data);
+    return try repo.store.put(io, new_data);
 }
 
 fn copyTreeObjects(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     tree_cid: cid_mod.CID,
 ) !void {
-    const tree_data = repo.store.get(tree_cid) catch return;
+    const tree_data = repo.store.get(io, tree_cid) catch return;
     defer allocator.free(tree_data);
 
     var t = tree_mod.Tree.deserialize(allocator, tree_data) catch return;
     defer t.deinit();
 
     for (t.entries.items) |entry| {
-        if (try repo.store.has(entry.cid)) continue;
-        const blob_data = repo.store.get(entry.cid) catch continue;
+        if (try repo.store.has(io, entry.cid)) continue;
+        const blob_data = repo.store.get(io, entry.cid) catch continue;
         defer allocator.free(blob_data);
-        _ = try repo.store.put(blob_data);
+        _ = try repo.store.put(io, blob_data);
     }
 }
 
 pub fn rebase(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     onto_branch: []const u8,
 ) !RebaseResult {
-    const current_head = repo.getHeadCommit() catch {
+    const current_head = repo.getHeadCommit(io) catch {
         std.debug.print("Error: No commits on current branch\n", .{});
         return .nothing_to_rebase;
     };
 
     const onto_ref_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "refs", "heads", onto_branch });
     defer allocator.free(onto_ref_path);
-    const onto_ref_file = std.fs.cwd().openFile(onto_ref_path, .{}) catch {
+    const onto_ref_file = std.Io.Dir.cwd().openFile(onto_ref_path, .{}) catch {
         std.debug.print("Error: Branch '{s}' not found\n", .{onto_branch});
         return .nothing_to_rebase;
     };
@@ -182,7 +185,7 @@ pub fn rebase(
 
     var new_head = onto_head;
     for (commits_to_replay.items) |commit_cid| {
-        const cdata = try repo.store.get(commit_cid);
+        const cdata = try repo.store.get(io, commit_cid);
         defer allocator.free(cdata);
         const c = try commit_mod.Commit.deserialize(allocator, cdata);
         defer allocator.free(c.author);
@@ -202,7 +205,7 @@ pub fn rebase(
     const head_path = try std.fs.path.join(allocator, &.{ zev_path, "HEAD" });
     defer allocator.free(head_path);
 
-    const head_file = try std.fs.cwd().openFile(head_path, .{});
+    const head_file = try std.Io.Dir.cwd().openFile(head_path, .{});
     defer head_file.close();
 
     var buf: [256]u8 = undefined;
@@ -214,7 +217,7 @@ pub fn rebase(
         const ref_path = try std.fs.path.join(allocator, &.{ zev_path, ref_path_rel });
         defer allocator.free(ref_path);
 
-        const ref_file = try std.fs.cwd().createFile(ref_path, .{});
+        const ref_file = try std.Io.Dir.cwd().createFile(ref_path, .{});
         defer ref_file.close();
 
         const new_hash = try new_head.toString(allocator);

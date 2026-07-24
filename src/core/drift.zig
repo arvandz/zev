@@ -45,13 +45,13 @@ fn driftConfigPath(allocator: std.mem.Allocator, repo: *Repository) ![]u8 {
 
 fn driftHistoryDir(allocator: std.mem.Allocator, repo: *Repository) ![]u8 {
     const dir = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "drift_history" });
-    try std.fs.cwd().makePath(dir);
+    try std.Io.Dir.cwd().makePath(dir);
     return dir;
 }
 
 fn writeFile(allocator: std.mem.Allocator, path: []const u8, content: []const u8) !void {
     _ = allocator;
-    const f = try std.fs.cwd().createFile(path, .{});
+    const f = try std.Io.Dir.cwd().createFile(path, .{});
     defer f.close();
     try f.writeAll(content);
 }
@@ -63,7 +63,7 @@ fn buildConfigContent(
     watch_interval: u32,
     thresholds: []const DriftThreshold,
 ) ![]u8 {
-    var out: std.ArrayList(u8) = .{};
+    var out: std.ArrayList(u8) = .empty;
     const s1 = try std.fmt.allocPrint(allocator, "baseline={s}\n", .{baseline_ref});
     defer allocator.free(s1);
     try out.appendSlice(allocator, s1);
@@ -102,10 +102,10 @@ pub fn saveConfig(
     try writeFile(allocator, path, content);
 }
 
-pub fn loadConfig(allocator: std.mem.Allocator, repo: *Repository) !?DriftConfig {
+pub fn loadConfig(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) !?DriftConfig {
     const path = try driftConfigPath(allocator, repo);
     defer allocator.free(path);
-    const content = std.fs.cwd().readFileAlloc(path, allocator, @enumFromInt(64 * 1024)) catch |err| {
+    const content = std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(64 * 1024)) catch |err| {
         if (err == error.FileNotFound) return null;
         return err;
     };
@@ -114,7 +114,7 @@ pub fn loadConfig(allocator: std.mem.Allocator, repo: *Repository) !?DriftConfig
     var baseline_ref: []u8 = try allocator.dupe(u8, "");
     var webhook_url: []u8 = try allocator.dupe(u8, "");
     var watch_interval: u32 = 300;
-    var thresholds: std.ArrayList(DriftThreshold) = .{};
+    var thresholds: std.ArrayList(DriftThreshold) = .empty;
 
     var iter = std.mem.splitSequence(u8, content, "\n");
     while (iter.next()) |line| {
@@ -153,11 +153,11 @@ pub fn loadConfig(allocator: std.mem.Allocator, repo: *Repository) !?DriftConfig
     return DriftConfig{ .baseline_ref = baseline_ref, .webhook_url = webhook_url, .watch_interval = watch_interval, .thresholds = thresholds };
 }
 
-fn loadMetricsForHash(allocator: std.mem.Allocator, repo: *Repository, hash: []const u8) !std.StringHashMap(f64) {
+fn loadMetricsForHash(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, hash: []const u8) !std.StringHashMap(f64) {
     var map = std.StringHashMap(f64).init(allocator);
     const path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "metrics", hash });
     defer allocator.free(path);
-    const content = std.fs.cwd().readFileAlloc(path, allocator, @enumFromInt(64 * 1024)) catch return map;
+    const content = std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(64 * 1024)) catch return map;
     defer allocator.free(content);
     var iter = std.mem.splitSequence(u8, content, "\n");
     while (iter.next()) |line| {
@@ -181,17 +181,17 @@ fn freeMetricsMap(allocator: std.mem.Allocator, map: *std.StringHashMap(f64)) vo
     map.deinit();
 }
 
-fn loadMetricsFromSnapshot(allocator: std.mem.Allocator, repo: *Repository, name: []const u8) !?std.StringHashMap(f64) {
+fn loadMetricsFromSnapshot(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, name: []const u8) !?std.StringHashMap(f64) {
     const dir_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "snapshots" });
     defer allocator.free(dir_path);
-    var dir = std.fs.cwd().openDir(dir_path, .{ .iterate = true }) catch return null;
+    var dir = std.Io.Dir.cwd().openDir(dir_path, .{ .iterate = true }) catch return null;
     defer dir.close();
     var it = dir.iterate();
     while (try it.next()) |entry| {
         if (entry.kind != .file or std.mem.endsWith(u8, entry.name, ".name")) continue;
         const path = try std.fs.path.join(allocator, &.{ dir_path, entry.name });
         defer allocator.free(path);
-        const content = std.fs.cwd().readFileAlloc(path, allocator, @enumFromInt(64 * 1024)) catch continue;
+        const content = std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(64 * 1024)) catch continue;
         defer allocator.free(content);
         var snap_name: []u8 = try allocator.dupe(u8, "");
         var metrics_raw: []u8 = try allocator.dupe(u8, "");
@@ -288,7 +288,7 @@ fn runDriftCheck(
 
 fn printDriftResults(results: []const DriftResult, baseline_ref: []const u8, current_ref: []const u8, any_drift: bool) void {
     std.debug.print("\n   {s:<22} {s:<14} {s:<14} {s:<12} {s}\n", .{ "Metric", baseline_ref[0..@min(12, baseline_ref.len)], current_ref[0..@min(12, current_ref.len)], "Change", "Status" });
-    std.debug.print("   {s}\n", .{"─" ** 70});
+    std.debug.print("   {s}\n", .{"─"**70});
     for (results) |r| {
         const status: []const u8 = if (r.drifted) "🚨 DRIFT" else "✅ OK";
         std.debug.print("   {s:<22} {d:<14.4} {d:<14.4} {s}{d:<8.4} {s}\n", .{ r.metric, r.baseline_val, r.current_val, r.direction, @abs(r.delta), status });
@@ -317,7 +317,7 @@ fn saveHistory(
     const path = try std.fs.path.join(allocator, &.{ dir, fname });
     defer allocator.free(path);
 
-    var out: std.ArrayList(u8) = .{};
+    var out: std.ArrayList(u8) = .empty;
     defer out.deinit(allocator);
     const s1 = try std.fmt.allocPrint(allocator, "timestamp={d}\n", .{timestamp});
     defer allocator.free(s1);
@@ -355,7 +355,7 @@ pub fn driftBaseline(allocator: std.mem.Allocator, repo: *Repository, baseline_r
         .baseline_ref = try allocator.dupe(u8, ""),
         .webhook_url = try allocator.dupe(u8, ""),
         .watch_interval = 300,
-        .thresholds = .{},
+        .thresholds = .empty,
     };
     defer cfg.deinit(allocator);
     try saveConfig(allocator, repo, baseline_ref, cfg.thresholds.items, cfg.webhook_url, cfg.watch_interval);
@@ -377,7 +377,7 @@ pub fn driftConfig(
         .baseline_ref = try allocator.dupe(u8, ""),
         .webhook_url = try allocator.dupe(u8, ""),
         .watch_interval = 300,
-        .thresholds = .{},
+        .thresholds = .empty,
     };
     defer cfg.deinit(allocator);
 
@@ -388,7 +388,7 @@ pub fn driftConfig(
     else
         .any;
 
-    var new_t: std.ArrayList(DriftThreshold) = .{};
+    var new_t: std.ArrayList(DriftThreshold) = .empty;
     defer {
         for (new_t.items) |t| allocator.free(t.metric);
         new_t.deinit(allocator);
@@ -465,14 +465,14 @@ pub fn driftCheck(allocator: std.mem.Allocator, repo: *Repository, baseline_over
     std.debug.print("   Baseline: {s}\n", .{baseline_ref});
     std.debug.print("   Current:  {s}\n", .{current_hash[0..8]});
 
-    var results: std.ArrayList(DriftResult) = .{};
+    var results: std.ArrayList(DriftResult) = .empty;
     defer {
         for (results.items) |r| allocator.free(r.metric);
         results.deinit(allocator);
     }
 
     var effective: []DriftThreshold = cfg.thresholds.items;
-    var auto_t: std.ArrayList(DriftThreshold) = .{};
+    var auto_t: std.ArrayList(DriftThreshold) = .empty;
     defer {
         for (auto_t.items) |t| allocator.free(t.metric);
         auto_t.deinit(allocator);
@@ -505,16 +505,16 @@ pub fn driftCheck(allocator: std.mem.Allocator, repo: *Repository, baseline_over
     }
 }
 
-pub fn driftHistory(allocator: std.mem.Allocator, repo: *Repository, limit: usize) !void {
+pub fn driftHistory(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, limit: usize) !void {
     const dir = try driftHistoryDir(allocator, repo);
     defer allocator.free(dir);
-    var d = std.fs.cwd().openDir(dir, .{ .iterate = true }) catch {
+    var d = std.Io.Dir.cwd().openDir(dir, .{ .iterate = true }) catch {
         std.debug.print("No drift history yet. Run: zev drift check\n", .{});
         return;
     };
     defer d.close();
 
-    var entries: std.ArrayList([]u8) = .{};
+    var entries: std.ArrayList([]u8) = .empty;
     defer {
         for (entries.items) |e| allocator.free(e);
         entries.deinit(allocator);
@@ -536,7 +536,7 @@ pub fn driftHistory(allocator: std.mem.Allocator, repo: *Repository, limit: usiz
         if (shown >= limit) break;
         const path = try std.fs.path.join(allocator, &.{ dir, name });
         defer allocator.free(path);
-        const content = std.fs.cwd().readFileAlloc(path, allocator, @enumFromInt(64 * 1024)) catch continue;
+        const content = std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(64 * 1024)) catch continue;
         defer allocator.free(content);
         var timestamp: i64 = 0;
         var baseline: []u8 = try allocator.dupe(u8, "");

@@ -23,7 +23,7 @@ pub const Commit = struct {
     }
 
     pub fn serialize(self: Commit, allocator: std.mem.Allocator) ![]u8 {
-        var buffer: std.ArrayList(u8) = .{};
+        var buffer: std.ArrayList(u8) = .empty;
         errdefer buffer.deinit(allocator);
 
         const tree_str = try self.tree_cid.toString(allocator);
@@ -52,7 +52,7 @@ pub const Commit = struct {
         var author_opt: ?[]const u8 = null;
         var timestamp_opt: ?i64 = null;
         var message_started = false;
-        var message_buffer: std.ArrayList(u8) = .{};
+        var message_buffer: std.ArrayList(u8) = .empty;
         defer message_buffer.deinit(allocator);
 
         while (lines.next()) |line| {

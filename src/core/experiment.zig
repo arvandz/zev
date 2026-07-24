@@ -16,7 +16,7 @@ pub const Experiment = struct {
 
 fn experimentsDir(allocator: std.mem.Allocator, repo: *Repository) ![]u8 {
     const dir = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "experiments" });
-    try std.fs.cwd().makePath(dir);
+    try std.Io.Dir.cwd().makePath(dir);
     return dir;
 }
 
@@ -40,7 +40,7 @@ fn saveExperiment(allocator: std.mem.Allocator, repo: *Repository, exp: Experime
     const path = try experimentPath(allocator, repo, exp.name);
     defer allocator.free(path);
 
-    const file = try std.fs.cwd().createFile(path, .{});
+    const file = try std.Io.Dir.cwd().createFile(path, .{});
     defer file.close();
 
     const content = try std.fmt.allocPrint(allocator, "name={s}\ndescription={s}\nhypothesis={s}\nstatus={s}\nbranch={s}\ncreated_at={d}\ntags={s}\n", .{ exp.name, exp.description, exp.hypothesis, exp.status, exp.branch, exp.created_at, exp.tags });
@@ -48,11 +48,11 @@ fn saveExperiment(allocator: std.mem.Allocator, repo: *Repository, exp: Experime
     try file.writeAll(content);
 }
 
-fn loadExperiment(allocator: std.mem.Allocator, repo: *Repository, name: []const u8) !?Experiment {
+fn loadExperiment(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, name: []const u8) !?Experiment {
     const path = try experimentPath(allocator, repo, name);
     defer allocator.free(path);
 
-    const content = std.fs.cwd().readFileAlloc(path, allocator, @enumFromInt(64 * 1024)) catch |err| {
+    const content = std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(64 * 1024)) catch |err| {
         if (err == error.FileNotFound) return null;
         return err;
     };
@@ -140,7 +140,7 @@ pub fn experimentStart(
 
     const exp_refs_dir = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "refs", "heads", "exp" });
     defer allocator.free(exp_refs_dir);
-    try std.fs.cwd().makePath(exp_refs_dir);
+    try std.Io.Dir.cwd().makePath(exp_refs_dir);
 
     const branch_name = try std.fmt.allocPrint(allocator, "exp/{s}", .{name});
     defer allocator.free(branch_name);
@@ -183,7 +183,7 @@ pub fn experimentStart(
 }
 
 pub fn experimentComplete(allocator: std.mem.Allocator, repo: *Repository, name: []const u8, notes: []const u8) !void {
-    var exp = (try loadExperiment(allocator, repo, name)) orelse {
+    const exp = (try loadExperiment(allocator, repo, name)) orelse {
         std.debug.print("Error: Experiment '{s}' not found\n", .{name});
         return;
     };
@@ -203,7 +203,7 @@ pub fn experimentComplete(allocator: std.mem.Allocator, repo: *Repository, name:
     if (notes.len > 0) {
         const results_path = try experimentPath(allocator, repo, try std.fmt.allocPrint(allocator, "{s}.results", .{name}));
         defer allocator.free(results_path);
-        const f = try std.fs.cwd().createFile(results_path, .{});
+        const f = try std.Io.Dir.cwd().createFile(results_path, .{});
         defer f.close();
         try f.writeAll(notes);
     }
@@ -216,7 +216,7 @@ pub fn experimentComplete(allocator: std.mem.Allocator, repo: *Repository, name:
 }
 
 pub fn experimentAbandon(allocator: std.mem.Allocator, repo: *Repository, name: []const u8, reason: []const u8) !void {
-    var exp = (try loadExperiment(allocator, repo, name)) orelse {
+    const exp = (try loadExperiment(allocator, repo, name)) orelse {
         std.debug.print("Error: Experiment '{s}' not found\n", .{name});
         return;
     };
@@ -238,7 +238,7 @@ pub fn experimentAbandon(allocator: std.mem.Allocator, repo: *Repository, name: 
         std.debug.print("   Reason: {s}\n", .{reason});
 }
 
-pub fn experimentShow(allocator: std.mem.Allocator, repo: *Repository, name: []const u8) !void {
+pub fn experimentShow(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, name: []const u8) !void {
     const exp = (try loadExperiment(allocator, repo, name)) orelse {
         std.debug.print("Error: Experiment '{s}' not found\n", .{name});
         return;
@@ -261,7 +261,7 @@ pub fn experimentShow(allocator: std.mem.Allocator, repo: *Repository, name: []c
 
     const results_path = try experimentPath(allocator, repo, try std.fmt.allocPrint(allocator, "{s}.results", .{name}));
     defer allocator.free(results_path);
-    const notes = std.fs.cwd().readFileAlloc(results_path, allocator, @enumFromInt(64 * 1024)) catch null;
+    const notes = std.Io.Dir.cwd().readFileAlloc(io, results_path, allocator, .limited(64 * 1024)) catch null;
     defer if (notes) |n| allocator.free(n);
     if (notes) |n| {
         std.debug.print("   Results:     {s}\n", .{n});
@@ -273,7 +273,7 @@ pub fn experimentList(allocator: std.mem.Allocator, repo: *Repository) !void {
     const dir_path = try experimentsDir(allocator, repo);
     defer allocator.free(dir_path);
 
-    var dir = std.fs.cwd().openDir(dir_path, .{ .iterate = true }) catch {
+    var dir = std.Io.Dir.cwd().openDir(dir_path, .{ .iterate = true }) catch {
         std.debug.print("No experiments yet.\n", .{});
         std.debug.print("Start one with: zev experiment start <name> [description]\n", .{});
         return;
@@ -316,7 +316,7 @@ pub fn experimentList(allocator: std.mem.Allocator, repo: *Repository) !void {
     }
 }
 
-pub fn experimentCompare(allocator: std.mem.Allocator, repo: *Repository, name_a: []const u8, name_b: []const u8) !void {
+pub fn experimentCompare(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, name_a: []const u8, name_b: []const u8) !void {
     const metrics_mod = @import("metrics.zig");
 
     const exp_a = (try loadExperiment(allocator, repo, name_a)) orelse {
@@ -339,13 +339,13 @@ pub fn experimentCompare(allocator: std.mem.Allocator, repo: *Repository, name_a
     const path_b = try std.fs.path.join(allocator, &.{ refs_dir, exp_b.branch });
     defer allocator.free(path_b);
 
-    const hash_a = std.fs.cwd().readFileAlloc(path_a, allocator, @enumFromInt(1024)) catch {
+    const hash_a = std.Io.Dir.cwd().readFileAlloc(io, path_a, allocator, .limited(1024)) catch {
         std.debug.print("Cannot read branch head for '{s}'\n", .{name_a});
         return;
     };
     defer allocator.free(hash_a);
 
-    const hash_b = std.fs.cwd().readFileAlloc(path_b, allocator, @enumFromInt(1024)) catch {
+    const hash_b = std.Io.Dir.cwd().readFileAlloc(io, path_b, allocator, .limited(1024)) catch {
         std.debug.print("Cannot read branch head for '{s}'\n", .{name_b});
         return;
     };

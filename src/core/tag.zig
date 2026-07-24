@@ -23,12 +23,12 @@ pub fn createTag(allocator: std.mem.Allocator, repo: *Repository, tag_name: []co
     const tag_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "refs", "tags", tag_name });
     defer allocator.free(tag_path);
 
-    if (std.fs.cwd().access(tag_path, .{}) == error.FileNotFound or true) {
+    if (std.Io.Dir.cwd().access(tag_path, .{}) == error.FileNotFound or true) {
         const tags_dir = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "refs", "tags" });
         defer allocator.free(tags_dir);
-        try std.fs.cwd().makePath(tags_dir);
+        try std.Io.Dir.cwd().makePath(tags_dir);
 
-        const tag_file = try std.fs.cwd().createFile(tag_path, .{ .exclusive = false });
+        const tag_file = try std.Io.Dir.cwd().createFile(tag_path, .{ .exclusive = false });
         defer tag_file.close();
         try tag_file.writeAll(commit_hash);
         try tag_file.writeAll("\n");
@@ -44,12 +44,12 @@ pub fn createAnnotatedTag(allocator: std.mem.Allocator, repo: *Repository, tag_n
 
     const tags_dir = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "refs", "tags" });
     defer allocator.free(tags_dir);
-    try std.fs.cwd().makePath(tags_dir);
+    try std.Io.Dir.cwd().makePath(tags_dir);
 
     const tag_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "refs", "tags", tag_name });
     defer allocator.free(tag_path);
 
-    const tag_file = try std.fs.cwd().createFile(tag_path, .{ .exclusive = false });
+    const tag_file = try std.Io.Dir.cwd().createFile(tag_path, .{ .exclusive = false });
     defer tag_file.close();
 
     const timestamp: u64 = 0;
@@ -62,7 +62,7 @@ pub fn listTags(allocator: std.mem.Allocator, repo: *Repository) !void {
     const tags_dir = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "refs", "tags" });
     defer allocator.free(tags_dir);
 
-    var dir = std.fs.cwd().openDir(tags_dir, .{ .iterate = true }) catch |err| {
+    var dir = std.Io.Dir.cwd().openDir(tags_dir, .{ .iterate = true }) catch |err| {
         if (err == error.FileNotFound) {
             std.debug.print("No tags found\n", .{});
             return;
@@ -79,7 +79,7 @@ pub fn listTags(allocator: std.mem.Allocator, repo: *Repository) !void {
             const tag_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "refs", "tags", entry.name });
             defer allocator.free(tag_path);
 
-            const tag_file = try std.fs.cwd().openFile(tag_path, .{});
+            const tag_file = try std.Io.Dir.cwd().openFile(tag_path, .{});
             defer tag_file.close();
 
             var buf: [512]u8 = undefined;
@@ -104,7 +104,7 @@ pub fn deleteTag(allocator: std.mem.Allocator, repo: *Repository, tag_name: []co
     const tag_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "refs", "tags", tag_name });
     defer allocator.free(tag_path);
 
-    std.fs.cwd().deleteFile(tag_path) catch |err| {
+    std.Io.Dir.cwd().deleteFile(tag_path) catch |err| {
         if (err == error.FileNotFound) return error.TagNotFound;
         return err;
     };
@@ -114,7 +114,7 @@ pub fn getTagCommit(allocator: std.mem.Allocator, repo: *Repository, tag_name: [
     const tag_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "refs", "tags", tag_name });
     defer allocator.free(tag_path);
 
-    const tag_file = std.fs.cwd().openFile(tag_path, .{}) catch |err| {
+    const tag_file = std.Io.Dir.cwd().openFile(tag_path, .{}) catch |err| {
         if (err == error.FileNotFound) return error.TagNotFound;
         return err;
     };

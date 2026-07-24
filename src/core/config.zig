@@ -28,25 +28,26 @@ pub const Config = struct {
         };
     }
 
-    pub fn load(allocator: std.mem.Allocator, repo_path: []const u8) !Config {
+    pub fn load(allocator: std.mem.Allocator, io: std.Io, repo_path: []const u8) !Config {
         var config = Config.init(allocator);
 
         const config_path = try std.fs.path.join(allocator, &[_][]const u8{ repo_path, ".zev", "config" });
         defer allocator.free(config_path);
 
-        const file = std.fs.cwd().openFile(config_path, .{}) catch |err| {
+        const file = std.Io.Dir.cwd().openFile(io, config_path, .{}) catch |err| {
             if (err == error.FileNotFound) {
                 return config;
             }
             return err;
         };
-        defer file.close();
+        defer file.close(io);
 
-        const stat = try file.stat();
+        const stat = try file.stat(io);
         const content = try allocator.alloc(u8, @intCast(stat.size));
         defer allocator.free(content);
-
-        const bytes_read = try file.read(content);
+        var read_buf: [4096]u8 = undefined;
+        var reader = file.reader(io, &read_buf);
+        const bytes_read = try reader.interface.readSliceShort(content);
         const actual_content = content[0..bytes_read];
 
         var lines = std.mem.splitScalar(u8, actual_content, '\n');
@@ -84,45 +85,39 @@ pub const Config = struct {
         return config;
     }
 
-    pub fn save(self: *const Config, repo_path: []const u8) !void {
+    pub fn save(self: *const Config, io: std.Io, repo_path: []const u8) !void {
         const config_path = try std.fs.path.join(self.allocator, &[_][]const u8{ repo_path, ".zev", "config" });
         defer self.allocator.free(config_path);
-
-        const file = try std.fs.cwd().createFile(config_path, .{});
-        defer file.close();
-
-        try file.writeAll("# Zev Configuration File\n");
-        try file.writeAll("# Generated automatically - you can edit this file\n\n");
-
-        try file.writeAll("# User Information\n");
+        const file = try std.Io.Dir.cwd().createFile(io, config_path, .{});
+        defer file.close(io);
+        var buffer: [512]u8 = undefined;
+        var writer = file.writer(io, &buffer);
+        try writer.interface.writeAll("# Zev Configuration File\n");
+        try writer.interface.writeAll("# Generated automatically - you can edit this file\n\n");
+        try writer.interface.writeAll("# User Information\n");
         var line_buf: [512]u8 = undefined;
-
         var line = try std.fmt.bufPrint(&line_buf, "user.name={s}\n", .{self.user_name});
-        try file.writeAll(line);
-
+        try writer.interface.writeAll(line);
         line = try std.fmt.bufPrint(&line_buf, "user.email={s}\n", .{self.user_email});
-        try file.writeAll(line);
-
-        try file.writeAll("\n# Storage Backend\n");
-        try file.writeAll("# Options: local, ipfs, hybrid\n");
+        try writer.interface.writeAll(line);
+        try writer.interface.writeAll("\n# Storage Backend\n");
+        try writer.interface.writeAll("# Options: local, ipfs, hybrid\n");
         const backend_str = switch (self.storage_backend) {
             .local => "local",
             .ipfs => "ipfs",
             .hybrid => "hybrid",
         };
         line = try std.fmt.bufPrint(&line_buf, "storage.backend={s}\n", .{backend_str});
-        try file.writeAll(line);
-
-        try file.writeAll("\n# IPFS Configuration\n");
+        try writer.interface.writeAll(line);
+        try writer.interface.writeAll("\n# IPFS Configuration\n");
         line = try std.fmt.bufPrint(&line_buf, "ipfs.url={s}\n", .{self.ipfs_url});
-        try file.writeAll(line);
-
+        try writer.interface.writeAll(line);
         line = try std.fmt.bufPrint(&line_buf, "ipfs.auto_pin={s}\n", .{if (self.ipfs_auto_pin) "true" else "false"});
-        try file.writeAll(line);
-
-        try file.writeAll("\n# Repository Settings\n");
+        try writer.interface.writeAll(line);
+        try writer.interface.writeAll("\n# Repository Settings\n");
         line = try std.fmt.bufPrint(&line_buf, "core.default_branch={s}\n", .{self.default_branch});
-        try file.writeAll(line);
+        try writer.interface.writeAll(line);
+        try writer.flush();
     }
 
     pub fn get(self: *const Config, key: []const u8) ![]const u8 {

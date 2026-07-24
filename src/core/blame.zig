@@ -15,10 +15,11 @@ pub const BlameLine = struct {
 
 pub fn blame(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     filename: []const u8,
 ) !void {
-    const head = repo.getHeadCommit() catch {
+    const head = repo.getHeadCommit(io) catch {
         std.debug.print("No commits yet.\n", .{});
         return;
     };
@@ -31,7 +32,7 @@ pub fn blame(
         content: []const u8,
     };
 
-    var history: std.ArrayList(HistoryEntry) = .{};
+    var history: std.ArrayList(HistoryEntry) = .empty;
     defer {
         for (history.items) |entry| {
             allocator.free(entry.author);
@@ -41,13 +42,13 @@ pub fn blame(
         history.deinit(allocator);
     }
 
-    var raw_history: std.ArrayList(HistoryEntry) = .{};
+    var raw_history: std.ArrayList(HistoryEntry) = .empty;
     defer raw_history.deinit(allocator);
 
     var current = head;
     var walked: usize = 0;
     while (walked < 10000) : (walked += 1) {
-        const cdata = repo.store.get(current) catch break;
+        const cdata = repo.store.get(io, current) catch break;
         defer allocator.free(cdata);
 
         const c = commit_mod.Commit.deserialize(allocator, cdata) catch break;
@@ -86,7 +87,7 @@ pub fn blame(
 
     const latest = raw_history.items[raw_history.items.len - 1];
     var lines = std.mem.splitSequence(u8, latest.content, "\n");
-    var line_list: std.ArrayList([]const u8) = .{};
+    var line_list: std.ArrayList([]const u8) = .empty;
     defer line_list.deinit(allocator);
     while (lines.next()) |line| {
         try line_list.append(allocator, line);
@@ -149,11 +150,12 @@ pub fn blame(
 
 fn getFileAtCommit(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     tree_cid: cid_mod.CID,
     filename: []const u8,
 ) ![]const u8 {
-    const tree_data = try repo.store.get(tree_cid);
+    const tree_data = try repo.store.get(io, tree_cid);
     defer allocator.free(tree_data);
 
     var t = try tree_mod.Tree.deserialize(allocator, tree_data);
@@ -161,7 +163,7 @@ fn getFileAtCommit(
 
     for (t.entries.items) |entry| {
         if (std.mem.eql(u8, entry.name, filename)) {
-            return try repo.store.get(entry.cid);
+            return try repo.store.get(io, entry.cid);
         }
     }
     return error.FileNotFound;

@@ -5,7 +5,7 @@ const cid_mod = @import("cid.zig");
 const IPFS_API = "http://127.0.0.1:5001/api/v0";
 
 fn ipfsPost(allocator: std.mem.Allocator, endpoint: []const u8, args: []const []const u8) ![]u8 {
-    var argv: std.ArrayList([]const u8) = .{};
+    var argv: std.ArrayList([]const u8) = .empty;
     defer argv.deinit(allocator);
 
     const url = try std.fmt.allocPrint(allocator, "{s}{s}", .{ IPFS_API, endpoint });
@@ -154,17 +154,17 @@ fn savePeerState(
 ) !void {
     const path = try std.fs.path.join(allocator, &.{ repo.path, PEER_STATE_FILE });
     defer allocator.free(path);
-    const f = try std.fs.cwd().createFile(path, .{});
+    const f = try std.Io.Dir.cwd().createFile(path, .{});
     defer f.close();
     const content = try std.fmt.allocPrint(allocator, "meta_cid={s}\nnode_id={s}\n", .{ meta_cid, node_id });
     defer allocator.free(content);
     try f.writeAll(content);
 }
 
-fn loadPeerState(allocator: std.mem.Allocator, repo: *Repository) !?struct { meta_cid: []u8, node_id: []u8 } {
+fn loadPeerState(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) !?struct { meta_cid: []u8, node_id: []u8 } {
     const path = try std.fs.path.join(allocator, &.{ repo.path, PEER_STATE_FILE });
     defer allocator.free(path);
-    const content = std.fs.cwd().readFileAlloc(path, allocator, @enumFromInt(4096)) catch return null;
+    const content = std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(4096)) catch return null;
     defer allocator.free(content);
     var meta_cid: []u8 = try allocator.dupe(u8, "");
     var node_id: []u8 = try allocator.dupe(u8, "");
@@ -186,17 +186,17 @@ fn loadPeerState(allocator: std.mem.Allocator, repo: *Repository) !?struct { met
     return .{ .meta_cid = meta_cid, .node_id = node_id };
 }
 
-fn addPeer(allocator: std.mem.Allocator, repo: *Repository, peer_id: []const u8, meta_cid: []const u8) !void {
+fn addPeer(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, peer_id: []const u8, meta_cid: []const u8) !void {
     const path = try std.fs.path.join(allocator, &.{ repo.path, PEERS_FILE });
     defer allocator.free(path);
 
-    const existing = std.fs.cwd().readFileAlloc(path, allocator, @enumFromInt(64 * 1024)) catch
+    const existing = std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(64 * 1024)) catch
         try allocator.dupe(u8, "");
     defer allocator.free(existing);
 
     if (std.mem.indexOf(u8, existing, peer_id) != null) return;
 
-    const f = try std.fs.cwd().createFile(path, .{ .truncate = false });
+    const f = try std.Io.Dir.cwd().createFile(io, path, .{ .truncate = false });
     defer f.close();
     try f.seekFromEnd(0);
     const line = try std.fmt.allocPrint(allocator, "{s} {s}\n", .{ peer_id, meta_cid });
@@ -204,10 +204,10 @@ fn addPeer(allocator: std.mem.Allocator, repo: *Repository, peer_id: []const u8,
     try f.writeAll(line);
 }
 
-fn listPeers(allocator: std.mem.Allocator, repo: *Repository) !void {
+fn listPeers(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) !void {
     const path = try std.fs.path.join(allocator, &.{ repo.path, PEERS_FILE });
     defer allocator.free(path);
-    const content = std.fs.cwd().readFileAlloc(path, allocator, @enumFromInt(64 * 1024)) catch {
+    const content = std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(64 * 1024)) catch {
         std.debug.print("  No known peers yet.\n", .{});
         return;
     };
@@ -227,13 +227,13 @@ fn listPeers(allocator: std.mem.Allocator, repo: *Repository) !void {
 }
 
 fn buildManifest(allocator: std.mem.Allocator, repo: *Repository) ![]u8 {
-    var result: std.ArrayList(u8) = .{};
+    var result: std.ArrayList(u8) = .empty;
     const dirs = [_][]const u8{ "metrics", "experiments", "lineage", "snapshots" };
 
     for (dirs) |d| {
         const dir_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", d });
         defer allocator.free(dir_path);
-        var dir = std.fs.cwd().openDir(dir_path, .{ .iterate = true }) catch continue;
+        var dir = std.Io.Dir.cwd().openDir(dir_path, .{ .iterate = true }) catch continue;
         defer dir.close();
         var it = dir.iterate();
         while (try it.next()) |entry| {
@@ -246,7 +246,7 @@ fn buildManifest(allocator: std.mem.Allocator, repo: *Repository) ![]u8 {
 
     const heads_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "refs", "heads" });
     defer allocator.free(heads_path);
-    var heads_dir = std.fs.cwd().openDir(heads_path, .{ .iterate = true }) catch {
+    var heads_dir = std.Io.Dir.cwd().openDir(heads_path, .{ .iterate = true }) catch {
         return result.toOwnedSlice(allocator);
     };
     defer heads_dir.close();
@@ -292,7 +292,7 @@ pub fn peerAnnounce(allocator: std.mem.Allocator, repo: *Repository, topic: []co
     defer allocator.free(pub_endpoint);
 
     const tmp = "/tmp/zev_pubsub_msg.json";
-    const tf = try std.fs.cwd().createFile(tmp, .{});
+    const tf = try std.Io.Dir.cwd().createFile(tmp, .{});
     try tf.writeAll(msg);
     tf.close();
 
@@ -367,19 +367,19 @@ pub fn peerSync(allocator: std.mem.Allocator, repo: *Repository, peer_meta_cid: 
             else
                 try std.fs.path.join(allocator, &.{ repo.path, ".zev", dir_name });
             defer allocator.free(local_dir);
-            try std.fs.cwd().makePath(local_dir);
+            try std.Io.Dir.cwd().makePath(local_dir);
 
             const local_path = try std.fs.path.join(allocator, &.{ local_dir, file_name });
             defer allocator.free(local_path);
 
-            std.fs.cwd().access(local_path, .{}) catch {
+            std.Io.Dir.cwd().access(local_path, .{}) catch {
                 const cat_endpoint = try std.fmt.allocPrint(allocator, "/cat?arg={s}", .{file_hash});
                 defer allocator.free(cat_endpoint);
                 const content = try ipfsPost(allocator, cat_endpoint, &.{});
                 defer allocator.free(content);
 
                 if (content.len > 0) {
-                    const f = try std.fs.cwd().createFile(local_path, .{});
+                    const f = try std.Io.Dir.cwd().createFile(local_path, .{});
                     defer f.close();
                     try f.writeAll(content);
                     std.debug.print("   ✅ {s}/{s}\n", .{ dir_name, file_name });
@@ -467,7 +467,7 @@ pub fn forkRepo(allocator: std.mem.Allocator, peer_meta_cid: []const u8, target_
 
     const zev_dir = try std.fs.path.join(allocator, &.{ target_dir, ".zev" });
     defer allocator.free(zev_dir);
-    try std.fs.cwd().makePath(zev_dir);
+    try std.Io.Dir.cwd().makePath(zev_dir);
 
     const subdirs = [_][]const u8{
         "objects", "refs/heads", "metrics", "experiments",
@@ -476,12 +476,12 @@ pub fn forkRepo(allocator: std.mem.Allocator, peer_meta_cid: []const u8, target_
     for (subdirs) |sub| {
         const p = try std.fs.path.join(allocator, &.{ zev_dir, sub });
         defer allocator.free(p);
-        try std.fs.cwd().makePath(p);
+        try std.Io.Dir.cwd().makePath(p);
     }
 
     const head_path = try std.fs.path.join(allocator, &.{ zev_dir, "HEAD" });
     defer allocator.free(head_path);
-    const hf = try std.fs.cwd().createFile(head_path, .{});
+    const hf = try std.Io.Dir.cwd().createFile(head_path, .{});
     try hf.writeAll("ref: refs/heads/main\n");
     hf.close();
 

@@ -13,8 +13,8 @@ const ManifestEntry = struct {
     checksum: []const u8,
 };
 
-fn readFileSafe(allocator: std.mem.Allocator, path: []const u8) !?[]u8 {
-    return std.fs.cwd().readFileAlloc(path, allocator, @enumFromInt(64 * 1024 * 1024)) catch |err| {
+fn readFileSafe(allocator: std.mem.Allocator, io: std.Io, path: []const u8) !?[]u8 {
+    return std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(64 * 1024 * 1024)) catch |err| {
         if (err == error.FileNotFound or err == error.IsDir) return null;
         return err;
     };
@@ -42,7 +42,7 @@ fn collectDir(
     rel_prefix: []const u8,
     files: *std.ArrayList(FileEntry),
 ) !void {
-    var dir = std.fs.cwd().openDir(base_path, .{ .iterate = true }) catch return;
+    var dir = std.Io.Dir.cwd().openDir(base_path, .{ .iterate = true }) catch return;
     defer dir.close();
 
     var it = dir.iterate();
@@ -68,6 +68,7 @@ fn collectDir(
 
 pub fn exportRepo(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     output_path: []const u8,
     snapshot_filter: ?[]const u8,
@@ -78,7 +79,7 @@ pub fn exportRepo(
 
     std.debug.print("📦 Exporting repository...\n\n", .{});
 
-    var files: std.ArrayList(FileEntry) = .{};
+    var files: std.ArrayList(FileEntry) = .empty;
     defer {
         for (files.items) |f| {
             allocator.free(f.abs);
@@ -107,10 +108,10 @@ pub fn exportRepo(
     };
     for (config_files) |cf| {
         const abs = try std.fs.path.join(allocator, &.{ zev_path, cf });
-        if (std.fs.cwd().access(abs, .{}) catch null == null or
-            std.fs.cwd().access(abs, .{}) catch unreachable == {})
+        if (std.Io.Dir.cwd().access(abs, .{}) catch null == null or
+            std.Io.Dir.cwd().access(abs, .{}) catch unreachable == {})
         {
-            _ = std.fs.cwd().statFile(abs) catch {
+            _ = std.Io.Dir.cwd().statFile(abs) catch {
                 allocator.free(abs);
                 continue;
             };
@@ -131,7 +132,7 @@ pub fn exportRepo(
         }
     }
 
-    var filtered_files: std.ArrayList(FileEntry) = .{};
+    var filtered_files: std.ArrayList(FileEntry) = .empty;
     defer filtered_files.deinit(allocator);
 
     if (snapshot_filter) |snap_name| {
@@ -141,7 +142,7 @@ pub fn exportRepo(
 
         const snap_dir = try std.fs.path.join(allocator, &.{ zev_path, "snapshots" });
         defer allocator.free(snap_dir);
-        var sd = std.fs.cwd().openDir(snap_dir, .{ .iterate = true }) catch {
+        var sd = std.Io.Dir.cwd().openDir(snap_dir, .{ .iterate = true }) catch {
             std.debug.print("   No snapshots found\n", .{});
             return;
         };
@@ -151,7 +152,7 @@ pub fn exportRepo(
             if (entry.kind != .file or std.mem.endsWith(u8, entry.name, ".name")) continue;
             const sp = try std.fs.path.join(allocator, &.{ snap_dir, entry.name });
             defer allocator.free(sp);
-            const sc = std.fs.cwd().readFileAlloc(sp, allocator, @enumFromInt(64 * 1024)) catch continue;
+            const sc = std.Io.Dir.cwd().readFileAlloc(io, sp, allocator, .limited(64 * 1024)) catch continue;
             defer allocator.free(sc);
             var li = std.mem.splitSequence(u8, sc, "\n");
             while (li.next()) |line| {
@@ -178,10 +179,10 @@ pub fn exportRepo(
 
     std.debug.print("   Writing {d} file(s) to {s}\n\n", .{ export_files.len, output_path });
 
-    const out_f = try std.fs.cwd().createFile(output_path, .{});
+    const out_f = try std.Io.Dir.cwd().createFile(output_path, .{});
     defer out_f.close();
 
-    var manifest_hash: std.ArrayList(u8) = .{};
+    var manifest_hash: std.ArrayList(u8) = .empty;
     defer manifest_hash.deinit(allocator);
 
     {
@@ -233,13 +234,14 @@ pub fn exportRepo(
 
 pub fn importArchive(
     allocator: std.mem.Allocator,
+    io: std.Io,
     archive_path: []const u8,
     target_dir: []const u8,
     dry_run: bool,
 ) !void {
     std.debug.print("📥 Importing archive: {s}\n\n", .{archive_path});
 
-    const content = std.fs.cwd().readFileAlloc(archive_path, allocator, @enumFromInt(512 * 1024 * 1024)) catch |err| {
+    const content = std.Io.Dir.cwd().readFileAlloc(io, archive_path, allocator, .limited(512 * 1024 * 1024)) catch |err| {
         std.debug.print("❌ Cannot read archive: {}\n", .{err});
         return;
     };
@@ -288,13 +290,13 @@ pub fn importArchive(
         for (subdirs) |sub| {
             const p = try std.fs.path.join(allocator, &.{ zev_target, sub });
             defer allocator.free(p);
-            try std.fs.cwd().makePath(p);
+            try std.Io.Dir.cwd().makePath(p);
         }
     }
 
     var restored: usize = 0;
     var skipped: usize = 0;
-    var manifest_acc: std.ArrayList(u8) = .{};
+    var manifest_acc: std.ArrayList(u8) = .empty;
     defer manifest_acc.deinit(allocator);
 
     while (pos < content.len) {
@@ -360,7 +362,7 @@ pub fn importArchive(
         defer allocator.free(out_path);
 
         const parent = std.fs.path.dirname(out_path) orelse out_path;
-        std.fs.cwd().makePath(parent) catch {};
+        std.Io.Dir.cwd().makePath(parent) catch {};
 
         const existing = readFileSafe(allocator, out_path) catch null;
         if (existing) |ex| {
@@ -371,7 +373,7 @@ pub fn importArchive(
             }
         }
 
-        const wf = std.fs.cwd().createFile(out_path, .{}) catch |err| {
+        const wf = std.Io.Dir.cwd().createFile(out_path, .{}) catch |err| {
             std.debug.print("   ⚠️  Cannot write {s}: {}\n", .{ rel_path, err });
             skipped += 1;
             continue;
@@ -385,8 +387,8 @@ pub fn importArchive(
     if (!dry_run) {
         const head_path = try std.fs.path.join(allocator, &.{ zev_target, "HEAD" });
         defer allocator.free(head_path);
-        std.fs.cwd().access(head_path, .{}) catch {
-            const hf = try std.fs.cwd().createFile(head_path, .{});
+        std.Io.Dir.cwd().access(head_path, .{}) catch {
+            const hf = try std.Io.Dir.cwd().createFile(head_path, .{});
             defer hf.close();
             try hf.writeAll("ref: refs/heads/main\n");
         };
@@ -405,8 +407,8 @@ pub fn importArchive(
     }
 }
 
-pub fn archiveInfo(allocator: std.mem.Allocator, archive_path: []const u8) !void {
-    const content = std.fs.cwd().readFileAlloc(archive_path, allocator, @enumFromInt(512 * 1024 * 1024)) catch |err| {
+pub fn archiveInfo(allocator: std.mem.Allocator, io: std.Io, archive_path: []const u8) !void {
+    const content = std.Io.Dir.cwd().readFileAlloc(io, archive_path, allocator, .limited(512 * 1024 * 1024)) catch |err| {
         std.debug.print("❌ Cannot read archive: {}\n", .{err});
         return;
     };

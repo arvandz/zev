@@ -28,8 +28,8 @@ pub const AuditEvent = struct {
     status: []const u8,
 };
 
-fn readFileSafe(allocator: std.mem.Allocator, path: []const u8) !?[]u8 {
-    return std.fs.cwd().readFileAlloc(path, allocator, @enumFromInt(64 * 1024)) catch |err| {
+fn readFileSafe(allocator: std.mem.Allocator, io: std.Io, path: []const u8) !?[]u8 {
+    return std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(64 * 1024)) catch |err| {
         if (err == error.FileNotFound or err == error.IsDir) return null;
         return err;
     };
@@ -55,6 +55,7 @@ fn getAuthor(allocator: std.mem.Allocator, repo: *Repository) ![]u8 {
 
 fn collectCommits(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     events: *std.ArrayList(AuditEvent),
 ) !void {
@@ -96,7 +97,7 @@ fn collectCommits(
         if (!valid) break;
 
         const commit_cid = cid_mod.CID{ .hash = hash };
-        const commit_data = repo.store.get(commit_cid) catch break;
+        const commit_data = repo.store.get(io, commit_cid) catch break;
         defer allocator.free(commit_data);
 
         const c = commit_mod.Commit.deserialize(allocator, commit_data) catch break;
@@ -119,7 +120,7 @@ fn collectCommits(
         defer allocator.free(metrics_path);
         if (try readFileSafe(allocator, metrics_path)) |mf| {
             defer allocator.free(mf);
-            var metric_parts: std.ArrayList(u8) = .{};
+            var metric_parts: std.ArrayList(u8) = .empty;
             defer metric_parts.deinit(allocator);
             var mi = std.mem.splitSequence(u8, mf, "\n");
             var first = true;
@@ -165,14 +166,15 @@ fn collectCommits(
 
 fn collectSnapshots(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     events: *std.ArrayList(AuditEvent),
     filter_name: ?[]const u8,
 ) !void {
     const dir_path = try zevPath(allocator, repo, "snapshots");
     defer allocator.free(dir_path);
-    var dir = std.fs.cwd().openDir(dir_path, .{ .iterate = true }) catch return;
-    defer dir.close();
+    var dir = std.Io.Dir.cwd().openDir(io, dir_path, .{ .iterate = true }) catch return;
+    defer dir.close(io);
 
     var it = dir.iterate();
     while (try it.next()) |entry| {
@@ -233,14 +235,15 @@ fn collectSnapshots(
 
 fn collectNotarizations(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     events: *std.ArrayList(AuditEvent),
     filter_ref: ?[]const u8,
 ) !void {
     const dir_path = try zevPath(allocator, repo, "notarizations");
     defer allocator.free(dir_path);
-    var dir = std.fs.cwd().openDir(dir_path, .{ .iterate = true }) catch return;
-    defer dir.close();
+    var dir = std.Io.Dir.cwd().openDir(io, dir_path, .{ .iterate = true }) catch return;
+    defer dir.close(io);
 
     var it = dir.iterate();
     while (try it.next()) |entry| {
@@ -294,13 +297,14 @@ fn collectNotarizations(
 
 fn collectDriftHistory(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     events: *std.ArrayList(AuditEvent),
 ) !void {
     const dir_path = try zevPath(allocator, repo, "drift_history");
     defer allocator.free(dir_path);
-    var dir = std.fs.cwd().openDir(dir_path, .{ .iterate = true }) catch return;
-    defer dir.close();
+    var dir = std.Io.Dir.cwd().openDir(io, dir_path, .{ .iterate = true }) catch return;
+    defer dir.close(io);
 
     var it = dir.iterate();
     while (try it.next()) |entry| {
@@ -346,14 +350,15 @@ fn collectDriftHistory(
 
 fn collectReproductions(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     events: *std.ArrayList(AuditEvent),
     filter_ref: ?[]const u8,
 ) !void {
     const dir_path = try zevPath(allocator, repo, "reproduce");
     defer allocator.free(dir_path);
-    var dir = std.fs.cwd().openDir(dir_path, .{ .iterate = true }) catch return;
-    defer dir.close();
+    var dir = std.Io.Dir.cwd().openDir(io, dir_path, .{ .iterate = true }) catch return;
+    defer dir.close(io);
 
     var it = dir.iterate();
     while (try it.next()) |entry| {
@@ -407,13 +412,14 @@ fn collectReproductions(
 
 fn collectExperiments(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     events: *std.ArrayList(AuditEvent),
 ) !void {
     const dir_path = try zevPath(allocator, repo, "experiments");
     defer allocator.free(dir_path);
-    var dir = std.fs.cwd().openDir(dir_path, .{ .iterate = true }) catch return;
-    defer dir.close();
+    var dir = std.Io.Dir.cwd().openDir(io, dir_path, .{ .iterate = true }) catch return;
+    defer dir.close(io);
 
     var it = dir.iterate();
     while (try it.next()) |entry| {
@@ -464,19 +470,20 @@ fn collectExperiments(
 
 fn collectContext(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     events: *std.ArrayList(AuditEvent),
 ) !void {
     const dir_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "context" });
     defer allocator.free(dir_path);
-    var dir = std.fs.cwd().openDir(dir_path, .{ .iterate = true }) catch return;
-    defer dir.close();
+    var dir = std.Io.Dir.cwd().openDir(io, dir_path, .{ .iterate = true }) catch return;
+    defer dir.close(io);
     var it = dir.iterate();
     while (try it.next()) |entry| {
         if (entry.kind != .file) continue;
         const path = try std.fs.path.join(allocator, &.{ dir_path, entry.name });
         defer allocator.free(path);
-        const file_content = std.fs.cwd().readFileAlloc(path, allocator, @enumFromInt(64 * 1024)) catch continue;
+        const file_content = std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(64 * 1024)) catch continue;
         defer allocator.free(file_content);
         var file_path: []u8 = try allocator.dupe(u8, "");
         var model: []u8 = try allocator.dupe(u8, "");
@@ -565,7 +572,11 @@ fn renderTerminal(events: []const AuditEvent, repo_path: []const u8, filter: ?[]
     std.debug.print("   Events:     {d}\n", .{events.len});
     std.debug.print("\n", .{});
     std.debug.print("   {s:<12} {s:<14} {s:<14} {s}\n", .{ "Type", "Ref", "Status", "Summary" });
-    std.debug.print("   {s}\n", .{"─" ** 78});
+    const divider = comptime blk: {
+        var s: []const u8 = "";
+        for (0..78) |_| s = s ++ "─";
+        break :blk s;
+    };
 
     for (events) |ev| {
         std.debug.print("   {s}{s:<11} {s:<14} {s}  {s}\n", .{
@@ -579,7 +590,7 @@ fn renderTerminal(events: []const AuditEvent, repo_path: []const u8, filter: ?[]
             std.debug.print("              {s}\n", .{ev.detail[0..@min(70, ev.detail.len)]});
         }
     }
-    std.debug.print("\n", .{});
+    std.debug.print("   {s}\n", .{divider});
 }
 
 fn renderMarkdown(
@@ -589,7 +600,7 @@ fn renderMarkdown(
     filter: ?[]const u8,
     output_path: []const u8,
 ) !void {
-    var out: std.ArrayList(u8) = .{};
+    var out: std.ArrayList(u8) = .empty;
     defer out.deinit(allocator);
 
     const appendStr = struct {
@@ -653,7 +664,7 @@ fn renderMarkdown(
         try appendStr(&out, allocator, s);
     }
 
-    const f = try std.fs.cwd().createFile(output_path, .{});
+    const f = try std.Io.Dir.cwd().createFile(output_path, .{});
     defer f.close();
     try f.writeAll(out.items);
 
@@ -666,7 +677,7 @@ fn renderJson(
     repo_path: []const u8,
     output_path: []const u8,
 ) !void {
-    var out: std.ArrayList(u8) = .{};
+    var out: std.ArrayList(u8) = .empty;
     defer out.deinit(allocator);
 
     try out.appendSlice(allocator, "{\n");
@@ -688,7 +699,7 @@ fn renderJson(
     if (std.mem.eql(u8, output_path, "-")) {
         std.debug.print("{s}", .{out.items});
     } else {
-        const f = try std.fs.cwd().createFile(output_path, .{});
+        const f = try std.Io.Dir.cwd().createFile(output_path, .{});
         defer f.close();
         try f.writeAll(out.items);
         std.debug.print("📄 JSON report: {s} ({d} bytes)\n", .{ output_path, out.items.len });
@@ -699,7 +710,7 @@ fn printSummary(events: []const AuditEvent) void {
     var ok_count: usize = 0;
     var warn_count: usize = 0;
     var fail_count: usize = 0;
-    var by_kind = [_]usize{0} ** 11;
+    var by_kind: [11]usize = @splat(0);
 
     for (events) |ev| {
         if (std.mem.eql(u8, ev.status, "ok")) ok_count += 1 else if (std.mem.eql(u8, ev.status, "warn")) warn_count += 1 else if (std.mem.eql(u8, ev.status, "fail")) fail_count += 1;
@@ -742,7 +753,7 @@ pub fn runAudit(
     format: []const u8,
     output_path: ?[]const u8,
 ) !void {
-    var events: std.ArrayList(AuditEvent) = .{};
+    var events: std.ArrayList(AuditEvent) = .empty;
     defer {
         for (events.items) |ev| {
             allocator.free(ev.ref);

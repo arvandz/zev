@@ -16,7 +16,7 @@ pub const StashFile = struct {
     mode: u32,
 };
 
-pub fn stashSave(allocator: std.mem.Allocator, repo: *Repository, message: ?[]const u8) !void {
+pub fn stashSave(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, message: ?[]const u8) !void {
     if (repo.index.entries.items.len == 0) {
         std.debug.print("No staged changes to stash\n", .{});
         return;
@@ -24,11 +24,11 @@ pub fn stashSave(allocator: std.mem.Allocator, repo: *Repository, message: ?[]co
 
     const stash_dir = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "stash" });
     defer allocator.free(stash_dir);
-    try std.fs.cwd().makePath(stash_dir);
+    try std.Io.Dir.cwd().makePath(stash_dir);
 
     const stash_id = try getNextStashId(allocator, stash_dir);
 
-    var buf: std.ArrayList(u8) = .{};
+    var buf: std.ArrayList(u8) = .empty;
     defer buf.deinit(allocator);
 
     const now = std.time.Instant.now() catch unreachable;
@@ -41,7 +41,7 @@ pub fn stashSave(allocator: std.mem.Allocator, repo: *Repository, message: ?[]co
     try buf.appendSlice(allocator, "---\n");
 
     for (repo.index.entries.items) |entry| {
-        const file_data = try repo.store.get(entry.cid);
+        const file_data = try repo.store.get(io, entry.cid);
         defer allocator.free(file_data);
 
         const cid_str = try entry.cid.toString(allocator);
@@ -57,12 +57,12 @@ pub fn stashSave(allocator: std.mem.Allocator, repo: *Repository, message: ?[]co
     const stash_file_path = try std.fmt.allocPrint(allocator, "{s}/stash-{}", .{ stash_dir, stash_id });
     defer allocator.free(stash_file_path);
 
-    const stash_file = try std.fs.cwd().createFile(stash_file_path, .{});
+    const stash_file = try std.Io.Dir.cwd().createFile(io, stash_file_path, .{});
     defer stash_file.close();
     try stash_file.writeAll(try buf.toOwnedSlice(allocator));
 
     repo.index.clear();
-    try repo.index.write();
+    try repo.index.write(io);
 
     std.debug.print("✅ Saved stash@{{{}}} : {s}\n", .{ stash_id, msg });
 }
@@ -71,7 +71,7 @@ pub fn stashList(allocator: std.mem.Allocator, repo: *Repository) !void {
     const stash_dir = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "stash" });
     defer allocator.free(stash_dir);
 
-    var dir = std.fs.cwd().openDir(stash_dir, .{ .iterate = true }) catch |err| {
+    var dir = std.Io.Dir.cwd().openDir(stash_dir, .{ .iterate = true }) catch |err| {
         if (err == error.FileNotFound) {
             std.debug.print("No stashes found\n", .{});
             return;
@@ -90,7 +90,7 @@ pub fn stashList(allocator: std.mem.Allocator, repo: *Repository) !void {
         const file_path = try std.fs.path.join(allocator, &.{ stash_dir, entry.name });
         defer allocator.free(file_path);
 
-        const file = try std.fs.cwd().openFile(file_path, .{});
+        const file = try std.Io.Dir.cwd().openFile(file_path, .{});
         defer file.close();
 
         var buf: [512]u8 = undefined;
@@ -113,27 +113,27 @@ pub fn stashList(allocator: std.mem.Allocator, repo: *Repository) !void {
     if (!found_any) std.debug.print("No stashes found\n", .{});
 }
 
-pub fn stashApply(allocator: std.mem.Allocator, repo: *Repository, stash_id: usize) !void {
+pub fn stashApply(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, stash_id: usize) !void {
     const stash_dir = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "stash" });
     defer allocator.free(stash_dir);
 
     const stash_file_path = try std.fmt.allocPrint(allocator, "{s}/stash-{}", .{ stash_dir, stash_id });
     defer allocator.free(stash_file_path);
 
-    const file = std.fs.cwd().openFile(stash_file_path, .{}) catch |err| {
+    const file = std.Io.Dir.cwd().openFile(io, stash_file_path, .{}) catch |err| {
         if (err == error.FileNotFound) return error.StashNotFound;
         return err;
     };
     defer file.close();
 
-    const stat = try file.stat();
+    const stat = try file.stat(io, );
     const content = try allocator.alloc(u8, @intCast(stat.size));
     defer allocator.free(content);
     _ = try file.read(content);
 
     var in_content = false;
     var current_file: ?[]const u8 = null;
-    var current_content: std.ArrayList(u8) = .{};
+    var current_content: std.ArrayList(u8) = .empty;
     defer current_content.deinit(allocator);
     var current_mode: u32 = 0o644;
     var restored: usize = 0;
@@ -157,11 +157,11 @@ pub fn stashApply(allocator: std.mem.Allocator, repo: *Repository, stash_id: usi
                 const file_content = try current_content.toOwnedSlice(allocator);
                 defer allocator.free(file_content);
 
-                const out_file = try std.fs.cwd().createFile(path, .{});
+                const out_file = try std.Io.Dir.cwd().createFile(io, path, .{});
                 defer out_file.close();
                 try out_file.writeAll(file_content);
 
-                const content_cid = try repo.store.put(file_content);
+                const content_cid = try repo.store.put(io, file_content);
                 try repo.index.addEntry(path, content_cid, file_content.len, current_mode);
                 restored += 1;
                 std.debug.print("  restored: {s}\n", .{path});
@@ -183,7 +183,7 @@ pub fn stashDrop(allocator: std.mem.Allocator, repo: *Repository, stash_id: usiz
     const stash_file_path = try std.fmt.allocPrint(allocator, "{s}/stash-{}", .{ stash_dir, stash_id });
     defer allocator.free(stash_file_path);
 
-    std.fs.cwd().deleteFile(stash_file_path) catch |err| {
+    std.Io.Dir.cwd().deleteFile(stash_file_path) catch |err| {
         if (err == error.FileNotFound) return error.StashNotFound;
         return err;
     };
@@ -191,7 +191,7 @@ pub fn stashDrop(allocator: std.mem.Allocator, repo: *Repository, stash_id: usiz
 }
 
 fn getNextStashId(allocator: std.mem.Allocator, stash_dir: []const u8) !usize {
-    var dir = std.fs.cwd().openDir(stash_dir, .{ .iterate = true }) catch return 0;
+    var dir = std.Io.Dir.cwd().openDir(stash_dir, .{ .iterate = true }) catch return 0;
     defer dir.close();
 
     var max_id: usize = 0;

@@ -114,6 +114,7 @@ const MetricMap = std.StringHashMap(f64);
 
 fn collectMetricsForCommit(
     allocator: std.mem.Allocator,
+    io: std.Io,
     store: *ipld.BlockStore,
     commit_cid: ipld.CID,
 ) !MetricMap {
@@ -130,7 +131,7 @@ fn collectMetricsForCommit(
         const repo_path = if (std.mem.endsWith(u8, bp, suffix)) bp[0 .. bp.len - suffix.len] else bp;
         const cd_path = try std.fs.path.join(allocator, &.{ repo_path, ".zev", "ipld_commits" });
         defer allocator.free(cd_path);
-        if (std.fs.cwd().openDir(cd_path, .{ .iterate = true })) |*dir| {
+        if (std.Io.Dir.cwd().openDir(cd_path, .{ .iterate = true })) |*dir| {
             var cdir = dir.*;
             defer cdir.close();
             var cit = cdir.iterate();
@@ -138,7 +139,7 @@ fn collectMetricsForCommit(
                 if (entry.kind != .file) continue;
                 const ep = try std.fs.path.join(allocator, &.{ cd_path, entry.name });
                 defer allocator.free(ep);
-                const stored = std.fs.cwd().readFileAlloc(ep, allocator, @enumFromInt(64)) catch continue;
+                const stored = std.Io.Dir.cwd().readFileAlloc(io, ep, allocator, .limited(64)) catch continue;
                 defer allocator.free(stored);
                 const trimmed = std.mem.trim(u8, stored, "\n\r ");
                 const mlen = @min(trimmed.len, commit_short.len);
@@ -150,7 +151,7 @@ fn collectMetricsForCommit(
         } else |_| {}
     }
 
-    var root_dir = std.fs.cwd().openDir(store.base_path, .{ .iterate = true }) catch return map;
+    var root_dir = std.Io.Dir.cwd().openDir(store.base_path, .{ .iterate = true }) catch return map;
     defer root_dir.close();
 
     var rit = root_dir.iterate();
@@ -158,7 +159,7 @@ fn collectMetricsForCommit(
         if (shard.kind != .directory) continue;
         const sp = try std.fs.path.join(allocator, &.{ store.base_path, shard.name });
         defer allocator.free(sp);
-        var sd = std.fs.cwd().openDir(sp, .{ .iterate = true }) catch continue;
+        var sd = std.Io.Dir.cwd().openDir(sp, .{ .iterate = true }) catch continue;
         defer sd.close();
         var si = sd.iterate();
         while (try si.next()) |block| {
@@ -424,6 +425,7 @@ pub fn computeSemanticDiff(
 
 pub fn resolveRef(
     allocator: std.mem.Allocator,
+    io: std.Io,
     store: *ipld.BlockStore,
     repo: *Repository,
     ref: []const u8,
@@ -435,7 +437,7 @@ pub fn resolveRef(
     const head_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "ipld_head" });
     defer allocator.free(head_path);
 
-    const head_content = try std.fs.cwd().readFileAlloc(head_path, allocator, @enumFromInt(64));
+    const head_content = try std.Io.Dir.cwd().readFileAlloc(io, head_path, allocator, .limited(64));
     defer allocator.free(head_content);
     const head_cid = try ipld.CID.fromHex(std.mem.trim(u8, head_content, "\n\r "));
 

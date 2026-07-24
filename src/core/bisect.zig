@@ -18,7 +18,7 @@ pub fn bisectStart(allocator: std.mem.Allocator, repo: *Repository) !void {
     const state_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "BISECT_STATE" });
     defer allocator.free(state_path);
 
-    const file = try std.fs.cwd().createFile(state_path, .{});
+    const file = try std.Io.Dir.cwd().createFile(state_path, .{});
     defer file.close();
     try file.writeAll("good=\nbad=\ncurrent=\n");
 
@@ -32,7 +32,7 @@ fn loadState(allocator: std.mem.Allocator, repo: *Repository) !?struct { good: [
     const state_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "BISECT_STATE" });
     defer allocator.free(state_path);
 
-    const file = std.fs.cwd().openFile(state_path, .{}) catch return null;
+    const file = std.Io.Dir.cwd().openFile(state_path, .{}) catch return null;
     defer file.close();
 
     const stat = try file.stat();
@@ -64,7 +64,7 @@ fn saveState(allocator: std.mem.Allocator, repo: *Repository, good: []const u8, 
     const state_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "BISECT_STATE" });
     defer allocator.free(state_path);
 
-    const file = try std.fs.cwd().createFile(state_path, .{});
+    const file = try std.Io.Dir.cwd().createFile(state_path, .{});
     defer file.close();
 
     var buf: [256]u8 = undefined;
@@ -72,13 +72,13 @@ fn saveState(allocator: std.mem.Allocator, repo: *Repository, good: []const u8, 
     try file.writeAll(line);
 }
 
-fn collectHistory(allocator: std.mem.Allocator, repo: *Repository, tip: cid_mod.CID) !std.ArrayList(cid_mod.CID) {
-    var history: std.ArrayList(cid_mod.CID) = .{};
+fn collectHistory(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, tip: cid_mod.CID) !std.ArrayList(cid_mod.CID) {
+    var history: std.ArrayList(cid_mod.CID) = .empty;
     var current = tip;
     var i: usize = 0;
     while (i < 10000) : (i += 1) {
         try history.append(allocator, current);
-        const data = repo.store.get(current) catch break;
+        const data = repo.store.get(io, current) catch break;
         defer allocator.free(data);
         const c = commit_mod.Commit.deserialize(allocator, data) catch break;
         defer allocator.free(c.author);
@@ -101,8 +101,8 @@ fn hashFromStr(hash_str: []const u8) ![32]u8 {
     return hash;
 }
 
-fn checkoutForBisect(allocator: std.mem.Allocator, repo: *Repository, commit_cid: cid_mod.CID) !void {
-    const data = try repo.store.get(commit_cid);
+fn checkoutForBisect(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, commit_cid: cid_mod.CID) !void {
+    const data = try repo.store.get(io, commit_cid);
     defer allocator.free(data);
     const c = try commit_mod.Commit.deserialize(allocator, data);
     defer allocator.free(c.author);
@@ -131,7 +131,7 @@ fn resolveHash(allocator: std.mem.Allocator, repo: *Repository, hash_opt: ?[]con
 }
 
 pub fn bisectGood(allocator: std.mem.Allocator, repo: *Repository, hash_opt: ?[]const u8) !void {
-    var state = (try loadState(allocator, repo)) orelse {
+    const state = (try loadState(allocator, repo)) orelse {
         std.debug.print("No bisect in progress. Run: zev bisect start\n", .{});
         return;
     };
@@ -148,7 +148,7 @@ pub fn bisectGood(allocator: std.mem.Allocator, repo: *Repository, hash_opt: ?[]
 }
 
 pub fn bisectBad(allocator: std.mem.Allocator, repo: *Repository, hash_opt: ?[]const u8) !void {
-    var state = (try loadState(allocator, repo)) orelse {
+    const state = (try loadState(allocator, repo)) orelse {
         std.debug.print("No bisect in progress. Run: zev bisect start\n", .{});
         return;
     };
@@ -164,7 +164,7 @@ pub fn bisectBad(allocator: std.mem.Allocator, repo: *Repository, hash_opt: ?[]c
     try bisectStep(allocator, repo, state.good, bad_hash);
 }
 
-fn bisectStep(allocator: std.mem.Allocator, repo: *Repository, good_str: []const u8, bad_str: []const u8) !void {
+fn bisectStep(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, good_str: []const u8, bad_str: []const u8) !void {
     if (good_str.len == 0 or bad_str.len == 0) {
         std.debug.print("Need both good and bad commits marked\n", .{});
         std.debug.print("  zev bisect good <hash>\n", .{});
@@ -197,7 +197,7 @@ fn bisectStep(allocator: std.mem.Allocator, repo: *Repository, good_str: []const
 
     if (range <= 1) {
         std.debug.print("\n🎯 Found the culprit commit!\n", .{});
-        const data = try repo.store.get(bad_cid);
+        const data = try repo.store.get(io, bad_cid);
         defer allocator.free(data);
         const c = try commit_mod.Commit.deserialize(allocator, data);
         defer allocator.free(c.author);
@@ -224,6 +224,6 @@ fn bisectStep(allocator: std.mem.Allocator, repo: *Repository, good_str: []const
 pub fn bisectReset(allocator: std.mem.Allocator, repo: *Repository) !void {
     const state_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "BISECT_STATE" });
     defer allocator.free(state_path);
-    std.fs.cwd().deleteFile(state_path) catch {};
+    std.Io.Dir.cwd().deleteFile(state_path) catch {};
     std.debug.print("🔄 Bisect reset\n", .{});
 }

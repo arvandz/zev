@@ -44,12 +44,12 @@ fn compareFloat(a: f64, op: CompareOp, b: f64) bool {
     };
 }
 
-fn readMetricsForCommit(allocator: std.mem.Allocator, repo: *Repository, hash: []const u8) !std.StringHashMap(f64) {
+fn readMetricsForCommit(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, hash: []const u8) !std.StringHashMap(f64) {
     var map = std.StringHashMap(f64).init(allocator);
     const path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "metrics", hash });
     defer allocator.free(path);
 
-    const content = std.fs.cwd().readFileAlloc(path, allocator, @enumFromInt(64 * 1024)) catch return map;
+    const content = std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(64 * 1024)) catch return map;
     defer allocator.free(content);
 
     var iter = std.mem.splitSequence(u8, content, "\n");
@@ -73,7 +73,7 @@ fn freeMetricsMap(allocator: std.mem.Allocator, map: *std.StringHashMap(f64)) vo
     map.deinit();
 }
 
-pub fn searchCommits(allocator: std.mem.Allocator, repo: *Repository, query: []const u8, max: usize) !void {
+pub fn searchCommits(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, query: []const u8, max: usize) !void {
     const head = repo.getHeadCommit() catch {
         std.debug.print("No commits yet.\n", .{});
         return;
@@ -88,7 +88,7 @@ pub fn searchCommits(allocator: std.mem.Allocator, repo: *Repository, query: []c
         if (checked > 10000) break;
         checked += 1;
 
-        const data = repo.store.get(current) catch break;
+        const data = repo.store.get(io, current) catch break;
         defer allocator.free(data);
         const commit = commit_mod.Commit.deserialize(allocator, data) catch break;
         defer allocator.free(commit.author);
@@ -123,11 +123,11 @@ pub fn searchCommits(allocator: std.mem.Allocator, repo: *Repository, query: []c
     }
 }
 
-pub fn searchExperiments(allocator: std.mem.Allocator, repo: *Repository, query: []const u8, status_filter: []const u8) !void {
+pub fn searchExperiments(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, query: []const u8, status_filter: []const u8) !void {
     const exp_dir_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "experiments" });
     defer allocator.free(exp_dir_path);
 
-    var dir = std.fs.cwd().openDir(exp_dir_path, .{ .iterate = true }) catch {
+    var dir = std.Io.Dir.cwd().openDir(exp_dir_path, .{ .iterate = true }) catch {
         std.debug.print("No experiments yet.\n", .{});
         return;
     };
@@ -146,7 +146,7 @@ pub fn searchExperiments(allocator: std.mem.Allocator, repo: *Repository, query:
 
         const path = try std.fs.path.join(allocator, &.{ exp_dir_path, entry.name });
         defer allocator.free(path);
-        const content = std.fs.cwd().readFileAlloc(path, allocator, @enumFromInt(64 * 1024)) catch continue;
+        const content = std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(64 * 1024)) catch continue;
         defer allocator.free(content);
 
         var name: []u8 = try allocator.dupe(u8, entry.name);
@@ -207,7 +207,7 @@ pub fn searchExperiments(allocator: std.mem.Allocator, repo: *Repository, query:
     }
 }
 
-pub fn searchMetrics(allocator: std.mem.Allocator, repo: *Repository, filter: []const u8) !void {
+pub fn searchMetrics(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, filter: []const u8) !void {
     var key_end: usize = 0;
     for (filter, 0..) |c, i| {
         if (c == '>' or c == '<' or c == '=') {
@@ -253,7 +253,7 @@ pub fn searchMetrics(allocator: std.mem.Allocator, repo: *Repository, filter: []
             if (compareFloat(val, parsed.op, threshold)) {
                 found += 1;
 
-                const data = repo.store.get(current) catch {
+                const data = repo.store.get(io, current) catch {
                     current_opt = null;
                     break;
                 };
@@ -279,7 +279,7 @@ pub fn searchMetrics(allocator: std.mem.Allocator, repo: *Repository, filter: []
             }
         }
 
-        const data = repo.store.get(current) catch break;
+        const data = repo.store.get(io, current) catch break;
         defer allocator.free(data);
         const commit = commit_mod.Commit.deserialize(allocator, data) catch break;
         defer allocator.free(commit.author);
@@ -294,11 +294,11 @@ pub fn searchMetrics(allocator: std.mem.Allocator, repo: *Repository, filter: []
     }
 }
 
-pub fn searchLineage(allocator: std.mem.Allocator, repo: *Repository, query: []const u8, type_filter: []const u8) !void {
+pub fn searchLineage(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, query: []const u8, type_filter: []const u8) !void {
     const dir_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "lineage" });
     defer allocator.free(dir_path);
 
-    var dir = std.fs.cwd().openDir(dir_path, .{ .iterate = true }) catch {
+    var dir = std.Io.Dir.cwd().openDir(dir_path, .{ .iterate = true }) catch {
         std.debug.print("No lineage nodes yet.\n", .{});
         return;
     };
@@ -316,7 +316,7 @@ pub fn searchLineage(allocator: std.mem.Allocator, repo: *Repository, query: []c
 
         const path = try std.fs.path.join(allocator, &.{ dir_path, entry.name });
         defer allocator.free(path);
-        const content = std.fs.cwd().readFileAlloc(path, allocator, @enumFromInt(64 * 1024)) catch continue;
+        const content = std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(64 * 1024)) catch continue;
         defer allocator.free(content);
 
         var node_id: []u8 = try allocator.dupe(u8, entry.name);
@@ -381,11 +381,11 @@ pub fn searchLineage(allocator: std.mem.Allocator, repo: *Repository, query: []c
     if (found == 0) std.debug.print("  No lineage nodes found\n", .{}) else std.debug.print("  Found {d} node(s)\n", .{found});
 }
 
-pub fn searchSnapshots(allocator: std.mem.Allocator, repo: *Repository, query: []const u8, permanent_only: bool) !void {
+pub fn searchSnapshots(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, query: []const u8, permanent_only: bool) !void {
     const dir_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "snapshots" });
     defer allocator.free(dir_path);
 
-    var dir = std.fs.cwd().openDir(dir_path, .{ .iterate = true }) catch {
+    var dir = std.Io.Dir.cwd().openDir(dir_path, .{ .iterate = true }) catch {
         std.debug.print("No snapshots yet.\n", .{});
         return;
     };
@@ -404,7 +404,7 @@ pub fn searchSnapshots(allocator: std.mem.Allocator, repo: *Repository, query: [
 
         const path = try std.fs.path.join(allocator, &.{ dir_path, entry.name });
         defer allocator.free(path);
-        const content = std.fs.cwd().readFileAlloc(path, allocator, @enumFromInt(64 * 1024)) catch continue;
+        const content = std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(64 * 1024)) catch continue;
         defer allocator.free(content);
 
         var name: []u8 = try allocator.dupe(u8, "");

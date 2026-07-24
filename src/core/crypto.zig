@@ -90,11 +90,11 @@ pub const Identity = struct {
         return .{ .key_pair = Ed25519.KeyPair.generate() };
     }
 
-    pub fn loadOrCreate(allocator: std.mem.Allocator, repo_path: []const u8) !Identity {
+    pub fn loadOrCreate(allocator: std.mem.Allocator, io: std.Io, repo_path: []const u8) !Identity {
         const id_path = try std.fs.path.join(allocator, &.{ repo_path, ".zev", "identity" });
         defer allocator.free(id_path);
 
-        if (std.fs.cwd().readFileAlloc(id_path, allocator, @enumFromInt(256))) |content| {
+        if (std.Io.Dir.cwd().readFileAlloc(io, id_path, allocator, .limited(256))) |content| {
             defer allocator.free(content);
             const trimmed = std.mem.trim(u8, content, "\n\r ");
             const seed_bytes = try b64Decode32(trimmed);
@@ -116,7 +116,7 @@ pub const Identity = struct {
         @memcpy(&seed, sk_bytes[0..32]);
 
         const encoded = b64Encode32(seed);
-        const f = try std.fs.cwd().createFile(id_path, .{ .mode = 0o600 });
+        const f = try std.Io.Dir.cwd().createFile(id_path, .{ .mode = 0o600 });
         defer f.close();
         try f.writeAll(&encoded);
         try f.writeAll("\n");

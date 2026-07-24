@@ -37,7 +37,7 @@ pub fn runHook(allocator: std.mem.Allocator, repo_path: []const u8, hook_type: H
     const hook_path = try std.fs.path.join(allocator, &.{ repo_path, ".zev", "hooks", hook_type.toString() });
     defer allocator.free(hook_path);
 
-    std.fs.cwd().access(hook_path, .{}) catch |err| {
+    std.Io.Dir.cwd().access(hook_path, .{}) catch |err| {
         if (err == error.FileNotFound) return .not_found;
         return .not_found;
     };
@@ -77,12 +77,12 @@ pub fn runHook(allocator: std.mem.Allocator, repo_path: []const u8, hook_type: H
 pub fn installHook(allocator: std.mem.Allocator, repo_path: []const u8, hook_type: HookType, script_content: []const u8) !void {
     const hooks_dir = try std.fs.path.join(allocator, &.{ repo_path, ".zev", "hooks" });
     defer allocator.free(hooks_dir);
-    try std.fs.cwd().makePath(hooks_dir);
+    try std.Io.Dir.cwd().makePath(hooks_dir);
 
     const hook_path = try std.fs.path.join(allocator, &.{ hooks_dir, hook_type.toString() });
     defer allocator.free(hook_path);
 
-    const file = try std.fs.cwd().createFile(hook_path, .{});
+    const file = try std.Io.Dir.cwd().createFile(hook_path, .{});
     defer file.close();
     try file.writeAll(script_content);
 
@@ -94,7 +94,7 @@ pub fn listHooks(allocator: std.mem.Allocator, repo_path: []const u8) !void {
     const hooks_dir = try std.fs.path.join(allocator, &.{ repo_path, ".zev", "hooks" });
     defer allocator.free(hooks_dir);
 
-    var dir = std.fs.cwd().openDir(hooks_dir, .{ .iterate = true }) catch |err| {
+    var dir = std.Io.Dir.cwd().openDir(hooks_dir, .{ .iterate = true }) catch |err| {
         if (err == error.FileNotFound) {
             std.debug.print("No hooks installed\n", .{});
             return;
@@ -110,10 +110,10 @@ pub fn listHooks(allocator: std.mem.Allocator, repo_path: []const u8) !void {
             found_any = true;
             const hook_path = try std.fs.path.join(allocator, &.{ hooks_dir, entry.name });
             defer allocator.free(hook_path);
-            const file = try std.fs.cwd().openFile(hook_path, .{});
+            const file = try std.Io.Dir.cwd().openFile(hook_path, .{});
             defer file.close();
             const stat = try file.stat();
-            const executable = (stat.mode & 0o111) != 0;
+            const executable = (stat.permissions.toMode() & 0o111) != 0;
             std.debug.print("  {s} {s}\n", .{ entry.name, if (executable) "[executable]" else "[not executable]" });
         }
     }
@@ -124,7 +124,7 @@ pub fn removeHook(allocator: std.mem.Allocator, repo_path: []const u8, hook_type
     const hook_path = try std.fs.path.join(allocator, &.{ repo_path, ".zev", "hooks", hook_type.toString() });
     defer allocator.free(hook_path);
 
-    std.fs.cwd().deleteFile(hook_path) catch |err| {
+    std.Io.Dir.cwd().deleteFile(hook_path) catch |err| {
         if (err == error.FileNotFound) return error.HookNotFound;
         return err;
     };
@@ -133,12 +133,12 @@ pub fn removeHook(allocator: std.mem.Allocator, repo_path: []const u8, hook_type
 pub fn initHooks(allocator: std.mem.Allocator, repo_path: []const u8) !void {
     const hooks_dir = try std.fs.path.join(allocator, &.{ repo_path, ".zev", "hooks" });
     defer allocator.free(hooks_dir);
-    try std.fs.cwd().makePath(hooks_dir);
+    try std.Io.Dir.cwd().makePath(hooks_dir);
 
     const sample_path = try std.fs.path.join(allocator, &.{ hooks_dir, "pre-commit.sample" });
     defer allocator.free(sample_path);
 
-    const sample_file = try std.fs.cwd().createFile(sample_path, .{});
+    const sample_file = try std.Io.Dir.cwd().createFile(sample_path, .{});
     defer sample_file.close();
     try sample_file.writeAll("#!/bin/sh\n# Sample hook\n");
 }

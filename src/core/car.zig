@@ -96,8 +96,8 @@ pub const CarReader = struct {
     }
 };
 
-pub fn readCar(allocator: std.mem.Allocator, path: []const u8) !CarReader {
-    const data = try std.fs.cwd().readFileAlloc(path, allocator, @enumFromInt(512 * 1024 * 1024)); // 512MB max
+pub fn readCar(allocator: std.mem.Allocator, io: std.Io, path: []const u8) !CarReader {
+    const data = try std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(512 * 1024 * 1024)); // 512MB max
     defer allocator.free(data);
 
     var pos: usize = 0;
@@ -111,7 +111,7 @@ pub fn readCar(allocator: std.mem.Allocator, path: []const u8) !CarReader {
     const header = try ipld.decode(allocator, header_bytes);
     defer header.deinit(allocator);
 
-    var roots: std.ArrayList(ipld.CID) = .{};
+    var roots: std.ArrayList(ipld.CID) = .empty;
     if (header.getField("roots")) |roots_val| {
         if (roots_val == .list) {
             for (roots_val.list) |rv| {
@@ -120,7 +120,7 @@ pub fn readCar(allocator: std.mem.Allocator, path: []const u8) !CarReader {
         }
     }
 
-    var blocks: std.ArrayList(CarBlock) = .{};
+    var blocks: std.ArrayList(CarBlock) = .empty;
     while (pos < data.len) {
         const block_len = readVarint(data, &pos) catch break;
         if (block_len == 0) break;
@@ -161,7 +161,7 @@ pub fn dagExport(
     var store = try ipld.BlockStore.init(allocator, repo.path);
     defer store.deinit();
 
-    var root_cids: std.ArrayList(ipld.CID) = .{};
+    var root_cids: std.ArrayList(ipld.CID) = .empty;
     defer root_cids.deinit(allocator);
 
     if (std.mem.eql(u8, root_spec, "all")) {
@@ -185,7 +185,7 @@ pub fn dagExport(
         return;
     }
 
-    const f = std.fs.cwd().createFile(output_path, .{}) catch |err| {
+    const f = std.Io.Dir.cwd().createFile(io, output_path, .{}) catch |err| {
         std.debug.print("❌ Cannot create {s}: {}\n", .{ output_path, err });
         return;
     };
@@ -209,7 +209,7 @@ pub fn dagExport(
     }
 
     const file_size = blk: {
-        const st = std.fs.cwd().statFile(output_path) catch break :blk @as(u64, 0);
+        const st = std.Io.Dir.cwd().statFile(io, output_path) catch break :blk @as(u64, 0);
         break :blk @as(u64, @intCast(st.size));
     };
 
@@ -339,7 +339,7 @@ pub fn dagImport(
                     defer allocator.free(head_path);
                     const cid_str = try root_cid.toShort(allocator);
                     defer allocator.free(cid_str);
-                    const f2 = try std.fs.cwd().createFile(head_path, .{});
+                    const f2 = try std.Io.Dir.cwd().createFile(io, head_path, .{});
                     defer f2.close();
                     try f2.writeAll(cid_str);
                     break;
@@ -354,14 +354,14 @@ fn collectAllCIDs(
     store: *ipld.BlockStore,
     out: *std.ArrayList(ipld.CID),
 ) !void {
-    var root_dir = std.fs.cwd().openDir(store.base_path, .{ .iterate = true }) catch return;
+    var root_dir = std.Io.Dir.cwd().openDir(store.base_path, .{ .iterate = true }) catch return;
     defer root_dir.close();
     var it = root_dir.iterate();
     while (try it.next()) |shard| {
         if (shard.kind != .directory) continue;
         const sp = try std.fs.path.join(allocator, &.{ store.base_path, shard.name });
         defer allocator.free(sp);
-        var sd = std.fs.cwd().openDir(sp, .{ .iterate = true }) catch continue;
+        var sd = std.Io.Dir.cwd().openDir(sp, .{ .iterate = true }) catch continue;
         defer sd.close();
         var si = sd.iterate();
         while (try si.next()) |block| {
@@ -372,17 +372,17 @@ fn collectAllCIDs(
     }
 }
 
-fn resolveHEAD(allocator: std.mem.Allocator, repo: *Repository) !ipld.CID {
+fn resolveHEAD(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) !ipld.CID {
     const head_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "HEAD" });
     defer allocator.free(head_path);
-    const head = try std.fs.cwd().readFileAlloc(head_path, allocator, @enumFromInt(256));
+    const head = try std.Io.Dir.cwd().readFileAlloc(io, head_path, allocator, .limited(256));
     defer allocator.free(head);
 
     if (std.mem.startsWith(u8, head, "ref: ")) {
         const ref = std.mem.trim(u8, head[5..], "\n\r ");
         const rp = try std.fs.path.join(allocator, &.{ repo.path, ".zev", ref });
         defer allocator.free(rp);
-        const rc = try std.fs.cwd().readFileAlloc(rp, allocator, @enumFromInt(256));
+        const rc = try std.Io.Dir.cwd().readFileAlloc(io, rp, allocator, .limited(256));
         defer allocator.free(rc);
         const hash = std.mem.trim(u8, rc, "\n\r ");
         return ipld.CID.fromHex(hash);

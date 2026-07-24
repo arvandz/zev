@@ -16,7 +16,7 @@ pub const Index = struct {
     pub fn init(allocator: std.mem.Allocator, index_path: []const u8) Index {
         return Index{
             .allocator = allocator,
-            .entries = .{},
+            .entries = .empty,
             .index_path = index_path,
         };
     }
@@ -75,8 +75,8 @@ pub const Index = struct {
         return self.getEntry(path) != null;
     }
 
-    pub fn write(self: *Index) !void {
-        var buffer: std.ArrayList(u8) = .{};
+    pub fn write(self: *Index, io: std.Io) !void {
+        var buffer: std.ArrayList(u8) = .empty;
         defer buffer.deinit(self.allocator);
 
         for (self.entries.items) |entry| {
@@ -91,21 +91,23 @@ pub const Index = struct {
             });
         }
 
-        const file = try std.fs.cwd().createFile(self.index_path, .{});
+        const file = try std.Io.Dir.cwd().createFile(io, self.index_path, .{});
         defer file.close();
         try file.writeAll(buffer.items);
     }
 
-    pub fn read(self: *Index) !void {
-        const file = std.fs.cwd().openFile(self.index_path, .{}) catch |err| {
+    pub fn read(self: *Index, io: std.Io) !void {
+        const file = std.Io.Dir.cwd().openFile(io, self.index_path, .{}) catch |err| {
             if (err == error.FileNotFound) {
                 return;
             }
             return err;
         };
-        defer file.close();
+        defer file.close(io);
 
-        const content = try std.fs.cwd().readFileAlloc(self.index_path, self.allocator, @enumFromInt(10 * 1024 * 1024));
+        var read_buf: [4096]u8 = undefined;
+        var reader = file.reader(io, &read_buf);
+        const content = try reader.interface.allocRemaining(self.allocator, .unlimited);
         defer self.allocator.free(content);
 
         var lines = std.mem.splitSequence(u8, content, "\n");

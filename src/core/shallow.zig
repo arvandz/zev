@@ -8,6 +8,7 @@ const checkout_mod = @import("checkout.zig");
 
 pub fn shallowCopy(
     allocator: std.mem.Allocator,
+    io: std.Io,
     from_repo: *Repository,
     to_repo: *Repository,
     head: cid_mod.CID,
@@ -17,15 +18,15 @@ pub fn shallowCopy(
     var remaining = depth;
 
     while (remaining > 0) : (remaining -= 1) {
-        const commit_data = try from_repo.store.get(current_cid);
+        const commit_data = try from_repo.store.get(io, current_cid);
         defer allocator.free(commit_data);
-        _ = try to_repo.store.put(commit_data);
+        _ = try to_repo.store.put(io, commit_data);
 
         const commit = try commit_mod.Commit.deserialize(allocator, commit_data);
         defer allocator.free(commit.author);
         defer allocator.free(commit.message);
 
-        try copyTree(allocator, from_repo, to_repo, commit.tree_cid);
+        try copyTree(allocator, io, from_repo, to_repo, commit.tree_cid);
 
         if (commit.parent_cid) |parent| {
             current_cid = parent;
@@ -38,51 +39,57 @@ pub fn shallowCopy(
     const cid_str = try current_cid.toString(allocator);
     defer allocator.free(cid_str);
 
-    const shallow_file = try std.fs.cwd().createFile(shallow_path, .{});
-    defer shallow_file.close();
-    try shallow_file.writeAll(cid_str);
-    try shallow_file.writeAll("\n");
+    const shallow_file = try std.Io.Dir.cwd().createFile(io, shallow_path, .{});
+    defer shallow_file.close(io);
+    var buffer: [128]u8 = undefined;
+    var writer = shallow_file.writer(io, &buffer);
+    try writer.interface.writeAll(cid_str);
+    try writer.interface.writeAll("\n");
+    try writer.flush();
 }
 
 fn copyTree(
     allocator: std.mem.Allocator,
+    io: std.Io,
     from_repo: *Repository,
     to_repo: *Repository,
     tree_cid: cid_mod.CID,
 ) !void {
-    if (try to_repo.store.has(tree_cid)) return;
+    if (try to_repo.store.has(io, tree_cid)) return;
 
-    const tree_data = try from_repo.store.get(tree_cid);
+    const tree_data = try from_repo.store.get(io, tree_cid);
     defer allocator.free(tree_data);
-    _ = try to_repo.store.put(tree_data);
+    _ = try to_repo.store.put(io, tree_data);
 
     var tree = try tree_mod.Tree.deserialize(allocator, tree_data);
     defer tree.deinit();
 
     for (tree.entries.items) |entry| {
-        if (try to_repo.store.has(entry.cid)) continue;
-        const blob_data = try from_repo.store.get(entry.cid);
+        if (try to_repo.store.has(io, entry.cid)) continue;
+        const blob_data = try from_repo.store.get(io, entry.cid);
         defer allocator.free(blob_data);
-        _ = try to_repo.store.put(blob_data);
+        _ = try to_repo.store.put(io, blob_data);
     }
 }
 
-pub fn isShallow(allocator: std.mem.Allocator, repo_path: []const u8) bool {
+pub fn isShallow(io: std.Io, allocator: std.mem.Allocator, repo_path: []const u8) bool {
     const shallow_path = std.fs.path.join(allocator, &.{ repo_path, ".zev", "shallow" }) catch return false;
     defer allocator.free(shallow_path);
-    std.fs.cwd().access(shallow_path, .{}) catch return false;
+    std.Io.Dir.cwd().access(io, shallow_path, .{}) catch return false;
     return true;
 }
 
-pub fn getShallowBoundary(allocator: std.mem.Allocator, repo_path: []const u8) !?cid_mod.CID {
+pub fn getShallowBoundary(allocator: std.mem.Allocator, io: std.Io, repo_path: []const u8) !?cid_mod.CID {
     const shallow_path = try std.fs.path.join(allocator, &.{ repo_path, ".zev", "shallow" });
     defer allocator.free(shallow_path);
 
-    const file = std.fs.cwd().openFile(shallow_path, .{}) catch return null;
-    defer file.close();
+    const file = std.Io.Dir.cwd().openFile(io, shallow_path, .{}) catch return null;
+    defer file.close(io);
 
+    var read_buf: [128]u8 = undefined;
+    var reader = file.reader(io, &read_buf);
     var buf: [128]u8 = undefined;
-    const n = try file.read(&buf);
+    const n = try reader.interface.readSliceShort(&buf);
     const hash_str = std.mem.trim(u8, buf[0..n], " \n\r\t");
     if (hash_str.len != 64) return null;
 

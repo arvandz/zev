@@ -25,13 +25,14 @@ pub const TextCommit = struct {
 
 pub fn readTextCommit(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     hash: []const u8,
 ) !TextCommit {
     const path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "objects", hash });
     defer allocator.free(path);
 
-    const content = try std.fs.cwd().readFileAlloc(path, allocator, @enumFromInt(64 * 1024));
+    const content = try std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(64 * 1024));
     defer allocator.free(content);
 
     var author: []u8 = try allocator.dupe(u8, "");
@@ -44,7 +45,7 @@ pub fn readTextCommit(
 
     var iter = std.mem.splitSequence(u8, content, "\n");
     var past_headers = false;
-    var msg_buf: std.ArrayList(u8) = .{};
+    var msg_buf: std.ArrayList(u8) = .empty;
     defer msg_buf.deinit(allocator);
     while (iter.next()) |line| {
         if (!past_headers) {
@@ -102,6 +103,7 @@ const MetricEntry = struct { key: []u8, value: f64 };
 
 fn readMetricsForCommit(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     commit_hash: []const u8,
 ) ![]MetricEntry {
@@ -109,11 +111,11 @@ fn readMetricsForCommit(
     const metrics_dir = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "metrics" });
     defer allocator.free(metrics_dir);
 
-    var dir = std.fs.cwd().openDir(metrics_dir, .{ .iterate = true }) catch
+    var dir = std.Io.Dir.cwd().openDir(io, metrics_dir, .{ .iterate = true }) catch
         return try allocator.alloc(MetricEntry, 0);
     defer dir.close();
 
-    var entries: std.ArrayList(MetricEntry) = .{};
+    var entries: std.ArrayList(MetricEntry) = .empty;
 
     var it = dir.iterate();
     while (try it.next()) |entry| {
@@ -122,7 +124,7 @@ fn readMetricsForCommit(
 
         const path = try std.fs.path.join(allocator, &.{ metrics_dir, entry.name });
         defer allocator.free(path);
-        const content = std.fs.cwd().readFileAlloc(path, allocator, @enumFromInt(4096)) catch continue;
+        const content = std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(4096)) catch continue;
         defer allocator.free(content);
 
         var li = std.mem.splitSequence(u8, content, "\n");
@@ -210,7 +212,7 @@ pub fn migrateCommitsToIPLD(
     const head_hash = try resolveHEAD(allocator, repo);
     defer allocator.free(head_hash);
 
-    var chain: std.ArrayList([]u8) = .{};
+    var chain: std.ArrayList([]u8) = .empty;
     defer {
         for (chain.items) |h| allocator.free(h);
         chain.deinit(allocator);
@@ -325,7 +327,7 @@ pub fn onMetricsSet(
         allocator.free(all_metrics);
     }
 
-    var metrics: std.ArrayList(ipld.MetricsNode.MetricEntry) = .{};
+    var metrics: std.ArrayList(ipld.MetricsNode.MetricEntry) = .empty;
     defer metrics.deinit(allocator);
 
     var found_new = false;
@@ -378,7 +380,7 @@ pub fn ipldLog(
     const head_cid = loadIPLDHead(allocator, repo) catch blk: {
         var best: ?ipld.CID = null;
         var best_ts: i64 = 0;
-        var root_dir = std.fs.cwd().openDir(store.base_path, .{ .iterate = true }) catch {
+        var root_dir = std.Io.Dir.cwd().openDir(store.base_path, .{ .iterate = true }) catch {
             std.debug.print("No IPLD history yet. Run: zev ipld migrate\n\n", .{});
             return;
         };
@@ -388,7 +390,7 @@ pub fn ipldLog(
             if (shard.kind != .directory) continue;
             const sp = try std.fs.path.join(allocator, &.{ store.base_path, shard.name });
             defer allocator.free(sp);
-            var sd = std.fs.cwd().openDir(sp, .{ .iterate = true }) catch continue;
+            var sd = std.Io.Dir.cwd().openDir(sp, .{ .iterate = true }) catch continue;
             defer sd.close();
             var si = sd.iterate();
             while (try si.next()) |block| {
@@ -480,7 +482,7 @@ fn saveCommitCIDMapping(
 ) !void {
     const dir = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "ipld_commits" });
     defer allocator.free(dir);
-    try std.fs.cwd().makePath(dir);
+    try std.Io.Dir.cwd().makePath(dir);
 
     const short_hash = commit_hash[0..@min(16, commit_hash.len)];
     const path = try std.fs.path.join(allocator, &.{ dir, short_hash });
@@ -489,13 +491,14 @@ fn saveCommitCIDMapping(
     const cid_str = try cid.toShort(allocator);
     defer allocator.free(cid_str);
 
-    const f = try std.fs.cwd().createFile(path, .{});
+    const f = try std.Io.Dir.cwd().createFile(path, .{});
     defer f.close();
     try f.writeAll(cid_str);
 }
 
 fn loadCommitCIDMapping(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     commit_hash: []const u8,
 ) !ipld.CID {
@@ -506,7 +509,7 @@ fn loadCommitCIDMapping(
     const path = try std.fs.path.join(allocator, &.{ dir, short_hash });
     defer allocator.free(path);
 
-    const content = try std.fs.cwd().readFileAlloc(path, allocator, @enumFromInt(64));
+    const content = try std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(64));
     defer allocator.free(content);
 
     return ipld.CID.fromHex(std.mem.trim(u8, content, "\n\r "));
@@ -523,36 +526,37 @@ fn saveIPLDHead(
     const cid_str = try cid.toShort(allocator);
     defer allocator.free(cid_str);
 
-    const f = try std.fs.cwd().createFile(path, .{});
+    const f = try std.Io.Dir.cwd().createFile(path, .{});
     defer f.close();
     try f.writeAll(cid_str);
 }
 
 fn loadIPLDHead(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
 ) !ipld.CID {
     const path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "ipld_head" });
     defer allocator.free(path);
 
-    const content = try std.fs.cwd().readFileAlloc(path, allocator, @enumFromInt(64));
+    const content = try std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(64));
     defer allocator.free(content);
 
     return ipld.CID.fromHex(std.mem.trim(u8, content, "\n\r "));
 }
 
-fn resolveHEAD(allocator: std.mem.Allocator, repo: *Repository) ![]u8 {
+fn resolveHEAD(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) ![]u8 {
     const head_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "HEAD" });
     defer allocator.free(head_path);
 
-    const head = try std.fs.cwd().readFileAlloc(head_path, allocator, @enumFromInt(256));
+    const head = try std.Io.Dir.cwd().readFileAlloc(io, head_path, allocator, .limited(256));
     defer allocator.free(head);
 
     if (std.mem.startsWith(u8, head, "ref: ")) {
         const ref = std.mem.trim(u8, head[5..], "\n\r ");
         const rp = try std.fs.path.join(allocator, &.{ repo.path, ".zev", ref });
         defer allocator.free(rp);
-        const rc = try std.fs.cwd().readFileAlloc(rp, allocator, @enumFromInt(256));
+        const rc = try std.Io.Dir.cwd().readFileAlloc(io, rp, allocator, .limited(256));
         defer allocator.free(rc);
         return allocator.dupe(u8, std.mem.trim(u8, rc, "\n\r "));
     }

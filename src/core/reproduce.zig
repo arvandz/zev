@@ -36,13 +36,13 @@ pub const ReproduceRecord = struct {
 
 fn reproduceDir(allocator: std.mem.Allocator, repo: *Repository) ![]u8 {
     const dir = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "reproduce" });
-    try std.fs.cwd().makePath(dir);
+    try std.Io.Dir.cwd().makePath(dir);
     return dir;
 }
 
 fn captureDir(allocator: std.mem.Allocator, repo: *Repository) ![]u8 {
     const dir = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "capture" });
-    try std.fs.cwd().makePath(dir);
+    try std.Io.Dir.cwd().makePath(dir);
     return dir;
 }
 
@@ -56,7 +56,7 @@ fn saveReproduceRecord(
     const path = try std.fs.path.join(allocator, &.{ dir, rec.id });
     defer allocator.free(path);
 
-    var out: std.ArrayList(u8) = .{};
+    var out: std.ArrayList(u8) = .empty;
     defer out.deinit(allocator);
 
     inline for ([_]struct { k: []const u8, v: []const u8 }{
@@ -81,18 +81,19 @@ fn saveReproduceRecord(
         try out.appendSlice(allocator, ms);
     }
 
-    const f = try std.fs.cwd().createFile(path, .{});
+    const f = try std.Io.Dir.cwd().createFile(path, .{});
     defer f.close();
     try f.writeAll(out.items);
 }
 
 pub fn captureRun(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     run_command: []const u8,
     env_file: ?[]const u8,
 ) !void {
-    const head = repo.getHeadCommit() catch {
+    const head = repo.getHeadCommit(io) catch {
         std.debug.print("No commits yet. Make a commit first.\n", .{});
         return;
     };
@@ -104,7 +105,7 @@ pub fn captureRun(
 
     const cmd_path = try std.fs.path.join(allocator, &.{ dir, commit_hash });
     defer allocator.free(cmd_path);
-    const f = try std.fs.cwd().createFile(cmd_path, .{});
+    const f = try std.Io.Dir.cwd().createFile(cmd_path, .{});
     defer f.close();
 
     const content = try std.fmt.allocPrint(allocator, "run={s}\ncommit={s}\n", .{ run_command, commit_hash });
@@ -113,19 +114,19 @@ pub fn captureRun(
 
     const rc_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "run_command" });
     defer allocator.free(rc_path);
-    const rcf = try std.fs.cwd().createFile(rc_path, .{});
+    const rcf = try std.Io.Dir.cwd().createFile(rc_path, .{});
     defer rcf.close();
     try rcf.writeAll(run_command);
 
     if (env_file) |ef| {
         const env_dst = try std.fs.path.join(allocator, &.{ dir, "environment.txt" });
         defer allocator.free(env_dst);
-        const env_content = std.fs.cwd().readFileAlloc(ef, allocator, @enumFromInt(1024 * 1024)) catch |err| {
+        const env_content = std.Io.Dir.cwd().readFileAlloc(io, ef, allocator, .limited(1024 * 1024)) catch |err| {
             std.debug.print("Warning: could not read env file: {}\n", .{err});
             return;
         };
         defer allocator.free(env_content);
-        const edf = try std.fs.cwd().createFile(env_dst, .{});
+        const edf = try std.Io.Dir.cwd().createFile(env_dst, .{});
         defer edf.close();
         try edf.writeAll(env_content);
         std.debug.print("   Environment captured from: {s}\n", .{ef});
@@ -150,7 +151,7 @@ fn captureAutoEnv(allocator: std.mem.Allocator, capture_dir: []const u8) !void {
         if (n > 0) {
             const env_path = try std.fs.path.join(allocator, &.{ capture_dir, "pip_freeze.txt" });
             defer allocator.free(env_path);
-            const ef = try std.fs.cwd().createFile(env_path, .{});
+            const ef = try std.Io.Dir.cwd().createFile(env_path, .{});
             defer ef.close();
             try ef.writeAll(buf[0..n]);
             std.debug.print("   Python env captured (pip freeze → .zev/capture/pip_freeze.txt)\n", .{});
@@ -168,7 +169,7 @@ fn captureAutoEnv(allocator: std.mem.Allocator, capture_dir: []const u8) !void {
         if (n > 0) {
             const env_path = try std.fs.path.join(allocator, &.{ capture_dir, "conda_env.yml" });
             defer allocator.free(env_path);
-            const ef = try std.fs.cwd().createFile(env_path, .{});
+            const ef = try std.Io.Dir.cwd().createFile(env_path, .{});
             defer ef.close();
             try ef.writeAll(buf[0..n]);
             std.debug.print("   Conda env captured → .zev/capture/conda_env.yml\n", .{});
@@ -179,14 +180,14 @@ fn captureAutoEnv(allocator: std.mem.Allocator, capture_dir: []const u8) !void {
     std.debug.print("   (No Python/Conda env detected — install manually if needed)\n", .{});
 }
 
-fn loadRunCommand(allocator: std.mem.Allocator, repo: *Repository, commit_hash: []const u8) !?[]u8 {
+fn loadRunCommand(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, commit_hash: []const u8) !?[]u8 {
     const dir = try captureDir(allocator, repo);
     defer allocator.free(dir);
 
     const cmd_path = try std.fs.path.join(allocator, &.{ dir, commit_hash });
     defer allocator.free(cmd_path);
 
-    const content = std.fs.cwd().readFileAlloc(cmd_path, allocator, @enumFromInt(4096)) catch null;
+    const content = std.Io.Dir.cwd().readFileAlloc(io, cmd_path, allocator, .limited(4096)) catch null;
     if (content) |c| {
         defer allocator.free(c);
         var iter = std.mem.splitSequence(u8, c, "\n");
@@ -198,14 +199,14 @@ fn loadRunCommand(allocator: std.mem.Allocator, repo: *Repository, commit_hash: 
 
     const rc_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "run_command" });
     defer allocator.free(rc_path);
-    return std.fs.cwd().readFileAlloc(rc_path, allocator, @enumFromInt(4096)) catch null;
+    return std.Io.Dir.cwd().readFileAlloc(io, rc_path, allocator, .limited(4096)) catch null;
 }
 
-fn loadMetricsForHash(allocator: std.mem.Allocator, repo: *Repository, hash: []const u8) !std.StringHashMap(f64) {
+fn loadMetricsForHash(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, hash: []const u8) !std.StringHashMap(f64) {
     var map = std.StringHashMap(f64).init(allocator);
     const path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "metrics", hash });
     defer allocator.free(path);
-    const content = std.fs.cwd().readFileAlloc(path, allocator, @enumFromInt(64 * 1024)) catch return map;
+    const content = std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(64 * 1024)) catch return map;
     defer allocator.free(content);
     var iter = std.mem.splitSequence(u8, content, "\n");
     while (iter.next()) |line| {
@@ -223,17 +224,17 @@ fn loadMetricsForHash(allocator: std.mem.Allocator, repo: *Repository, hash: []c
     return map;
 }
 
-fn loadMetricsFromSnapshot(allocator: std.mem.Allocator, repo: *Repository, name: []const u8) !?struct { metrics: std.StringHashMap(f64), commit: []u8 } {
+fn loadMetricsFromSnapshot(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, name: []const u8) !?struct { metrics: std.StringHashMap(f64), commit: []u8 } {
     const dir_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "snapshots" });
     defer allocator.free(dir_path);
-    var dir = std.fs.cwd().openDir(dir_path, .{ .iterate = true }) catch return null;
+    var dir = std.Io.Dir.cwd().openDir(dir_path, .{ .iterate = true }) catch return null;
     defer dir.close();
     var it = dir.iterate();
     while (try it.next()) |entry| {
         if (entry.kind != .file or std.mem.endsWith(u8, entry.name, ".name")) continue;
         const path = try std.fs.path.join(allocator, &.{ dir_path, entry.name });
         defer allocator.free(path);
-        const content = std.fs.cwd().readFileAlloc(path, allocator, @enumFromInt(64 * 1024)) catch continue;
+        const content = std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(64 * 1024)) catch continue;
         defer allocator.free(content);
         var snap_name: []u8 = try allocator.dupe(u8, "");
         var metrics_raw: []u8 = try allocator.dupe(u8, "");
@@ -281,6 +282,7 @@ fn freeMetricsMap(allocator: std.mem.Allocator, map: *std.StringHashMap(f64)) vo
 
 fn checkoutCommit(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     commit_hash: []const u8,
     target_dir: []const u8,
@@ -295,26 +297,26 @@ fn checkoutCommit(
     }
     const commit_cid = cid_mod.CID{ .hash = hash };
 
-    const commit_data = try repo.store.get(commit_cid);
+    const commit_data = try repo.store.get(io, commit_cid);
     defer allocator.free(commit_data);
     const c = try commit_mod.Commit.deserialize(allocator, commit_data);
     defer allocator.free(c.author);
     defer allocator.free(c.message);
 
-    const tree_data = try repo.store.get(c.tree_cid);
+    const tree_data = try repo.store.get(io, c.tree_cid);
     defer allocator.free(tree_data);
     var t = try tree_mod.Tree.deserialize(allocator, tree_data);
     defer t.deinit();
 
     var count: usize = 0;
     for (t.entries.items) |entry| {
-        const blob_data = repo.store.get(entry.cid) catch continue;
+        const blob_data = repo.store.get(io, entry.cid) catch continue;
         defer allocator.free(blob_data);
 
         const file_path = try std.fs.path.join(allocator, &.{ target_dir, entry.name });
         defer allocator.free(file_path);
 
-        const f = try std.fs.cwd().createFile(file_path, .{});
+        const f = try std.Io.Dir.cwd().createFile(file_path, .{});
         defer f.close();
         try f.writeAll(blob_data);
         count += 1;
@@ -397,6 +399,7 @@ fn isMetricName(s: []const u8) bool {
 
 fn doReproduce(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     subject_type: []const u8,
     subject_id: []const u8,
@@ -421,7 +424,7 @@ fn doReproduce(
 
     const work_dir = try std.fmt.allocPrint(allocator, "/tmp/zev-repro-{s}", .{commit_hash[0..8]});
     defer allocator.free(work_dir);
-    try std.fs.cwd().makePath(work_dir);
+    try std.Io.Dir.cwd().makePath(work_dir);
     defer std.fs.deleteTreeAbsolute(work_dir) catch {};
 
     std.debug.print("   📁 Workspace: {s}\n", .{work_dir});
@@ -442,7 +445,7 @@ fn doReproduce(
         std.debug.print("   zev reproduce {s} --cmd \"python train.py\"\n", .{subject_id});
 
         std.debug.print("\n   Files checked out to {s}:\n", .{work_dir});
-        var wd = std.fs.cwd().openDir(work_dir, .{ .iterate = true }) catch return;
+        var wd = std.Io.Dir.cwd().openDir(work_dir, .{ .iterate = true }) catch return;
         defer wd.close();
         var wdit = wd.iterate();
         while (try wdit.next()) |e| {
@@ -468,7 +471,7 @@ fn doReproduce(
     std.debug.print("\n   ⏱️  Running...\n", .{});
     const start_inst = std.time.Instant.now() catch unreachable;
 
-    var argv: std.ArrayList([]const u8) = .{};
+    var argv: std.ArrayList([]const u8) = .empty;
     defer argv.deinit(allocator);
     {
         var ci: usize = 0;
@@ -494,7 +497,7 @@ fn doReproduce(
     {
         const cap_dir_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "capture" });
         defer allocator.free(cap_dir_path);
-        var repo_dir = std.fs.cwd().openDir(repo.path, .{ .iterate = true }) catch unreachable;
+        var repo_dir = std.Io.Dir.cwd().openDir(repo.path, .{ .iterate = true }) catch unreachable;
         defer repo_dir.close();
         var rdit = repo_dir.iterate();
         while (try rdit.next()) |entry| {
@@ -504,10 +507,10 @@ fn doReproduce(
             defer allocator.free(src);
             const dst = try std.fs.path.join(allocator, &.{ work_dir, entry.name });
             defer allocator.free(dst);
-            std.fs.cwd().access(dst, .{}) catch {
-                const data = std.fs.cwd().readFileAlloc(src, allocator, @enumFromInt(1024 * 1024)) catch continue;
+            std.Io.Dir.cwd().access(dst, .{}) catch {
+                const data = std.Io.Dir.cwd().readFileAlloc(io, src, allocator, .limited(1024 * 1024)) catch continue;
                 defer allocator.free(data);
-                const wf = std.fs.cwd().createFile(dst, .{}) catch continue;
+                const wf = std.Io.Dir.cwd().createFile(dst, .{}) catch continue;
                 defer wf.close();
                 wf.writeAll(data) catch continue;
             };
@@ -542,7 +545,7 @@ fn doReproduce(
 
     const metrics_out_path = try std.fs.path.join(allocator, &.{ work_dir, "metrics.txt" });
     defer allocator.free(metrics_out_path);
-    if (std.fs.cwd().readFileAlloc(metrics_out_path, allocator, @enumFromInt(64 * 1024))) |mf| {
+    if (std.Io.Dir.cwd().readFileAlloc(io, metrics_out_path, allocator, .limited(64 * 1024))) |mf| {
         defer allocator.free(mf);
         var mi = std.mem.splitSequence(u8, mf, "\n");
         while (mi.next()) |line| {
@@ -558,9 +561,14 @@ fn doReproduce(
 
     std.debug.print("   📊 Metric Comparison (tolerance: ±{d}):\n\n", .{tolerance});
     std.debug.print("   {s:<22} {s:<14} {s:<14} {s}\n", .{ "Metric", "Original", "Reproduced", "Match" });
-    std.debug.print("   {s}\n", .{"─" ** 60});
+    const divider60 = comptime blk: {
+        var s: []const u8 = "";
+        for (0..60) |_| s = s ++ "─";
+        break :blk s;
+    };
+    std.debug.print("   {s}\n", .{divider60});
 
-    var matches: std.ArrayList(MetricMatch) = .{};
+    var matches: std.ArrayList(MetricMatch) = .empty;
     defer {
         for (matches.items) |m| allocator.free(m.key);
         matches.deinit(allocator);
@@ -703,18 +711,18 @@ pub fn reproduceCommit(
     try doReproduce(allocator, repo, "commit", commit_hash[0..8], commit_hash, &metrics, tolerance, run_cmd, dry_run);
 }
 
-pub fn reproduceStatus(allocator: std.mem.Allocator, repo: *Repository, limit: usize) !void {
+pub fn reproduceStatus(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, limit: usize) !void {
     const dir = try reproduceDir(allocator, repo);
     defer allocator.free(dir);
 
-    var d = std.fs.cwd().openDir(dir, .{ .iterate = true }) catch {
+    var d = std.Io.Dir.cwd().openDir(dir, .{ .iterate = true }) catch {
         std.debug.print("No reproduction records yet.\n", .{});
         std.debug.print("Run: zev reproduce <snapshot-name>\n", .{});
         return;
     };
     defer d.close();
 
-    var entries: std.ArrayList([]u8) = .{};
+    var entries: std.ArrayList([]u8) = .empty;
     defer {
         for (entries.items) |e| allocator.free(e);
         entries.deinit(allocator);
@@ -737,7 +745,7 @@ pub fn reproduceStatus(allocator: std.mem.Allocator, repo: *Repository, limit: u
         if (shown >= limit) break;
         const path = try std.fs.path.join(allocator, &.{ dir, name });
         defer allocator.free(path);
-        const content = std.fs.cwd().readFileAlloc(path, allocator, @enumFromInt(64 * 1024)) catch continue;
+        const content = std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(64 * 1024)) catch continue;
         defer allocator.free(content);
 
         var subject_id: []u8 = try allocator.dupe(u8, "");

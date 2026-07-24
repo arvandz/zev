@@ -352,7 +352,7 @@ fn parseHeadQuery(
         head_cid = try walkBackCommits(allocator, repo, head_cid, steps_back);
     }
 
-    var path_parts: std.ArrayList([]const u8) = .{};
+    var path_parts: std.ArrayList([]const u8) = .empty;
     defer path_parts.deinit(allocator);
 
     if (rest.len > 0 and rest[0] == '/') {
@@ -380,7 +380,7 @@ fn parseCIDQuery(allocator: std.mem.Allocator, query: []const u8) !ParsedQuery {
 
     const c = ipld.CID.fromHex(cid_str) catch return error.InvalidCID;
 
-    var path_parts: std.ArrayList([]const u8) = .{};
+    var path_parts: std.ArrayList([]const u8) = .empty;
     defer path_parts.deinit(allocator);
     var pit = std.mem.splitSequence(u8, path_str, "/");
     while (pit.next()) |part| {
@@ -445,6 +445,7 @@ fn parseCondition(expr: []const u8) !Selector.Condition {
 
 fn walkBackCommits(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     start: ipld.CID,
     steps: usize,
@@ -452,7 +453,7 @@ fn walkBackCommits(
     _ = start;
     const head_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "HEAD" });
     defer allocator.free(head_path);
-    const head_content = std.fs.cwd().readFileAlloc(head_path, allocator, @enumFromInt(256)) catch return error.NoCommits;
+    const head_content = std.Io.Dir.cwd().readFileAlloc(io, head_path, allocator, .limited(256)) catch return error.NoCommits;
     defer allocator.free(head_content);
 
     var current_hash = blk: {
@@ -460,7 +461,7 @@ fn walkBackCommits(
             const ref = std.mem.trim(u8, head_content[5..], "\n\r ");
             const ref_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", ref });
             defer allocator.free(ref_path);
-            const ref_content = std.fs.cwd().readFileAlloc(ref_path, allocator, @enumFromInt(256)) catch return error.NoCommits;
+            const ref_content = std.Io.Dir.cwd().readFileAlloc(io, ref_path, allocator, .limited(256)) catch return error.NoCommits;
             defer allocator.free(ref_content);
             break :blk try allocator.dupe(u8, std.mem.trim(u8, ref_content, "\n\r "));
         }
@@ -472,7 +473,7 @@ fn walkBackCommits(
     while (step < steps) : (step += 1) {
         const commit_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "commits", current_hash });
         defer allocator.free(commit_path);
-        const commit_data = std.fs.cwd().readFileAlloc(commit_path, allocator, @enumFromInt(64 * 1024)) catch break;
+        const commit_data = std.Io.Dir.cwd().readFileAlloc(io, commit_path, allocator, .limited(64 * 1024)) catch break;
         defer allocator.free(commit_data);
 
         var found_parent = false;
@@ -635,7 +636,7 @@ fn scanAllBlocks(
 ) !void {
     const ipld_path = store.base_path;
 
-    var root_dir = std.fs.cwd().openDir(ipld_path, .{ .iterate = true }) catch return;
+    var root_dir = std.Io.Dir.cwd().openDir(ipld_path, .{ .iterate = true }) catch return;
     defer root_dir.close();
 
     var root_it = root_dir.iterate();
@@ -643,7 +644,7 @@ fn scanAllBlocks(
         if (shard_entry.kind != .directory) continue;
         const shard_path = try std.fs.path.join(allocator, &.{ ipld_path, shard_entry.name });
         defer allocator.free(shard_path);
-        var shard_dir = std.fs.cwd().openDir(shard_path, .{ .iterate = true }) catch continue;
+        var shard_dir = std.Io.Dir.cwd().openDir(shard_path, .{ .iterate = true }) catch continue;
         defer shard_dir.close();
         var shard_it = shard_dir.iterate();
         while (try shard_it.next()) |block_entry| {

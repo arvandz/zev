@@ -60,15 +60,14 @@ pub const RepositoryWithStorage = struct {
         return try self.storage.storeObject(data);
     }
 
-    pub fn getCommit(self: *RepositoryWithStorage, commit_cid: []const u8) !Commit {
-        const commit_data = try self.storage.getObject(commit_cid);
+    pub fn getCommit(self: *RepositoryWithStorage, io: std.Io, commit_cid: []const u8) !Commit {
+        const commit_data = try self.storage.getObject(io, commit_cid);
         defer self.repo.allocator.free(commit_data);
-
         return try parseCommit(self.repo.allocator, commit_data);
     }
 
-    pub fn getBlob(self: *RepositoryWithStorage, blob_cid: []const u8) ![]u8 {
-        return try self.storage.getObject(blob_cid);
+    pub fn getBlob(self: *RepositoryWithStorage, io: std.Io, blob_cid: []const u8) ![]u8 {
+        return try self.storage.getObject(io, blob_cid);
     }
 };
 

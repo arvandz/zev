@@ -12,10 +12,10 @@ pub const DiffLine = struct {
 };
 
 pub fn diffFiles(allocator: std.mem.Allocator, old_content: []const u8, new_content: []const u8) !void {
-    var old_lines: std.ArrayList([]const u8) = .{};
+    var old_lines: std.ArrayList([]const u8) = .empty;
     defer old_lines.deinit(allocator);
 
-    var new_lines: std.ArrayList([]const u8) = .{};
+    var new_lines: std.ArrayList([]const u8) = .empty;
     defer new_lines.deinit(allocator);
 
     var old_iter = std.mem.splitSequence(u8, old_content, "\n");
@@ -49,14 +49,14 @@ pub fn diffFiles(allocator: std.mem.Allocator, old_content: []const u8, new_cont
     }
 }
 
-pub fn diffWorkingToStaging(allocator: std.mem.Allocator, repo: *repository.Repository, filename: []const u8) !void {
-    const working_content = try std.fs.cwd().readFileAlloc(filename, allocator, @enumFromInt(10 * 1024 * 1024));
+pub fn diffWorkingToStaging(allocator: std.mem.Allocator, io: std.Io, repo: *repository.Repository, filename: []const u8) !void {
+    const working_content = try std.Io.Dir.cwd().readFileAlloc(io, filename, allocator, .limited(10 * 1024 * 1024));
     defer allocator.free(working_content);
 
     const staged_entry = repo.index.getEntry(filename);
 
     if (staged_entry) |entry| {
-        const staged_content = try repo.store.get(entry.cid);
+        const staged_content = try repo.store.get(io, entry.cid);
         defer allocator.free(staged_content);
 
         std.debug.print("diff --zev a/{s} b/{s}\n", .{ filename, filename });
@@ -69,25 +69,25 @@ pub fn diffWorkingToStaging(allocator: std.mem.Allocator, repo: *repository.Repo
     }
 }
 
-pub fn diffCommits(allocator: std.mem.Allocator, repo: *repository.Repository, commit1_cid: cid.CID, commit2_cid: cid.CID) !void {
-    const commit1_data = try repo.store.get(commit1_cid);
+pub fn diffCommits(allocator: std.mem.Allocator, io: std.Io, repo: *repository.Repository, commit1_cid: cid.CID, commit2_cid: cid.CID) !void {
+    const commit1_data = try repo.store.get(io, commit1_cid);
     defer allocator.free(commit1_data);
     const commit1_obj = try commit.Commit.deserialize(allocator, commit1_data);
     defer allocator.free(commit1_obj.author);
     defer allocator.free(commit1_obj.message);
 
-    const commit2_data = try repo.store.get(commit2_cid);
+    const commit2_data = try repo.store.get(io, commit2_cid);
     defer allocator.free(commit2_data);
     const commit2_obj = try commit.Commit.deserialize(allocator, commit2_data);
     defer allocator.free(commit2_obj.author);
     defer allocator.free(commit2_obj.message);
 
-    const tree1_data = try repo.store.get(commit1_obj.tree_cid);
+    const tree1_data = try repo.store.get(io, commit1_obj.tree_cid);
     defer allocator.free(tree1_data);
     var tree1_obj = try tree.Tree.deserialize(allocator, tree1_data);
     defer tree1_obj.deinit();
 
-    const tree2_data = try repo.store.get(commit2_obj.tree_cid);
+    const tree2_data = try repo.store.get(io, commit2_obj.tree_cid);
     defer allocator.free(tree2_data);
     var tree2_obj = try tree.Tree.deserialize(allocator, tree2_data);
     defer tree2_obj.deinit();
@@ -111,9 +111,9 @@ pub fn diffCommits(allocator: std.mem.Allocator, repo: *repository.Repository, c
             if (!entry1.cid.equals(entry2.cid)) {
                 std.debug.print("\nModified: {s}\n", .{entry2.name});
 
-                const content1 = try repo.store.get(entry1.cid);
+                const content1 = try repo.store.get(io, entry1.cid);
                 defer allocator.free(content1);
-                const content2 = try repo.store.get(entry2.cid);
+                const content2 = try repo.store.get(io, entry2.cid);
                 defer allocator.free(content2);
 
                 std.debug.print("--- a/{s}\n", .{entry2.name});
@@ -122,7 +122,7 @@ pub fn diffCommits(allocator: std.mem.Allocator, repo: *repository.Repository, c
             }
         } else {
             std.debug.print("\nNew file: {s}\n", .{entry2.name});
-            const content = try repo.store.get(entry2.cid);
+            const content = try repo.store.get(io, entry2.cid);
             defer allocator.free(content);
 
             std.debug.print("+++ b/{s}\n", .{entry2.name});
@@ -141,7 +141,7 @@ pub fn diffCommits(allocator: std.mem.Allocator, repo: *repository.Repository, c
 
         if (!found) {
             std.debug.print("\nDeleted: {s}\n", .{entry1.name});
-            const content = try repo.store.get(entry1.cid);
+            const content = try repo.store.get(io, entry1.cid);
             defer allocator.free(content);
 
             std.debug.print("--- a/{s}\n", .{entry1.name});
@@ -150,25 +150,25 @@ pub fn diffCommits(allocator: std.mem.Allocator, repo: *repository.Repository, c
     }
 }
 
-pub fn diffUnstaged(allocator: std.mem.Allocator, repo: *repository.Repository) !void {
+pub fn diffUnstaged(allocator: std.mem.Allocator, io: std.Io, repo: *repository.Repository) !void {
     const head_cid = repo.getHeadCommit() catch {
         std.debug.print("No commits yet\n", .{});
         return;
     };
 
-    const commit_data = try repo.store.get(head_cid);
+    const commit_data = try repo.store.get(io, head_cid);
     defer allocator.free(commit_data);
     const commit_obj = try commit.Commit.deserialize(allocator, commit_data);
     defer allocator.free(commit_obj.author);
     defer allocator.free(commit_obj.message);
 
-    const tree_data = try repo.store.get(commit_obj.tree_cid);
+    const tree_data = try repo.store.get(io, commit_obj.tree_cid);
     defer allocator.free(tree_data);
     var tree_obj = try tree.Tree.deserialize(allocator, tree_data);
     defer tree_obj.deinit();
 
     for (tree_obj.entries.items) |entry| {
-        const working_content = std.fs.cwd().readFileAlloc(entry.name, allocator, @enumFromInt(10 * 1024 * 1024)) catch continue;
+        const working_content = std.Io.Dir.cwd().readFileAlloc(io, entry.name, allocator, .limited(10 * 1024 * 1024)) catch continue;
         defer allocator.free(working_content);
 
         const working_cid = cid.CID.fromBytes(working_content);
@@ -176,7 +176,7 @@ pub fn diffUnstaged(allocator: std.mem.Allocator, repo: *repository.Repository) 
         if (!working_cid.equals(entry.cid)) {
             std.debug.print("\nModified: {s}\n", .{entry.name});
 
-            const head_content = try repo.store.get(entry.cid);
+            const head_content = try repo.store.get(io, entry.cid);
             defer allocator.free(head_content);
 
             std.debug.print("--- a/{s}\n", .{entry.name});
@@ -186,7 +186,7 @@ pub fn diffUnstaged(allocator: std.mem.Allocator, repo: *repository.Repository) 
     }
 }
 
-pub fn diffStaged(allocator: std.mem.Allocator, repo: *repository.Repository) !void {
+pub fn diffStaged(allocator: std.mem.Allocator, io: std.Io, repo: *repository.Repository) !void {
     if (repo.index.entries.items.len == 0) {
         std.debug.print("No staged changes\n", .{});
         return;
@@ -195,7 +195,7 @@ pub fn diffStaged(allocator: std.mem.Allocator, repo: *repository.Repository) !v
     const head_cid = repo.getHeadCommit() catch {
         for (repo.index.entries.items) |entry| {
             std.debug.print("\nNew file: {s}\n", .{entry.path});
-            const content = try repo.store.get(entry.cid);
+            const content = try repo.store.get(io, entry.cid);
             defer allocator.free(content);
 
             std.debug.print("+++ b/{s}\n", .{entry.path});
@@ -204,13 +204,13 @@ pub fn diffStaged(allocator: std.mem.Allocator, repo: *repository.Repository) !v
         return;
     };
 
-    const commit_data = try repo.store.get(head_cid);
+    const commit_data = try repo.store.get(io, head_cid);
     defer allocator.free(commit_data);
     const commit_obj = try commit.Commit.deserialize(allocator, commit_data);
     defer allocator.free(commit_obj.author);
     defer allocator.free(commit_obj.message);
 
-    const tree_data = try repo.store.get(commit_obj.tree_cid);
+    const tree_data = try repo.store.get(io, commit_obj.tree_cid);
     defer allocator.free(tree_data);
     var tree_obj = try tree.Tree.deserialize(allocator, tree_data);
     defer tree_obj.deinit();
@@ -227,9 +227,9 @@ pub fn diffStaged(allocator: std.mem.Allocator, repo: *repository.Repository) !v
             if (!staged.cid.equals(head_entry.cid)) {
                 std.debug.print("\nModified: {s}\n", .{staged.path});
 
-                const head_content = try repo.store.get(head_entry.cid);
+                const head_content = try repo.store.get(io, head_entry.cid);
                 defer allocator.free(head_content);
-                const staged_content = try repo.store.get(staged.cid);
+                const staged_content = try repo.store.get(io, staged.cid);
                 defer allocator.free(staged_content);
 
                 std.debug.print("--- a/{s}\n", .{staged.path});
@@ -238,7 +238,7 @@ pub fn diffStaged(allocator: std.mem.Allocator, repo: *repository.Repository) !v
             }
         } else {
             std.debug.print("\nNew file: {s}\n", .{staged.path});
-            const content = try repo.store.get(staged.cid);
+            const content = try repo.store.get(io, staged.cid);
             defer allocator.free(content);
 
             std.debug.print("+++ b/{s}\n", .{staged.path});
