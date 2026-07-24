@@ -152,6 +152,7 @@ pub fn readCar(allocator: std.mem.Allocator, io: std.Io, path: []const u8) !CarR
 
 pub fn dagExport(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     root_spec: []const u8,
     output_path: []const u8,
@@ -286,6 +287,7 @@ fn followLinks(
 
 pub fn dagImport(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     car_path: []const u8,
 ) !void {

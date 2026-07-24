@@ -351,6 +351,7 @@ fn submitArweave(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, pa
 
 fn notarizeLocal(
     allocator: std.mem.Allocator,
+    io: std.Io,
     payload: []const u8,
     timestamp: i64,
 ) !NotarizeResult {
@@ -473,7 +474,7 @@ pub fn notarizeSnapshot(
                     std.debug.print("   zev notarize config --key YOUR_PRIVATE_KEY --from 0xYOUR_ADDRESS\n", .{});
                     std.debug.print("   Falling back to local notarization...\n\n", .{});
                 }
-                break :blk try notarizeLocal(allocator, payload, now);
+                break :blk try notarizeLocal(allocator, io, payload, now);
             };
         } else if (std.mem.eql(u8, chain, "arweave")) {
             break :blk submitArweave(allocator, repo, payload) catch |err| {
@@ -483,10 +484,10 @@ pub fn notarizeSnapshot(
                     std.debug.print("   Configure: zev notarize config --chain arweave --keyfile /path/to/wallet.json\n", .{});
                     std.debug.print("   Falling back to local notarization...\n\n", .{});
                 }
-                break :blk try notarizeLocal(allocator, payload, now);
+                break :blk try notarizeLocal(allocator, io, payload, now);
             };
         } else {
-            break :blk try notarizeLocal(allocator, payload, now);
+            break :blk try notarizeLocal(allocator, io, payload, now);
         }
     };
     defer allocator.free(result.tx_hash);
@@ -582,7 +583,7 @@ pub fn notarizeCommit(
         return;
     }
 
-    const result = try notarizeLocal(allocator, payload, now);
+    const result = try notarizeLocal(allocator, io, payload, now);
     defer allocator.free(result.tx_hash);
     defer allocator.free(result.block);
 

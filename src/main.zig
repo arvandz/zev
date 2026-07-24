@@ -240,7 +240,7 @@ pub fn main(init: std.process.Init) !void {
         }
 
         try repo.index.addEntry(filename, content_id, file_data.len, @intCast(file_stat.permissions.toMode()));
-        try repo.index.write();
+        try repo.index.write(io);
 
         std.debug.print("Added '{s}' to staging area\n", .{filename});
     } else if (std.mem.eql(u8, command, "commit")) {
@@ -1092,13 +1092,13 @@ pub fn main(init: std.process.Init) !void {
                     to_ipfs = true;
                 }
             }
-            try car_mod.dagExport(allocator, &repo, args[3], output, depth, to_ipfs);
+            try car_mod.dagExport(allocator, io, &repo, args[3], output, depth, to_ipfs);
         } else if (std.mem.eql(u8, sub, "import")) {
             if (args.len < 4) {
                 std.debug.print("Usage: zev dag import <file.car>\n", .{});
                 return;
             }
-            try car_mod.dagImport(allocator, &repo, args[3]);
+            try car_mod.dagImport(allocator, io, &repo, args[3]);
         } else if (std.mem.eql(u8, sub, "query")) {
             if (args.len < 4) {
                 std.debug.print("Usage: zev dag query <query> [--format text|json|cids]\n\n", .{});
@@ -1180,7 +1180,7 @@ pub fn main(init: std.process.Init) !void {
                     fetch = true;
                 }
             }
-            try dag_mod.graftAdd(allocator, &repo, sub, alias, desc, fetch);
+            try dag_mod.graftAdd(allocator, io, &repo, sub, alias, desc, fetch);
         }
     } else if (std.mem.eql(u8, command, "dataset")) {
         if (!repository.Repository.exists(allocator, io, ".")) {
@@ -1386,13 +1386,13 @@ pub fn main(init: std.process.Init) !void {
                     to_ipfs = true;
                 }
             }
-            try car_mod.dagExport(allocator, &repo, args[3], output, depth, to_ipfs);
+            try car_mod.dagExport(allocator, io, &repo, args[3], output, depth, to_ipfs);
         } else if (std.mem.eql(u8, sub, "import")) {
             if (args.len < 4) {
                 std.debug.print("Usage: zev dag import <file.car>\n", .{});
                 return;
             }
-            try car_mod.dagImport(allocator, &repo, args[3]);
+            try car_mod.dagImport(allocator, io, &repo, args[3]);
         } else if (std.mem.eql(u8, sub, "query")) {
             var model_filter: ?[]const u8 = null;
             var kind_filter: ?[]const u8 = null;

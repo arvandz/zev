@@ -224,6 +224,7 @@ pub fn dagStat(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) !voi
 
 pub fn graftAdd(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     cid_str: []const u8,
     alias: []const u8,
@@ -266,7 +267,7 @@ pub fn graftAdd(
     const graft_val = try graft.toValue(aa);
     const graft_cid = try store.putNode(aa, graft_val);
 
-    try saveGraftAlias(allocator, repo, alias, cid_str, graft_cid);
+    try saveGraftAlias(allocator, io, repo, alias, cid_str, graft_cid);
 
     const short_target = try c.toShort(allocator);
     defer allocator.free(short_target);
@@ -480,6 +481,7 @@ fn loadConfigField(allocator: std.mem.Allocator, io: std.Io, config_path: []cons
 
 fn saveGraftAlias(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     alias: []const u8,
     target_cid: []const u8,
