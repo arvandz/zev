@@ -67,7 +67,7 @@ pub fn main(init: std.process.Init) !void {
             use_ipfs = true;
         }
 
-        var repo = try repository.Repository.init(allocator, io, io, io, io, path, use_ipfs);
+        var repo = try repository.Repository.init(allocator, io, path, use_ipfs);
 
         defer repo.deinit();
 

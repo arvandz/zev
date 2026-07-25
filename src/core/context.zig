@@ -198,8 +198,7 @@ fn getHeadHash(allocator: std.mem.Allocator, repo: *Repository) ![]u8 {
     return try head.toString(allocator);
 }
 
-fn makeRecordId(allocator: std.mem.Allocator,
-    io: std.Io, file_path: []const u8, ts: i64) ![]u8 {
+fn makeRecordId(allocator: std.mem.Allocator, file_path: []const u8, ts: i64) ![]u8 {
     const raw = try std.fmt.allocPrint(allocator, "ctx:{s}:{d}", .{ file_path, ts });
     defer allocator.free(raw);
     const c = cid_mod.CID.fromBytes(raw);
@@ -279,7 +278,8 @@ pub fn contextAdd(
     const commit_hash = try getHeadHash(allocator, repo);
     defer allocator.free(commit_hash);
 
-    const record_id = try makeRecordId(allocator, io, file_path, now);
+    const record_id = try     const record_id = try makeRecordId(allocator, file_path, now);
+allocator, io, file_path, now);
     defer allocator.free(record_id);
 
     const author_kind = parseKind(kind_str);
