@@ -1860,7 +1860,7 @@ pub fn main(init: std.process.Init) !void {
         } else if (std.mem.eql(u8, sub, "experiments")) {
             try compare_mod.compareExperiments(allocator, &repo, args[3], args[4]);
         } else if (std.mem.eql(u8, sub, "snapshots")) {
-            try compare_mod.compareSnapshots(allocator, io, &repo, args[3], args[4]);
+            try compare_mod.compareSnapshots(allocator, &repo, args[3], args[4]);
         } else if (std.mem.eql(u8, sub, "branches")) {
             try compare_mod.compareBranches(allocator, &repo, args[3], args[4]);
         } else {

@@ -372,8 +372,7 @@ fn findSnapshotById(allocator: std.mem.Allocator, repo: *Repository, name: []con
     return null;
 }
 
-pub fn compareSnapshots(allocator: std.mem.Allocator,
-    io: std.Io, repo: *Repository, name_a: []const u8, name_b: []const u8) !void {
+pub fn compareSnapshots(allocator: std.mem.Allocator, repo: *Repository, name_a: []const u8, name_b: []const u8) !void {
     var snap_a = (try findSnapshotById(allocator, repo, name_a)) orelse {
         std.debug.print("Error: Snapshot '{s}' not found\n", .{name_a});
         return;
