@@ -1357,7 +1357,7 @@ pub fn main(init: std.process.Init) !void {
         } else if (std.mem.eql(u8, sub, "blame")) {
             try context_mod.contextBlame(allocator, &repo);
         } else if (std.mem.eql(u8, sub, "stats")) {
-            try context_mod.contextStats(allocator, io, &repo);
+            try context_mod.contextStats(allocator, &repo);
         } else if (std.mem.eql(u8, sub, "list")) {
             try context_mod.contextList(allocator, &repo);
         } else if (std.mem.eql(u8, sub, "auto")) {

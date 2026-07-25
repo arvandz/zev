@@ -467,7 +467,6 @@ pub fn contextBlame(
 
 pub fn contextStats(
     allocator: std.mem.Allocator,
-    io: std.Io,
     repo: *Repository,
 ) !void {
     const dir_path = try contextDir(allocator, repo);
