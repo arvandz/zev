@@ -43,7 +43,6 @@ fn collectCommits(
 
 fn findCommonAncestor(
     allocator: std.mem.Allocator,
-    io: std.Io,
     store: *blob_mod.BlobStore,
     a: cid_mod.CID,
     b: cid_mod.CID,
@@ -166,7 +165,7 @@ pub fn rebase(
         return .nothing_to_rebase;
     }
 
-    const ancestor = try findCommonAncestor(allocator, io, &repo.store, current_head, onto_head);
+    const ancestor = try findCommonAncestor(allocator, &repo.store, current_head, onto_head);
     if (ancestor == null) {
         std.debug.print("Error: No common ancestor found\n", .{});
         return .nothing_to_rebase;
@@ -174,7 +173,7 @@ pub fn rebase(
 
     std.debug.print("🔀 Rebasing onto {s}...\n", .{onto_branch});
 
-    var commits_to_replay = try collectCommits(allocator, io, &repo.store, current_head, ancestor.?);
+    var commits_to_replay = try collectCommits(allocator, &repo.store, current_head, ancestor.?);
     defer commits_to_replay.deinit(allocator);
 
     if (commits_to_replay.items.len == 0) {

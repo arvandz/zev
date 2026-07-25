@@ -253,8 +253,7 @@ fn loadExpFields(allocator: std.mem.Allocator, repo: *Repository, name: []const 
     return map;
 }
 
-pub fn compareExperiments(allocator: std.mem.Allocator,
-    io: std.Io, repo: *Repository, name_a: []const u8, name_b: []const u8) !void {
+pub fn compareExperiments(allocator: std.mem.Allocator, repo: *Repository, name_a: []const u8, name_b: []const u8) !void {
     var exp_a = (try loadExpFields(allocator, repo, name_a)) orelse {
         std.debug.print("Error: Experiment '{s}' not found\n", .{name_a});
         return;

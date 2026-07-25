@@ -482,7 +482,6 @@ fn diffText(
 
 pub fn diffTrees(
     allocator: std.mem.Allocator,
-    io: std.Io,
     repo_path: []const u8,
     tree_hash_a: []const u8,
     tree_hash_b: []const u8,
