@@ -329,8 +329,7 @@ pub fn compareExperiments(allocator: std.mem.Allocator, repo: *Repository, name_
     std.debug.print("\n", .{});
 }
 
-fn findSnapshotById(allocator: std.mem.Allocator,
-    io: std.Io, repo: *Repository, name: []const u8) !?std.StringHashMap([]u8) {
+fn findSnapshotById(allocator: std.mem.Allocator, repo: *Repository, name: []const u8) !?std.StringHashMap([]u8) {
     const dir_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "snapshots" });
     defer allocator.free(dir_path);
 
@@ -375,13 +374,13 @@ fn findSnapshotById(allocator: std.mem.Allocator,
 
 pub fn compareSnapshots(allocator: std.mem.Allocator,
     io: std.Io, repo: *Repository, name_a: []const u8, name_b: []const u8) !void {
-    var snap_a = (try findSnapshotById(allocator, io, repo, name_a)) orelse {
+    var snap_a = (try findSnapshotById(allocator, repo, name_a)) orelse {
         std.debug.print("Error: Snapshot '{s}' not found\n", .{name_a});
         return;
     };
     defer freeStrMap(allocator, &snap_a);
 
-    var snap_b = (try findSnapshotById(allocator, io, repo, name_b)) orelse {
+    var snap_b = (try findSnapshotById(allocator, repo, name_b)) orelse {
         std.debug.print("Error: Snapshot '{s}' not found\n", .{name_b});
         return;
     };
