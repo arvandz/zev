@@ -31,8 +31,7 @@ fn snapshotPath(allocator: std.mem.Allocator, repo: *Repository, id: []const u8)
     return try std.fs.path.join(allocator, &.{ dir, id });
 }
 
-fn computeSnapshotId(allocator: std.mem.Allocator,
-    io: std.Io, name: []const u8, commit_hash: []const u8, created_at: i64) ![]u8 {
+fn computeSnapshotId(allocator: std.mem.Allocator, name: []const u8, commit_hash: []const u8, created_at: i64) ![]u8 {
     const fingerprint = try std.fmt.allocPrint(allocator, "snapshot:{s}:{s}:{d}", .{ name, commit_hash, created_at });
     defer allocator.free(fingerprint);
     const content_cid = cid_mod.CID.fromBytes(fingerprint);
@@ -246,7 +245,7 @@ pub fn snapshotCreate(
     defer allocator.free(branch);
 
     const now = @divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s);
-    const snap_id = try computeSnapshotId(allocator, io, name, commit_hash, now);
+    const snap_id = try computeSnapshotId(allocator, name, commit_hash, now);
     defer allocator.free(snap_id);
 
     const existing_id = try resolveSnapshotId(allocator, repo, name);

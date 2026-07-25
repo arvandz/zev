@@ -76,7 +76,6 @@ pub fn cherryPick(
             defer pt.deinit();
             const parent_entry = pt.getEntry(pick_entry.name);
             break :blk if (parent_entry) |pe| !pe.cid.equals(pick_entry.cid) else true;
-io, pick_entry.cid) else true;
         } else true;
 
         if (!changed) continue;

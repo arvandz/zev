@@ -6,10 +6,9 @@ pub const Blob = struct {
     data: []const u8,
     size: usize,
 
-    pub fn init(io: std.Io, data: []const u8) Blob {
+    pub fn init( data: []const u8) Blob {
         return Blob{
             .cid = cid.CID.fromBytes(data),
-io, data),
             .data = data,
             .size = data.len,
         };

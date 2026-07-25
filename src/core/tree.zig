@@ -91,8 +91,7 @@ pub const Tree = struct {
         return buffer.toOwnedSlice(self.allocator);
     }
 
-    pub fn deserialize(allocator: std.mem.Allocator,
-    io: std.Io, data: []const u8) !Tree {
+    pub fn deserialize(allocator: std.mem.Allocator, data: []const u8) !Tree {
         var tree_obj = Tree.init(allocator);
         errdefer tree_obj.deinit();
 

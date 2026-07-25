@@ -182,8 +182,7 @@ fn bisectStep(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, good_
 
     var good_pos: ?usize = null;
     for (history.items, 0..) |c, idx| {
-        if (c.        if (c.equals(good_cid)) {
-io, good_cid)) {
+        if (c.equals(good_cid)) {
             good_pos = idx;
             break;
         }

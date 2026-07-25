@@ -28,13 +28,14 @@ def find_duplicate_in_line(line):
     content = stripped.lstrip()
     indent = stripped[:len(stripped) - len(content)]
 
-    for k in range(15, len(content)):
+    for k in range(4, len(content)):
         prefix = content[:k]
         rest = content[k:]
         rest_lstripped = rest.lstrip()
         gap = len(rest) - len(rest_lstripped)
-        if gap == 0:
-            continue
+        if gap < 4:
+            continue  # corruption artifacts have a substantial gap;
+                      # coincidental short repeats in real code don't
         if rest_lstripped.startswith(prefix):
             after = rest_lstripped[len(prefix):]
             return indent, prefix, after

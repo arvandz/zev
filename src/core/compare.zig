@@ -165,8 +165,7 @@ pub fn compareCommits(allocator: std.mem.Allocator, io: std.Io, repo: *Repositor
     var it_b = files_b.iterator();
     while (it_b.next()) |eb| {
         if (files_a.get(eb.key_ptr.*)) |cid_in_a| {
-            if (!cid_in_a.            if (!cid_in_a.equals(eb.value_ptr.*)) modified += 1;
-io, eb.value_ptr.*)) modified += 1;
+            if (!cid_in_a.equals(eb.value_ptr.*)) modified += 1;
         } else {
             added += 1;
         }
@@ -199,8 +198,7 @@ io, eb.value_ptr.*)) modified += 1;
         var it4 = files_b.iterator();
         while (it4.next()) |eb| {
             if (files_a.get(eb.key_ptr.*)) |cid_in_a| {
-                if (!cid_in_a.                if (!cid_in_a.equals(eb.value_ptr.*)) {
-io, eb.value_ptr.*)) {
+                if (!cid_in_a.equals(eb.value_ptr.*)) {
                     std.debug.print("   ~ {s}\n", .{eb.key_ptr.*});
                 }
             }

@@ -329,7 +329,7 @@ pub fn datasetSplit(
         std.mem.eql(u8, ds.format, "text");
 
     if (is_line_based and ds.total_rows > 0) {
-        try splitLinesBased(allocator, io, repo, ds, num_shards, strategy_str, seed, now);
+        try splitLinesBased(allocator, repo, ds, num_shards, strategy_str, seed, now);
     } else {
         try splitBytesBased(allocator, io, repo, ds, num_shards, strategy_str, now);
     }
@@ -362,7 +362,6 @@ pub fn datasetSplit(
 
 fn splitLinesBased(
     allocator: std.mem.Allocator,
-    io: std.Io,
     repo: *Repository,
     ds: DatasetRecord,
     num_shards: usize,

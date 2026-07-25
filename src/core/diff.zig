@@ -109,7 +109,6 @@ pub fn diffCommits(allocator: std.mem.Allocator, io: std.Io, repo: *repository.R
     for (tree2_obj.entries.items) |entry2| {
         if (tree1_map.get(entry2.name)) |entry1| {
             if (!entry1.cid.equals(entry2.cid)) {
-io, entry2.cid)) {
                 std.debug.print("\nModified: {s}\n", .{entry2.name});
 
                 const content1 = try repo.store.get(io, entry1.cid);
@@ -175,7 +174,6 @@ pub fn diffUnstaged(allocator: std.mem.Allocator, io: std.Io, repo: *repository.
         const working_cid = cid.CID.fromBytes(working_content);
 
         if (!working_cid.equals(entry.cid)) {
-io, entry.cid)) {
             std.debug.print("\nModified: {s}\n", .{entry.name});
 
             const head_content = try repo.store.get(io, entry.cid);
@@ -227,7 +225,6 @@ pub fn diffStaged(allocator: std.mem.Allocator, io: std.Io, repo: *repository.Re
     for (repo.index.entries.items) |staged| {
         if (head_map.get(staged.path)) |head_entry| {
             if (!staged.cid.equals(head_entry.cid)) {
-io, head_entry.cid)) {
                 std.debug.print("\nModified: {s}\n", .{staged.path});
 
                 const head_content = try repo.store.get(io, head_entry.cid);

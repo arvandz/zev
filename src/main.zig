@@ -696,7 +696,7 @@ pub fn main(init: std.process.Init) !void {
 
         const max_count = if (args.len >= 3) try std.fmt.parseInt(usize, args[2], 10) else 10;
 
-        try log.printLog(allocator, io, &repo.store, head_cid, max_count);
+        try log.printLog(allocator, &repo.store, head_cid, max_count);
     } else if (std.mem.eql(u8, command, "status")) {
         if (!repository.Repository.exists(allocator, io, ".")) {
             std.debug.print("Not a zev repository.\n", .{});

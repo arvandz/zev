@@ -3,8 +3,7 @@ const cid = @import("cid.zig");
 const commit = @import("commit.zig");
 const blob = @import("blob.zig");
 
-pub fn printLog(allocator: std.mem.Allocator,
-    io: std.Io, store: *blob.BlobStore, start_cid: cid.CID, max_count: usize) !void {
+pub fn printLog(allocator: std.mem.Allocator, store: *blob.BlobStore, start_cid: cid.CID, max_count: usize) !void {
     var current_cid: ?cid.CID = start_cid;
     var count: usize = 0;
 

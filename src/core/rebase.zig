@@ -22,8 +22,7 @@ fn collectCommits(
     var current = start;
 
     while (true) {
-        if (current.        if (current.equals(base)) break;
-io, base)) break;
+        if (current.equals(base)) break;
 
         const data = store.get(current) catch break;
         defer allocator.free(data);
@@ -164,7 +163,6 @@ pub fn rebase(
     const onto_head = cid_mod.CID{ .hash = onto_hash };
 
     if (current_head.equals(onto_head)) {
-io, onto_head)) {
         std.debug.print("Already up to date.\n", .{});
         return .nothing_to_rebase;
     }

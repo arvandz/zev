@@ -69,7 +69,6 @@ const MetricMap = struct {
 
 fn collectMetrics(
     allocator: std.mem.Allocator,
-    io: std.Io,
     store: *ipld.BlockStore,
     root_cid: ipld.CID,
     out: *MetricMap,
@@ -345,8 +344,8 @@ pub fn mergeFromCar(
     var metrics_b = MetricMap.init(allocator, io, io, io, );
     defer metrics_b.deinit();
 
-    try collectMetrics(allocator, io, &store, head_a, &metrics_a);
-    try collectMetrics(allocator, io, &store, head_b, &metrics_b);
+    try collectMetrics(allocator, &store, head_a, &metrics_a);
+    try collectMetrics(allocator, &store, head_b, &metrics_b);
 
     std.debug.print("📊 Metrics comparison:\n\n", .{});
     var all_keys = std.StringHashMap(void).init(allocator);

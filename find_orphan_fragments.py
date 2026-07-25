@@ -16,8 +16,14 @@ from pathlib import Path
 
 SRC = Path("src")
 
-FRAGMENT = re.compile(r"^(allocator|io)\s*,.*\);\s*$")
-COMPLETE_PREV = re.compile(r"(\);|\}|;)\s*$")
+FRAGMENT = re.compile(r"^(allocator|io)\s*,.*[;,{]\s*$")
+def is_complete_line(line):
+    """A line is complete (self-contained) if its parens are balanced -
+    regardless of whether it ends in ; , or { (all three are valid
+    endings for a complete line: a statement, a struct-field entry, or
+    a block opener). An UNBALANCED line (more '(' than ')') is a
+    genuine open continuation, e.g. 'const x = try someFunc('."""
+    return line.count("(") <= line.count(")")
 
 
 def main():
@@ -37,7 +43,7 @@ def main():
                 # only safe to treat as orphan if the previous line is
                 # ALREADY a complete, terminated statement - otherwise
                 # this could be a legitimate multi-line call continuation
-                if not COMPLETE_PREV.search(prev_stripped):
+                if not is_complete_line(prev_stripped):
                     print(f"{f}:{i+1}  SKIPPED (previous line not complete - "
                           f"might be a legitimate continuation): {line!r}")
                     print(f"    previous line: {lines[i-1]!r}")
