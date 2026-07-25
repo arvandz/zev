@@ -31,8 +31,8 @@ pub fn stashSave(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, me
     var buf: std.ArrayList(u8) = .empty;
     defer buf.deinit(allocator);
 
-    const now = std.time.Instant.now() catch unreachable;
-    const ts = now.timestamp.sec;
+    const now = std.Io.Timestamp.now(io, .real);
+    const ts = @divTrunc(now.nanoseconds, std.time.ns_per_s);
     const msg = message orelse "WIP stash";
 
     try buf.print(allocator, "message {s}\n", .{msg});
@@ -58,8 +58,11 @@ pub fn stashSave(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, me
     defer allocator.free(stash_file_path);
 
     const stash_file = try std.Io.Dir.cwd().createFile(io, stash_file_path, .{});
-    defer stash_file.close();
-    try stash_file.writeAll(try buf.toOwnedSlice(allocator));
+    defer stash_file.close(io);
+    var stash_file_buffer: [512]u8 = undefined;
+    var stash_file_writer = stash_file.writer(io, &stash_file_buffer);
+    try stash_file_writer.interface.writeAll(try buf.toOwnedSlice(allocator));
+    try stash_file_writer.flush();
 
     repo.index.clear();
     try repo.index.write(io);
@@ -158,8 +161,11 @@ pub fn stashApply(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, s
                 defer allocator.free(file_content);
 
                 const out_file = try std.Io.Dir.cwd().createFile(io, path, .{});
-                defer out_file.close();
-                try out_file.writeAll(file_content);
+                defer out_file.close(io);
+                var out_file_buffer: [512]u8 = undefined;
+                var out_file_writer = out_file.writer(io, &out_file_buffer);
+                try out_file_writer.interface.writeAll(file_content);
+                try out_file_writer.flush();
 
                 const content_cid = try repo.store.put(io, file_content);
                 try repo.index.addEntry(path, content_cid, file_content.len, current_mode);

@@ -135,6 +135,7 @@ pub const MetricRecord = struct {
 
 pub fn appendMetricHistory(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     commit_short: []const u8,
     metric: []const u8,
@@ -143,7 +144,7 @@ pub fn appendMetricHistory(
     const path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "metric_history" });
     defer allocator.free(path);
 
-    const now = (std.time.Instant.now() catch unreachable).timestamp.sec;
+    const now = @divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s);
     const f = blk: {
         if (std.Io.Dir.cwd().openFile(path, .{ .mode = .read_write })) |file| {
             break :blk file;
@@ -470,7 +471,7 @@ pub fn recordMetricsToHistory(
                             .int => |i| @floatFromInt(i),
                             else => continue,
                         };
-                        try appendMetricHistory(allocator, repo, commit_short, entry.key, val);
+                        try appendMetricHistory(allocator, io, repo, commit_short, entry.key, val);
                     }
                 }
             }
@@ -552,10 +553,11 @@ pub fn cmdThresholdList(
 
 pub fn cmdCheck(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     ref: []const u8,
 ) !u8 {
-    var store = try ipld.BlockStore.init(allocator, repo.path);
+    var store = try ipld.BlockStore.init(allocator, io, io, io, repo.path);
     defer store.deinit();
 
     std.debug.print("🔎 Regression check: {s}\n\n", .{ref});
@@ -580,7 +582,7 @@ pub fn cmdCheck(
     try recordMetricsToHistory(allocator, repo, &store, parent_cid.?);
     try recordMetricsToHistory(allocator, repo, &store, cid_b);
 
-    const diff = try semantic_diff.computeSemanticDiff(allocator, &store, parent_cid.?, cid_b);
+    const diff = try semantic_diff.computeSemanticDiff(allocator, io, &store, parent_cid.?, cid_b);
     defer {
         for (diff.metrics) |d| allocator.free(d.key);
         allocator.free(diff.metrics);

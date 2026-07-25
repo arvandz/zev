@@ -118,7 +118,7 @@ fn collectMetricsForCommit(
     store: *ipld.BlockStore,
     commit_cid: ipld.CID,
 ) !MetricMap {
-    var map = MetricMap.init(allocator);
+    var map = MetricMap.init(allocator, io, io, io, );
 
     const commit_short = try commit_cid.toShort(allocator);
     defer allocator.free(commit_short);
@@ -283,6 +283,7 @@ fn diffTrees(
 
 pub fn computeSemanticDiff(
     allocator: std.mem.Allocator,
+    io: std.Io,
     store: *ipld.BlockStore,
     cid_a: ipld.CID,
     cid_b: ipld.CID,
@@ -358,7 +359,7 @@ pub fn computeSemanticDiff(
         defer allocator.free(short_ta);
         const short_tb = try tree_b.?.toShort(allocator);
         defer allocator.free(short_tb);
-        file_diffs = file_diff.diffTrees(allocator, repo_path, short_ta, short_tb) catch &.{};
+        file_diffs = file_diff.diffTrees(allocator, io, repo_path, short_ta, short_tb) catch &.{};
     }
 
     const ds_a = if (node_a == .map) node_a.getLink("dataset") else null;
@@ -572,13 +573,14 @@ fn printJsonDiff(
 
 pub fn cmdSemanticDiff(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     ref_a: []const u8,
     ref_b: []const u8,
     metric_filter: ?[]const u8,
     format: []const u8,
 ) !void {
-    var store = try ipld.BlockStore.init(allocator, repo.path);
+    var store = try ipld.BlockStore.init(allocator, io, io, io, repo.path);
     defer store.deinit();
 
     const cid_a = resolveRef(allocator, &store, repo, ref_a) catch {
@@ -601,7 +603,7 @@ pub fn cmdSemanticDiff(
         return;
     }
 
-    const diff = try computeSemanticDiff(allocator, &store, cid_a, cid_b);
+    const diff = try computeSemanticDiff(allocator, io, &store, cid_a, cid_b);
     try printSemanticDiff(allocator, &diff, metric_filter, format);
 
     for (diff.metrics) |d| allocator.free(d.key);

@@ -147,10 +147,11 @@ fn getAuthor(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) ![]u8 
     return try allocator.dupe(u8, "unknown");
 }
 
-fn computeRecordId(allocator: std.mem.Allocator, subject_cid: []const u8, timestamp: i64) ![]u8 {
+fn computeRecordId(allocator: std.mem.Allocator,
+    io: std.Io, subject_cid: []const u8, timestamp: i64) ![]u8 {
     const raw = try std.fmt.allocPrint(allocator, "notarize:{s}:{d}", .{ subject_cid, timestamp });
     defer allocator.free(raw);
-    const c = cid_mod.CID.fromBytes(raw);
+    const c = cid_mod.CID.fromBytes(io, raw);
     return try c.toString(allocator);
 }
 
@@ -176,14 +177,18 @@ fn buildPayload(
     , .{ subject_type, subject_id, subject_cid, metrics, author, timestamp });
 }
 
-fn runCmd(allocator: std.mem.Allocator, argv: []const []const u8) ![]u8 {
-    var child = std.process.Child.init(argv, allocator);
-    child.stdout_behavior = .Pipe;
-    child.stderr_behavior = .Pipe;
-    try child.spawn();
+fn runCmd(allocator: std.mem.Allocator,
+    io: std.Io, argv: []const []const u8) ![]u8 {
+    var child = try std.process.spawn(io, .{
+        .argv = argv,
+        .stdout = .pipe,
+        .stderr = .pipe,
+    });
     var buf: [65536]u8 = undefined;
-    const n = child.stdout.?.read(&buf) catch 0;
-    _ = try child.wait();
+    var child_scratch: [4096]u8 = undefined;
+    var child_reader = child.stdout.?.reader(io, &child_scratch);
+    const n = child_reader.interface.readSliceShort(&buf) catch 0;
+    _ = try child.wait(io);
     return try allocator.dupe(u8, buf[0..n]);
 }
 
@@ -218,7 +223,8 @@ fn loadEthConfig(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) !s
     return .{ .rpc_url = rpc_url, .private_key = private_key, .from_addr = from_addr };
 }
 
-fn submitEthereum(allocator: std.mem.Allocator, repo: *Repository, payload: []const u8) !NotarizeResult {
+fn submitEthereum(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository, payload: []const u8) !NotarizeResult {
     const eth = loadEthConfig(allocator, repo) catch {
         return error.EthNotConfigured;
     };
@@ -236,7 +242,7 @@ fn submitEthereum(allocator: std.mem.Allocator, repo: *Repository, payload: []co
     defer allocator.free(data_field);
 
     const cast_available = blk: {
-        const r = runCmd(allocator, &.{ "cast", "--version" }) catch {
+        const r = runCmd(allocator, io, &.{ "cast", "--version" }) catch {
             break :blk false;
         };
         allocator.free(r);
@@ -252,7 +258,7 @@ fn submitEthereum(allocator: std.mem.Allocator, repo: *Repository, payload: []co
             "0",                                          "--data",
             data_field,                                   "--json",
         };
-        const resp = try runCmd(allocator, &argv);
+        const resp = try runCmd(allocator, io, &argv);
         defer allocator.free(resp);
 
         if (std.mem.indexOf(u8, resp, "transactionHash")) |_| {
@@ -272,7 +278,7 @@ fn submitEthereum(allocator: std.mem.Allocator, repo: *Repository, payload: []co
     try tf.writeAll(nonce_req);
     tf.close();
 
-    const nonce_resp = try runCmd(allocator, &.{
+    const nonce_resp = try runCmd(allocator, io, &.{
         "curl",   "-s",                     "-X",        "POST", "-H", "Content-Type: application/json",
         "--data", "@/tmp/zev_eth_req.json", eth.rpc_url,
     });
@@ -331,10 +337,13 @@ fn submitArweave(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, pa
 
     const tmp_payload = "/tmp/zev_arweave_payload.json";
     const tf = try std.Io.Dir.cwd().createFile(io, tmp_payload, .{});
-    try tf.writeAll(payload);
+    var tf_buffer: [512]u8 = undefined;
+    var tf_writer = tf.writer(io, &tf_buffer);
+    try tf_writer.interface.writeAll(payload);
+    try tf_writer.flush();
     tf.close();
 
-    const resp = runCmd(allocator, &.{
+    const resp = runCmd(allocator, io, &.{
         "arkb",           "deploy",    tmp_payload,
         "--wallet",       arweave_key, "--tag",
         "App-Name",       "--tag",     "zev-notarize",
@@ -358,16 +367,19 @@ fn notarizeLocal(
     const combined = try std.fmt.allocPrint(allocator, "{s}:{d}", .{ payload, timestamp });
     defer allocator.free(combined);
 
-    const fingerprint_cid = cid_mod.CID.fromBytes(combined);
+    const fingerprint_cid = cid_mod.CID.fromBytes(io, combined);
     const fingerprint = try fingerprint_cid.toString(allocator);
 
     const proof_path = "/tmp/zev_notarization_proof.json";
     const pf = try std.Io.Dir.cwd().createFile(io, proof_path, .{});
-    defer pf.close();
+    defer pf.close(io);
+    var pf_buffer: [512]u8 = undefined;
+    var pf_writer = pf.writer(io, &pf_buffer);
 
     const proof = try std.fmt.allocPrint(allocator, "{{\n  \"proof\": \"{s}\",\n  \"timestamp\": {d},\n  \"payload\": {s}\n}}\n", .{ fingerprint, timestamp, payload });
     defer allocator.free(proof);
-    try pf.writeAll(proof);
+    try pf_writer.interface.writeAll(proof);
+    try pf_writer.flush();
 
     return .{
         .tx_hash = fingerprint,
@@ -441,12 +453,12 @@ pub fn notarizeSnapshot(
     const author = try getAuthor(allocator, repo);
     defer allocator.free(author);
 
-    const now = (std.time.Instant.now() catch unreachable).timestamp.sec;
+    const now = @divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s);
 
     const payload = try buildPayload(allocator, "snapshot", snap_name, snap.cid, snap.metrics, author, now);
     defer allocator.free(payload);
 
-    const rec_id = try computeRecordId(allocator, snap.cid, now);
+    const rec_id = try computeRecordId(allocator, io, snap.cid, now);
     defer allocator.free(rec_id);
 
     std.debug.print("⛓️  Notarizing snapshot '{s}'\n\n", .{snap_name});
@@ -466,7 +478,7 @@ pub fn notarizeSnapshot(
 
     const result = blk: {
         if (std.mem.eql(u8, chain, "ethereum")) {
-            break :blk submitEthereum(allocator, repo, payload) catch |err| {
+            break :blk submitEthereum(allocator, io, repo, payload) catch |err| {
                 if (err == error.EthNotConfigured) {
                     std.debug.print("❌ Ethereum not configured.\n", .{});
                     std.debug.print("   Set up with:\n", .{});
@@ -565,12 +577,12 @@ pub fn notarizeCommit(
 
     const author = try getAuthor(allocator, repo);
     defer allocator.free(author);
-    const now = (std.time.Instant.now() catch unreachable).timestamp.sec;
+    const now = @divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s);
 
     const payload = try buildPayload(allocator, "commit", commit_hash, commit_hash, metrics_str, author, now);
     defer allocator.free(payload);
 
-    const rec_id = try computeRecordId(allocator, commit_hash, now);
+    const rec_id = try computeRecordId(allocator, io, commit_hash, now);
     defer allocator.free(rec_id);
 
     std.debug.print("⛓️  Notarizing commit {s}\n\n", .{commit_hash[0..8]});
@@ -607,7 +619,8 @@ pub fn notarizeCommit(
     std.debug.print("   Verify: zev notarize verify {s}\n", .{rec_id[0..16]});
 }
 
-pub fn notarizeVerify(allocator: std.mem.Allocator, repo: *Repository, rec_id_prefix: []const u8) !void {
+pub fn notarizeVerify(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository, rec_id_prefix: []const u8) !void {
     const dir = try notarizeDir(allocator, repo);
     defer allocator.free(dir);
 
@@ -646,7 +659,7 @@ pub fn notarizeVerify(allocator: std.mem.Allocator, repo: *Repository, rec_id_pr
     if (rec.metrics.len > 0)
         std.debug.print("   Metrics:     {s}\n", .{rec.metrics});
 
-    const recomputed = try computeRecordId(allocator, rec.subject_cid, rec.timestamp);
+    const recomputed = try computeRecordId(allocator, io, rec.subject_cid, rec.timestamp);
     defer allocator.free(recomputed);
 
     const id_matches = std.mem.eql(u8, recomputed, rec.id);

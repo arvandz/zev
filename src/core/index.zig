@@ -92,8 +92,11 @@ pub const Index = struct {
         }
 
         const file = try std.Io.Dir.cwd().createFile(io, self.index_path, .{});
-        defer file.close();
-        try file.writeAll(buffer.items);
+        defer file.close(io);
+        var file_buffer: [512]u8 = undefined;
+        var file_writer = file.writer(io, &file_buffer);
+        try file_writer.interface.writeAll(buffer.items);
+        try file_writer.flush();
     }
 
     pub fn read(self: *Index, io: std.Io) !void {

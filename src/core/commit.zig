@@ -9,9 +9,9 @@ pub const Commit = struct {
     message: []const u8,
     timestamp: i64,
 
-    pub fn init(tree_cid: cid.CID, parent_cid: ?cid.CID, author: []const u8, message: []const u8) Commit {
-        const now = std.time.Instant.now() catch unreachable;
-        const epoch_seconds = now.timestamp.sec;
+    pub fn init(io: std.Io, tree_cid: cid.CID, parent_cid: ?cid.CID, author: []const u8, message: []const u8) Commit {
+        const now = std.Io.Timestamp.now(io, .real);
+        const epoch_seconds = @divTrunc(now.nanoseconds, std.time.ns_per_s);
 
         return Commit{
             .tree_cid = tree_cid,
@@ -44,7 +44,8 @@ pub const Commit = struct {
         return buffer.toOwnedSlice(allocator);
     }
 
-    pub fn deserialize(allocator: std.mem.Allocator, data: []const u8) !Commit {
+    pub fn deserialize(allocator: std.mem.Allocator,
+    io: std.Io, data: []const u8) !Commit {
         var lines = std.mem.splitSequence(u8, data, "\n");
 
         var tree_cid_opt: ?cid.CID = null;
@@ -107,8 +108,8 @@ pub const Commit = struct {
 test "commit serialization" {
     const allocator = std.testing.allocator;
 
-    const tree_cid = cid.CID.fromBytes("test tree");
-    const commit = Commit.init(tree_cid, null, "Test Author", "Initial commit");
+    const tree_cid = cid.CID.fromBytes(io, "test tree");
+    const commit = Commit.init(io, tree_cid, null, "Test Author", "Initial commit");
 
     const serialized = try commit.serialize(allocator);
     defer allocator.free(serialized);

@@ -4,7 +4,8 @@ const cid_mod = @import("cid.zig");
 
 const IPFS_API = "http://127.0.0.1:5001/api/v0";
 
-fn ipfsPost(allocator: std.mem.Allocator, endpoint: []const u8, args: []const []const u8) ![]u8 {
+fn ipfsPost(allocator: std.mem.Allocator,
+    io: std.Io, endpoint: []const u8, args: []const []const u8) ![]u8 {
     var argv: std.ArrayList([]const u8) = .empty;
     defer argv.deinit(allocator);
 
@@ -14,34 +15,42 @@ fn ipfsPost(allocator: std.mem.Allocator, endpoint: []const u8, args: []const []
     try argv.appendSlice(allocator, &.{ "curl", "-s", "-X", "POST", url });
     for (args) |arg| try argv.append(allocator, arg);
 
-    var child = std.process.Child.init(argv.items, allocator);
-    child.stdout_behavior = .Pipe;
-    child.stderr_behavior = .Ignore;
-    try child.spawn();
+    var child = try std.process.spawn(io, .{
+        .argv = argv.items,
+        .stdout = .pipe,
+        .stderr = .ignore,
+    });
 
     var buf: [1024 * 256]u8 = undefined;
-    const n = try child.stdout.?.read(&buf);
-    _ = try child.wait();
+    var child_scratch: [4096]u8 = undefined;
+    var child_reader = child.stdout.?.reader(io, &child_scratch);
+    const n = try child_reader.interface.readSliceShort(&buf);
+    _ = try child.wait(io);
     return try allocator.dupe(u8, buf[0..n]);
 }
 
-fn ipfsGet(allocator: std.mem.Allocator, endpoint: []const u8) ![]u8 {
+fn ipfsGet(allocator: std.mem.Allocator,
+    io: std.Io, endpoint: []const u8) ![]u8 {
     const url = try std.fmt.allocPrint(allocator, "{s}{s}", .{ IPFS_API, endpoint });
     defer allocator.free(url);
 
-    var child = std.process.Child.init(&.{ "curl", "-s", url }, allocator);
-    child.stdout_behavior = .Pipe;
-    child.stderr_behavior = .Ignore;
-    try child.spawn();
+    var child = try std.process.spawn(io, .{
+        .argv = &.{ "curl", "-s", url },
+        .stdout = .pipe,
+        .stderr = .ignore,
+    });
 
     var buf: [1024 * 256]u8 = undefined;
-    const n = try child.stdout.?.read(&buf);
-    _ = try child.wait();
+    var child_scratch: [4096]u8 = undefined;
+    var child_reader = child.stdout.?.reader(io, &child_scratch);
+    const n = try child_reader.interface.readSliceShort(&buf);
+    _ = try child.wait(io);
     return try allocator.dupe(u8, buf[0..n]);
 }
 
-fn ipfsAlive(allocator: std.mem.Allocator) bool {
-    const resp = ipfsPost(allocator, "/id", &.{}) catch return false;
+fn ipfsAlive(allocator: std.mem.Allocator,
+    io: std.Io,) bool {
+    const resp = ipfsPost(allocator, io, "/id", &.{}) catch return false;
     defer allocator.free(resp);
     return std.mem.indexOf(u8, resp, "ID") != null;
 }
@@ -59,23 +68,24 @@ fn extractJsonStr(allocator: std.mem.Allocator, json: []const u8, field: []const
     return try allocator.dupe(u8, trimmed[start .. start + end]);
 }
 
-fn ipfsAddFile(allocator: std.mem.Allocator, path: []const u8) !?[]u8 {
+fn ipfsAddFile(allocator: std.mem.Allocator,
+    io: std.Io, path: []const u8) !?[]u8 {
     const endpoint = try std.fmt.allocPrint(allocator, "{s}/add?quieter=true&pin=true", .{IPFS_API});
     defer allocator.free(endpoint);
 
     const form_arg = try std.fmt.allocPrint(allocator, "-F file=@{s}", .{path});
     defer allocator.free(form_arg);
 
-    var child = std.process.Child.init(
-        &.{ "curl", "-s", "-X", "POST", endpoint, form_arg },
-        allocator,
-    );
-    child.stdout_behavior = .Pipe;
-    child.stderr_behavior = .Ignore;
-    try child.spawn();
+    var child = try std.process.spawn(io, .{
+        .argv = &.{ "curl", "-s", "-X", "POST", endpoint, form_arg },
+        .stdout = .pipe,
+        .stderr = .ignore,
+    });
     var buf: [512]u8 = undefined;
-    const n = try child.stdout.?.read(&buf);
-    _ = try child.wait();
+    var child_scratch: [4096]u8 = undefined;
+    var child_reader = child.stdout.?.reader(io, &child_scratch);
+    const n = try child_reader.interface.readSliceShort(&buf);
+    _ = try child.wait(io);
 
     const resp = buf[0..n];
     const trimmed = std.mem.trim(u8, resp, " \n\r\t{}\"");
@@ -86,7 +96,8 @@ fn ipfsAddFile(allocator: std.mem.Allocator, path: []const u8) !?[]u8 {
     return try allocator.dupe(u8, trimmed);
 }
 
-fn ipfsAddDir(allocator: std.mem.Allocator, dir_path: []const u8) !?[]u8 {
+fn ipfsAddDir(allocator: std.mem.Allocator,
+    io: std.Io, dir_path: []const u8) !?[]u8 {
     const endpoint = try std.fmt.allocPrint(allocator, "{s}/add?recursive=true&quieter=true&pin=true&wrap-with-directory=false", .{IPFS_API});
     defer allocator.free(endpoint);
 
@@ -94,35 +105,41 @@ fn ipfsAddDir(allocator: std.mem.Allocator, dir_path: []const u8) !?[]u8 {
         "ipfs", "add", "-r", "-Q", "--pin=true", dir_path,
     };
 
-    var child = std.process.Child.init(&argv, allocator);
-    child.stdout_behavior = .Pipe;
-    child.stderr_behavior = .Ignore;
-    try child.spawn();
+    var child = try std.process.spawn(io, .{
+        .argv = &argv,
+        .stdout = .pipe,
+        .stderr = .ignore,
+    });
     var buf: [512]u8 = undefined;
-    const n = try child.stdout.?.read(&buf);
-    _ = try child.wait();
+    var child_scratch: [4096]u8 = undefined;
+    var child_reader = child.stdout.?.reader(io, &child_scratch);
+    const n = try child_reader.interface.readSliceShort(&buf);
+    _ = try child.wait(io);
 
     const trimmed = std.mem.trim(u8, buf[0..n], " \n\r\t");
     if (trimmed.len < 10) return null;
     return try allocator.dupe(u8, trimmed);
 }
 
-fn ipfsPin(allocator: std.mem.Allocator, hash: []const u8) !void {
+fn ipfsPin(allocator: std.mem.Allocator,
+    io: std.Io, hash: []const u8) !void {
     const endpoint = try std.fmt.allocPrint(allocator, "/pin/add?arg={s}", .{hash});
     defer allocator.free(endpoint);
-    const resp = try ipfsPost(allocator, endpoint, &.{});
+    const resp = try ipfsPost(allocator, io, endpoint, &.{});
     allocator.free(resp);
 }
 
-fn getNodeId(allocator: std.mem.Allocator) ![]u8 {
-    const resp = try ipfsPost(allocator, "/id", &.{});
+fn getNodeId(allocator: std.mem.Allocator,
+    io: std.Io,) ![]u8 {
+    const resp = try ipfsPost(allocator, io, "/id", &.{});
     defer allocator.free(resp);
     return (try extractJsonStr(allocator, resp, "ID")) orelse
         try allocator.dupe(u8, "unknown");
 }
 
-fn getNodeAddrs(allocator: std.mem.Allocator) ![]u8 {
-    const resp = try ipfsPost(allocator, "/id", &.{});
+fn getNodeAddrs(allocator: std.mem.Allocator,
+    io: std.Io,) ![]u8 {
+    const resp = try ipfsPost(allocator, io, "/id", &.{});
     defer allocator.free(resp);
     const idx = std.mem.indexOf(u8, resp, "Addresses") orelse return try allocator.dupe(u8, "");
     const after = resp[idx..];
@@ -197,11 +214,14 @@ fn addPeer(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, peer_id:
     if (std.mem.indexOf(u8, existing, peer_id) != null) return;
 
     const f = try std.Io.Dir.cwd().createFile(io, path, .{ .truncate = false });
-    defer f.close();
+    defer f.close(io);
+    var f_buffer: [512]u8 = undefined;
+    var f_writer = f.writer(io, &f_buffer);
     try f.seekFromEnd(0);
     const line = try std.fmt.allocPrint(allocator, "{s} {s}\n", .{ peer_id, meta_cid });
     defer allocator.free(line);
-    try f.writeAll(line);
+    try f_writer.interface.writeAll(line);
+    try f_writer.flush();
 }
 
 fn listPeers(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) !void {
@@ -261,8 +281,9 @@ fn buildManifest(allocator: std.mem.Allocator, repo: *Repository) ![]u8 {
     return result.toOwnedSlice(allocator);
 }
 
-pub fn peerAnnounce(allocator: std.mem.Allocator, repo: *Repository, topic: []const u8) !void {
-    if (!ipfsAlive(allocator)) {
+pub fn peerAnnounce(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository, topic: []const u8) !void {
+    if (!ipfsAlive(allocator, io)) {
         std.debug.print("❌ IPFS daemon not running.\n", .{});
         std.debug.print("   Start it with: ipfs daemon\n", .{});
         return;
@@ -273,16 +294,16 @@ pub fn peerAnnounce(allocator: std.mem.Allocator, repo: *Repository, topic: []co
     defer allocator.free(zev_path);
 
     std.debug.print("   Adding metadata to IPFS...\n", .{});
-    const meta_cid = (try ipfsAddDir(allocator, zev_path)) orelse {
+    const meta_cid = (try ipfsAddDir(allocator, io, zev_path)) orelse {
         std.debug.print("❌ Failed to add metadata to IPFS\n", .{});
         std.debug.print("   Is 'ipfs' in your PATH? Try: ipfs add -r {s}\n", .{zev_path});
         return;
     };
     defer allocator.free(meta_cid);
 
-    const node_id = try getNodeId(allocator);
+    const node_id = try getNodeId(allocator, io);
     defer allocator.free(node_id);
-    const addr = try getNodeAddrs(allocator);
+    const addr = try getNodeAddrs(allocator, io, );
     defer allocator.free(addr);
 
     const msg = try std.fmt.allocPrint(allocator, "{{\"type\":\"zev-announce\",\"node_id\":\"{s}\",\"meta_cid\":\"{s}\",\"addr\":\"{s}\"}}", .{ node_id, meta_cid, addr });
@@ -296,7 +317,7 @@ pub fn peerAnnounce(allocator: std.mem.Allocator, repo: *Repository, topic: []co
     try tf.writeAll(msg);
     tf.close();
 
-    const pub_resp = try ipfsPost(allocator, pub_endpoint, &.{ "--data-binary", "@/tmp/zev_pubsub_msg.json" });
+    const pub_resp = try ipfsPost(allocator, io, pub_endpoint, &.{ "--data-binary", "@/tmp/zev_pubsub_msg.json" });
     defer allocator.free(pub_resp);
 
     try savePeerState(allocator, repo, meta_cid, node_id);
@@ -311,8 +332,9 @@ pub fn peerAnnounce(allocator: std.mem.Allocator, repo: *Repository, topic: []co
     std.debug.print("   zev peer sync {s}\n", .{meta_cid});
 }
 
-pub fn peerSync(allocator: std.mem.Allocator, repo: *Repository, peer_meta_cid: []const u8) !void {
-    if (!ipfsAlive(allocator)) {
+pub fn peerSync(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository, peer_meta_cid: []const u8) !void {
+    if (!ipfsAlive(allocator, io)) {
         std.debug.print("❌ IPFS daemon not running. Start with: ipfs daemon\n", .{});
         return;
     }
@@ -322,7 +344,7 @@ pub fn peerSync(allocator: std.mem.Allocator, repo: *Repository, peer_meta_cid: 
     const ls_endpoint = try std.fmt.allocPrint(allocator, "/ls?arg={s}", .{peer_meta_cid});
     defer allocator.free(ls_endpoint);
 
-    const ls_resp = try ipfsPost(allocator, ls_endpoint, &.{});
+    const ls_resp = try ipfsPost(allocator, io, ls_endpoint, &.{});
     defer allocator.free(ls_resp);
 
     if (ls_resp.len < 5 or std.mem.indexOf(u8, ls_resp, "Error") != null) {
@@ -342,7 +364,7 @@ pub fn peerSync(allocator: std.mem.Allocator, repo: *Repository, peer_meta_cid: 
         const subdir_endpoint = try std.fmt.allocPrint(allocator, "/ls?arg={s}/{s}", .{ peer_meta_cid, dir_name });
         defer allocator.free(subdir_endpoint);
 
-        const subdir_resp = try ipfsPost(allocator, subdir_endpoint, &.{});
+        const subdir_resp = try ipfsPost(allocator, io, subdir_endpoint, &.{});
         defer allocator.free(subdir_resp);
 
         if (std.mem.indexOf(u8, subdir_resp, "Error") != null) continue;
@@ -375,7 +397,7 @@ pub fn peerSync(allocator: std.mem.Allocator, repo: *Repository, peer_meta_cid: 
             std.Io.Dir.cwd().access(local_path, .{}) catch {
                 const cat_endpoint = try std.fmt.allocPrint(allocator, "/cat?arg={s}", .{file_hash});
                 defer allocator.free(cat_endpoint);
-                const content = try ipfsPost(allocator, cat_endpoint, &.{});
+                const content = try ipfsPost(allocator, io, cat_endpoint, &.{});
                 defer allocator.free(content);
 
                 if (content.len > 0) {
@@ -391,7 +413,7 @@ pub fn peerSync(allocator: std.mem.Allocator, repo: *Repository, peer_meta_cid: 
         }
     }
 
-    const node_id = try getNodeId(allocator);
+    const node_id = try getNodeId(allocator, io);
     defer allocator.free(node_id);
     try addPeer(allocator, repo, peer_meta_cid, peer_meta_cid);
 
@@ -402,13 +424,14 @@ pub fn peerSync(allocator: std.mem.Allocator, repo: *Repository, peer_meta_cid: 
     std.debug.print("   Run 'zev lineage list' to see synced lineage\n", .{});
 }
 
-pub fn peerStatus(allocator: std.mem.Allocator, repo: *Repository) !void {
+pub fn peerStatus(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository) !void {
     std.debug.print("🌐 Peer Status\n\n", .{});
 
-    if (ipfsAlive(allocator)) {
-        const node_id = try getNodeId(allocator);
+    if (ipfsAlive(allocator, io)) {
+        const node_id = try getNodeId(allocator, io);
         defer allocator.free(node_id);
-        const addr = try getNodeAddrs(allocator);
+        const addr = try getNodeAddrs(allocator, io, );
         defer allocator.free(addr);
 
         std.debug.print("   IPFS:     ✅ Running\n", .{});
@@ -433,8 +456,9 @@ pub fn peerStatus(allocator: std.mem.Allocator, repo: *Repository) !void {
     try listPeers(allocator, repo);
 }
 
-pub fn peerConnect(allocator: std.mem.Allocator, multiaddr: []const u8) !void {
-    if (!ipfsAlive(allocator)) {
+pub fn peerConnect(allocator: std.mem.Allocator,
+    io: std.Io, multiaddr: []const u8) !void {
+    if (!ipfsAlive(allocator, io)) {
         std.debug.print("❌ IPFS daemon not running. Start with: ipfs daemon\n", .{});
         return;
     }
@@ -444,7 +468,7 @@ pub fn peerConnect(allocator: std.mem.Allocator, multiaddr: []const u8) !void {
     const endpoint = try std.fmt.allocPrint(allocator, "/swarm/connect?arg={s}", .{multiaddr});
     defer allocator.free(endpoint);
 
-    const resp = try ipfsPost(allocator, endpoint, &.{});
+    const resp = try ipfsPost(allocator, io, endpoint, &.{});
     defer allocator.free(resp);
 
     if (std.mem.indexOf(u8, resp, "success") != null or std.mem.indexOf(u8, resp, "connect") != null) {
@@ -456,8 +480,9 @@ pub fn peerConnect(allocator: std.mem.Allocator, multiaddr: []const u8) !void {
     }
 }
 
-pub fn forkRepo(allocator: std.mem.Allocator, peer_meta_cid: []const u8, target_dir: []const u8) !void {
-    if (!ipfsAlive(allocator)) {
+pub fn forkRepo(allocator: std.mem.Allocator,
+    io: std.Io, peer_meta_cid: []const u8, target_dir: []const u8) !void {
+    if (!ipfsAlive(allocator, io)) {
         std.debug.print("❌ IPFS daemon not running. Start with: ipfs daemon\n", .{});
         return;
     }
@@ -490,16 +515,17 @@ pub fn forkRepo(allocator: std.mem.Allocator, peer_meta_cid: []const u8, target_
     const argv = [_][]const u8{
         "ipfs", "get", "--output", zev_dir, peer_meta_cid,
     };
-    var child = std.process.Child.init(&argv, allocator);
-    child.stdout_behavior = .Pipe;
-    child.stderr_behavior = .Pipe;
-    try child.spawn();
+    var child = try std.process.spawn(io, .{
+        .argv = &argv,
+        .stdout = .pipe,
+        .stderr = .pipe,
+    });
     var buf: [4096]u8 = undefined;
     _ = child.stderr.?.read(&buf) catch 0;
-    const term = try child.wait();
+    const term = try child.wait(io);
 
     const success = switch (term) {
-        .Exited => |code| code == 0,
+        .exited => |code| code == 0,
         else => false,
     };
 
@@ -522,15 +548,16 @@ pub fn forkRepo(allocator: std.mem.Allocator, peer_meta_cid: []const u8, target_
         };
         defer tmp_repo.deinit();
 
-        try peerSync(allocator, &tmp_repo, peer_meta_cid);
+        try peerSync(allocator, io, &tmp_repo, peer_meta_cid);
     }
 
-    try ipfsPin(allocator, peer_meta_cid);
+    try ipfsPin(allocator, io, peer_meta_cid);
     std.debug.print("   📌 Pinned CID to local IPFS node\n", .{});
 }
 
-pub fn peerListen(allocator: std.mem.Allocator, repo: *Repository, topic: []const u8, timeout_secs: u32) !void {
-    if (!ipfsAlive(allocator)) {
+pub fn peerListen(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository, topic: []const u8, timeout_secs: u32) !void {
+    if (!ipfsAlive(allocator, io)) {
         std.debug.print("❌ IPFS daemon not running. Start with: ipfs daemon\n", .{});
         return;
     }
@@ -541,23 +568,26 @@ pub fn peerListen(allocator: std.mem.Allocator, repo: *Repository, topic: []cons
     defer allocator.free(timeout_str);
 
     const argv = [_][]const u8{ "timeout", timeout_str, "ipfs", "pubsub", "sub", topic };
-    var child = std.process.Child.init(&argv, allocator);
-    child.stdout_behavior = .Pipe;
-    child.stderr_behavior = .Ignore;
-    try child.spawn();
+    var child = try std.process.spawn(io, .{
+        .argv = &argv,
+        .stdout = .pipe,
+        .stderr = .ignore,
+    });
 
     var total_buf: [65536]u8 = undefined;
     var total_read: usize = 0;
     var read_buf: [4096]u8 = undefined;
     while (true) {
-        const n = child.stdout.?.read(&read_buf) catch break;
+        var child_scratch: [4096]u8 = undefined;
+        var child_reader = child.stdout.?.reader(io, &child_scratch);
+        const n = child_reader.interface.readSliceShort(&read_buf) catch break;
         if (n == 0) break;
         const space = total_buf.len - total_read;
         const to_copy = @min(n, space);
         @memcpy(total_buf[total_read .. total_read + to_copy], read_buf[0..to_copy]);
         total_read += to_copy;
     }
-    _ = child.wait() catch {};
+    _ = child.wait(io) catch {};
 
     const output = total_buf[0..total_read];
     if (output.len == 0) {

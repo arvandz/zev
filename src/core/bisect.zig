@@ -80,7 +80,7 @@ fn collectHistory(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, t
         try history.append(allocator, current);
         const data = repo.store.get(io, current) catch break;
         defer allocator.free(data);
-        const c = commit_mod.Commit.deserialize(allocator, data) catch break;
+        const c = commit_mod.Commit.deserialize(allocator, io, data) catch break;
         defer allocator.free(c.author);
         defer allocator.free(c.message);
         if (c.parent_cid) |parent| {
@@ -104,7 +104,7 @@ fn hashFromStr(hash_str: []const u8) ![32]u8 {
 fn checkoutForBisect(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, commit_cid: cid_mod.CID) !void {
     const data = try repo.store.get(io, commit_cid);
     defer allocator.free(data);
-    const c = try commit_mod.Commit.deserialize(allocator, data);
+    const c = try commit_mod.Commit.deserialize(allocator, io, data);
     defer allocator.free(c.author);
     defer allocator.free(c.message);
 
@@ -182,7 +182,7 @@ fn bisectStep(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, good_
 
     var good_pos: ?usize = null;
     for (history.items, 0..) |c, idx| {
-        if (c.equals(good_cid)) {
+        if (c.equals(io, good_cid)) {
             good_pos = idx;
             break;
         }
@@ -199,7 +199,7 @@ fn bisectStep(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, good_
         std.debug.print("\n🎯 Found the culprit commit!\n", .{});
         const data = try repo.store.get(io, bad_cid);
         defer allocator.free(data);
-        const c = try commit_mod.Commit.deserialize(allocator, data);
+        const c = try commit_mod.Commit.deserialize(allocator, io, data);
         defer allocator.free(c.author);
         defer allocator.free(c.message);
         const msg = std.mem.trim(u8, c.message, " \n\r\t");

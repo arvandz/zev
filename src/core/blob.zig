@@ -6,9 +6,9 @@ pub const Blob = struct {
     data: []const u8,
     size: usize,
 
-    pub fn init(data: []const u8) Blob {
+    pub fn init(io: std.Io, data: []const u8) Blob {
         return Blob{
-            .cid = cid.CID.fromBytes(data),
+            .cid = cid.CID.fromBytes(io, data),
             .data = data,
             .size = data.len,
         };
@@ -27,7 +27,7 @@ pub const BlobStore = struct {
     }
 
     pub fn put(self: *BlobStore, io: std.Io, data: []const u8) !cid.CID {
-        const blob = Blob.init(data);
+        const blob = Blob.init(io, data);
         const hash_str = try blob.cid.toString(self.allocator);
         defer self.allocator.free(hash_str);
         const file_path = try std.fs.path.join(self.allocator, &[_][]const u8{ self.store_path, hash_str });
@@ -78,7 +78,7 @@ pub const BlobStore = struct {
 
 test "blob creation" {
     const data = "hello world";
-    const blob = Blob.init(data);
+    const blob = Blob.init(io, data);
 
     try std.testing.expect(blob.size == 11);
     try std.testing.expect(std.mem.eql(u8, blob.data, data));
@@ -87,7 +87,7 @@ test "blob creation" {
 test "blob store put and get" {
     const allocator = std.testing.allocator;
     const test_dir = "test_blobs";
-    var store = try BlobStore.init(allocator, test_dir);
+    var store = try BlobStore.init(allocator, io, io, io, test_dir);
     defer std.Io.Dir.cwd().deleteTree(std.testing.io, test_dir) catch {};
 
     const data = "test data for blob store";
@@ -103,7 +103,7 @@ test "blob store has" {
     const allocator = std.testing.allocator;
     const test_dir = "test_blobs_has";
 
-    var store = try BlobStore.init(allocator, test_dir);
+    var store = try BlobStore.init(allocator, io, io, io, test_dir);
     defer std.Io.Dir.cwd().deleteTree(std.testing.io, test_dir) catch {};
 
     const data = "test data";
@@ -111,6 +111,6 @@ test "blob store has" {
 
     try std.testing.expect(try store.has(content_id));
 
-    const fake_cid = cid.CID.fromBytes("nonexistent");
+    const fake_cid = cid.CID.fromBytes(io, "nonexistent");
     try std.testing.expect(!try store.has(fake_cid));
 }

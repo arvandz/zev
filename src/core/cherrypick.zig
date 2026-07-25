@@ -23,7 +23,7 @@ pub fn cherryPick(
     };
     defer allocator.free(pick_data);
 
-    const pick_commit = try commit_mod.Commit.deserialize(allocator, pick_data);
+    const pick_commit = try commit_mod.Commit.deserialize(allocator, io, pick_data);
     defer allocator.free(pick_commit.author);
     defer allocator.free(pick_commit.message);
 
@@ -35,7 +35,7 @@ pub fn cherryPick(
     const pick_parent_tree = if (pick_commit.parent_cid) |parent_cid| blk: {
         const parent_data = repo.store.get(io, parent_cid) catch break :blk null;
         defer allocator.free(parent_data);
-        const parent_commit = commit_mod.Commit.deserialize(allocator, parent_data) catch break :blk null;
+        const parent_commit = commit_mod.Commit.deserialize(allocator, io, parent_data) catch break :blk null;
         defer allocator.free(parent_commit.author);
         defer allocator.free(parent_commit.message);
         break :blk parent_commit.tree_cid;
@@ -49,14 +49,14 @@ pub fn cherryPick(
 
     const current_commit_data = try repo.store.get(io, current_head);
     defer allocator.free(current_commit_data);
-    const current_commit = try commit_mod.Commit.deserialize(allocator, current_commit_data);
+    const current_commit = try commit_mod.Commit.deserialize(allocator, io, current_commit_data);
     defer allocator.free(current_commit.author);
     defer allocator.free(current_commit.message);
 
     var current_tree = try getTree(allocator, repo, current_commit.tree_cid);
     defer current_tree.deinit();
 
-    var new_tree = tree_mod.Tree.init(allocator);
+    var new_tree = tree_mod.Tree.init(allocator, io, io, io, );
     defer new_tree.deinit();
 
     for (current_tree.entries.items) |entry| {
@@ -75,7 +75,7 @@ pub fn cherryPick(
             var pt = parent_tree;
             defer pt.deinit();
             const parent_entry = pt.getEntry(pick_entry.name);
-            break :blk if (parent_entry) |pe| !pe.cid.equals(pick_entry.cid) else true;
+            break :blk if (parent_entry) |pe| !pe.cid.equals(io, pick_entry.cid) else true;
         } else true;
 
         if (!changed) continue;
@@ -148,7 +148,7 @@ pub fn cherryPick(
     defer allocator.free(new_commit_data);
     const new_commit_cid = try repo.store.put(io, new_commit_data);
 
-    try updateHead(allocator, repo, new_commit_cid);
+    try updateHead(allocator, io, repo, new_commit_cid);
 
     const new_hash = try new_commit_cid.toString(allocator);
     defer allocator.free(new_hash);
@@ -160,7 +160,7 @@ pub fn cherryPick(
 fn getTree(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, tree_cid: cid_mod.CID) !tree_mod.Tree {
     const tree_data = try repo.store.get(io, tree_cid);
     defer allocator.free(tree_data);
-    return try tree_mod.Tree.deserialize(allocator, tree_data);
+    return try tree_mod.Tree.deserialize(allocator, io, tree_data);
 }
 
 fn updateHead(allocator: std.mem.Allocator, repo: *Repository, new_cid: cid_mod.CID) !void {

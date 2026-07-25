@@ -11,7 +11,8 @@ fn readFile(allocator: std.mem.Allocator, io: std.Io, path: []const u8) !?[]u8 {
     };
 }
 
-fn readMetricsForHash(allocator: std.mem.Allocator, repo: *Repository, hash: []const u8) !std.StringHashMap([]u8) {
+fn readMetricsForHash(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository, hash: []const u8) !std.StringHashMap([]u8) {
     var map = std.StringHashMap([]u8).init(allocator);
     const path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "metrics", hash });
     defer allocator.free(path);
@@ -93,7 +94,7 @@ fn collectTreeFiles(
 ) !void {
     const data = try repo.store.get(io, tree_cid);
     defer allocator.free(data);
-    var tree = try tree_mod.Tree.deserialize(allocator, data);
+    var tree = try tree_mod.Tree.deserialize(allocator, io, data);
     defer tree.deinit();
 
     for (tree.entries.items) |entry| {
@@ -133,10 +134,10 @@ pub fn compareCommits(allocator: std.mem.Allocator, io: std.Io, repo: *Repositor
     };
     defer allocator.free(data_b);
 
-    const ca = try commit_mod.Commit.deserialize(allocator, data_a);
+    const ca = try commit_mod.Commit.deserialize(allocator, io, data_a);
     defer allocator.free(ca.author);
     defer allocator.free(ca.message);
-    const cb = try commit_mod.Commit.deserialize(allocator, data_b);
+    const cb = try commit_mod.Commit.deserialize(allocator, io, data_b);
     defer allocator.free(cb.author);
     defer allocator.free(cb.message);
 
@@ -165,7 +166,7 @@ pub fn compareCommits(allocator: std.mem.Allocator, io: std.Io, repo: *Repositor
     var it_b = files_b.iterator();
     while (it_b.next()) |eb| {
         if (files_a.get(eb.key_ptr.*)) |cid_in_a| {
-            if (!cid_in_a.equals(eb.value_ptr.*)) modified += 1;
+            if (!cid_in_a.equals(io, eb.value_ptr.*)) modified += 1;
         } else {
             added += 1;
         }
@@ -198,7 +199,7 @@ pub fn compareCommits(allocator: std.mem.Allocator, io: std.Io, repo: *Repositor
         var it4 = files_b.iterator();
         while (it4.next()) |eb| {
             if (files_a.get(eb.key_ptr.*)) |cid_in_a| {
-                if (!cid_in_a.equals(eb.value_ptr.*)) {
+                if (!cid_in_a.equals(io, eb.value_ptr.*)) {
                     std.debug.print("   ~ {s}\n", .{eb.key_ptr.*});
                 }
             }
@@ -207,9 +208,9 @@ pub fn compareCommits(allocator: std.mem.Allocator, io: std.Io, repo: *Repositor
         std.debug.print("   (identical file trees)\n", .{});
     }
 
-    var metrics_a = try readMetricsForHash(allocator, repo, hash_a);
+    var metrics_a = try readMetricsForHash(allocator, io, repo, hash_a);
     defer freeStrMap(allocator, &metrics_a);
-    var metrics_b = try readMetricsForHash(allocator, repo, hash_b);
+    var metrics_b = try readMetricsForHash(allocator, io, repo, hash_b);
     defer freeStrMap(allocator, &metrics_b);
 
     if (metrics_a.count() > 0 or metrics_b.count() > 0) {
@@ -235,7 +236,8 @@ pub fn compareCommits(allocator: std.mem.Allocator, io: std.Io, repo: *Repositor
     std.debug.print("\n", .{});
 }
 
-fn loadExpFields(allocator: std.mem.Allocator, repo: *Repository, name: []const u8) !?std.StringHashMap([]u8) {
+fn loadExpFields(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository, name: []const u8) !?std.StringHashMap([]u8) {
     const path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "experiments", name });
     defer allocator.free(path);
     const content = (try readFile(allocator, path)) orelse return null;
@@ -253,14 +255,15 @@ fn loadExpFields(allocator: std.mem.Allocator, repo: *Repository, name: []const 
     return map;
 }
 
-pub fn compareExperiments(allocator: std.mem.Allocator, repo: *Repository, name_a: []const u8, name_b: []const u8) !void {
-    var exp_a = (try loadExpFields(allocator, repo, name_a)) orelse {
+pub fn compareExperiments(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository, name_a: []const u8, name_b: []const u8) !void {
+    var exp_a = (try loadExpFields(allocator, io, repo, name_a)) orelse {
         std.debug.print("Error: Experiment '{s}' not found\n", .{name_a});
         return;
     };
     defer freeStrMap(allocator, &exp_a);
 
-    var exp_b = (try loadExpFields(allocator, repo, name_b)) orelse {
+    var exp_b = (try loadExpFields(allocator, io, repo, name_b)) orelse {
         std.debug.print("Error: Experiment '{s}' not found\n", .{name_b});
         return;
     };
@@ -301,9 +304,9 @@ pub fn compareExperiments(allocator: std.mem.Allocator, repo: *Repository, name_
         const hash_a = std.mem.trim(u8, hash_a_raw, " \n\r\t");
         const hash_b = std.mem.trim(u8, hash_b_raw, " \n\r\t");
 
-        var metrics_a = try readMetricsForHash(allocator, repo, hash_a);
+        var metrics_a = try readMetricsForHash(allocator, io, repo, hash_a);
         defer freeStrMap(allocator, &metrics_a);
-        var metrics_b = try readMetricsForHash(allocator, repo, hash_b);
+        var metrics_b = try readMetricsForHash(allocator, io, repo, hash_b);
         defer freeStrMap(allocator, &metrics_b);
 
         if (metrics_a.count() > 0 or metrics_b.count() > 0) {
@@ -329,7 +332,8 @@ pub fn compareExperiments(allocator: std.mem.Allocator, repo: *Repository, name_
     std.debug.print("\n", .{});
 }
 
-fn findSnapshotById(allocator: std.mem.Allocator, repo: *Repository, name: []const u8) !?std.StringHashMap([]u8) {
+fn findSnapshotById(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository, name: []const u8) !?std.StringHashMap([]u8) {
     const dir_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "snapshots" });
     defer allocator.free(dir_path);
 
@@ -372,14 +376,15 @@ fn findSnapshotById(allocator: std.mem.Allocator, repo: *Repository, name: []con
     return null;
 }
 
-pub fn compareSnapshots(allocator: std.mem.Allocator, repo: *Repository, name_a: []const u8, name_b: []const u8) !void {
-    var snap_a = (try findSnapshotById(allocator, repo, name_a)) orelse {
+pub fn compareSnapshots(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository, name_a: []const u8, name_b: []const u8) !void {
+    var snap_a = (try findSnapshotById(allocator, io, repo, name_a)) orelse {
         std.debug.print("Error: Snapshot '{s}' not found\n", .{name_a});
         return;
     };
     defer freeStrMap(allocator, &snap_a);
 
-    var snap_b = (try findSnapshotById(allocator, repo, name_b)) orelse {
+    var snap_b = (try findSnapshotById(allocator, io, repo, name_b)) orelse {
         std.debug.print("Error: Snapshot '{s}' not found\n", .{name_b});
         return;
     };
@@ -494,7 +499,7 @@ pub fn compareBranches(allocator: std.mem.Allocator, io: std.Io, repo: *Reposito
             if (depth > 1000) break;
             const data = repo.store.get(io, cur) catch break;
             defer allocator.free(data);
-            const c = commit_mod.Commit.deserialize(allocator, data) catch break;
+            const c = commit_mod.Commit.deserialize(allocator, io, data) catch break;
             defer allocator.free(c.author);
             defer allocator.free(c.message);
             current_opt = c.parent_cid;
@@ -521,7 +526,7 @@ pub fn compareBranches(allocator: std.mem.Allocator, io: std.Io, repo: *Reposito
             if (depth > 1000) break;
             const data = repo.store.get(io, cur) catch break;
             defer allocator.free(data);
-            const c = commit_mod.Commit.deserialize(allocator, data) catch break;
+            const c = commit_mod.Commit.deserialize(allocator, io, data) catch break;
             defer allocator.free(c.author);
             defer allocator.free(c.message);
             current_opt = c.parent_cid;
@@ -563,7 +568,7 @@ pub fn compareBranches(allocator: std.mem.Allocator, io: std.Io, repo: *Reposito
         defer allocator.free(hs);
         const data = repo.store.get(io, cur) catch break;
         defer allocator.free(data);
-        const c = commit_mod.Commit.deserialize(allocator, data) catch break;
+        const c = commit_mod.Commit.deserialize(allocator, io, data) catch break;
         defer allocator.free(c.author);
         defer allocator.free(c.message);
         const msg = std.mem.trim(u8, c.message, " \n\r\t");

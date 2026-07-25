@@ -35,7 +35,7 @@ pub const Repository = struct {
         try head_writer.interface.writeAll("ref: refs/heads/main\n");
         try head_writer.flush();
 
-        var repo_config = config_mod.Config.init(allocator);
+        var repo_config = config_mod.Config.init(allocator, io, io, io, );
         if (use_ipfs) {
             repo_config.storage_backend = .hybrid;
             repo_config.ipfs_enabled = true;
@@ -50,7 +50,7 @@ pub const Repository = struct {
                 .ipfs_url = repo_config.ipfs_url,
                 .auto_pin = repo_config.ipfs_auto_pin,
             };
-            storage_manager = try storage_mod.StorageManager.init(allocator, storage_config);
+            storage_manager = try storage_mod.StorageManager.init(allocator, io, io, io, storage_config);
         }
 
         const store_path = try allocator.dupe(u8, objects_path);
@@ -59,8 +59,8 @@ pub const Repository = struct {
         return Repository{
             .allocator = allocator,
             .path = try allocator.dupe(u8, path),
-            .store = try blob.BlobStore.init(allocator, io, store_path),
-            .index = index.Index.init(allocator, index_path),
+            .store = try blob.BlobStore.init(allocator, io, io, io, io, store_path),
+            .index = index.Index.init(allocator, io, io, io, index_path),
             .config = repo_config,
             .storage = storage_manager,
         };
@@ -81,14 +81,14 @@ pub const Repository = struct {
                 .ipfs_url = repo_config.ipfs_url,
                 .auto_pin = repo_config.ipfs_auto_pin,
             };
-            storage_manager = try storage_mod.StorageManager.init(allocator, storage_config);
+            storage_manager = try storage_mod.StorageManager.init(allocator, io, io, io, storage_config);
         }
 
         var repo = Repository{
             .allocator = allocator,
             .path = try allocator.dupe(u8, path),
-            .store = try blob.BlobStore.init(allocator, io, objects_path),
-            .index = index.Index.init(allocator, index_path),
+            .store = try blob.BlobStore.init(allocator, io, io, io, io, objects_path),
+            .index = index.Index.init(allocator, io, io, io, index_path),
             .config = repo_config,
             .storage = storage_manager,
         };
@@ -133,26 +133,26 @@ pub const Repository = struct {
         const tree_cid = try self.store.put(io, tree_data);
 
         if (self.storage) |*storage| {
-            const ipfs_tree_cid = try storage.storeObject(tree_data);
+            const ipfs_tree_cid = try storage.storeObject(io, tree_data);
             defer self.allocator.free(ipfs_tree_cid);
             std.debug.print("🌲 Tree stored in IPFS: {s}\n", .{ipfs_tree_cid});
         }
 
         const parent_cid = self.getHeadCommit(io) catch null;
 
-        const new_commit = commit.Commit.init(tree_cid, parent_cid, author, message);
+        const new_commit = commit.Commit.init(io, tree_cid, parent_cid, author, message);
         const commit_data = try new_commit.serialize(self.allocator);
         defer self.allocator.free(commit_data);
 
         const commit_cid = try self.store.put(io, commit_data);
 
         if (self.storage) |*storage| {
-            const ipfs_commit_cid = try storage.storeObject(commit_data);
+            const ipfs_commit_cid = try storage.storeObject(io, commit_data);
             defer self.allocator.free(ipfs_commit_cid);
             std.debug.print("📦 Commit stored in IPFS: {s}\n", .{ipfs_commit_cid});
         }
 
-        try self.updateHead(commit_cid);
+        try self.updateHead(io, commit_cid);
 
         _ = file_tree;
         return commit_cid;
@@ -194,14 +194,14 @@ pub const Repository = struct {
         return error.InvalidHead;
     }
 
-    fn updateHead(self: *Repository, commit_cid: cid.CID) !void {
+    fn updateHead(self: *Repository, io: std.Io, commit_cid: cid.CID) !void {
         const zev_path = try std.fs.path.join(self.allocator, &[_][]const u8{ self.path, ".zev" });
         defer self.allocator.free(zev_path);
 
         const head_path = try std.fs.path.join(self.allocator, &[_][]const u8{ zev_path, "HEAD" });
         defer self.allocator.free(head_path);
 
-        const head_file = try std.Io.Dir.cwd().openFile(head_path, .{});
+        const head_file = try std.Io.Dir.cwd().openFile(io, head_path, .{});
         defer head_file.close();
 
         var buffer: [256]u8 = undefined;

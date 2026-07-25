@@ -37,7 +37,7 @@ pub fn setMetric(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, ke
         };
         const k = line[0..eq];
         if (std.mem.eql(u8, k, key)) {
-            const now = (std.time.Instant.now() catch unreachable).timestamp.sec;
+            const now = @divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s);
             const new_line = try std.fmt.allocPrint(allocator, "{s}={s}\t{d}\n", .{ key, value, now });
             defer allocator.free(new_line);
             try lines.appendSlice(allocator, new_line);
@@ -49,15 +49,18 @@ pub fn setMetric(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, ke
     }
 
     if (!found) {
-        const now = (std.time.Instant.now() catch unreachable).timestamp.sec;
+        const now = @divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s);
         const new_line = try std.fmt.allocPrint(allocator, "{s}={s}\t{d}\n", .{ key, value, now });
         defer allocator.free(new_line);
         try lines.appendSlice(allocator, new_line);
     }
 
     const file = try std.Io.Dir.cwd().createFile(io, path, .{});
-    defer file.close();
-    try file.writeAll(lines.items);
+    defer file.close(io);
+    var file_buffer: [512]u8 = undefined;
+    var file_writer = file.writer(io, &file_buffer);
+    try file_writer.interface.writeAll(lines.items);
+    try file_writer.flush();
 
     std.debug.print("📊 Metric set: {s} = {s}\n", .{ key, value });
     std.debug.print("   Commit: {s}\n", .{hash_str[0..8]});
@@ -129,7 +132,7 @@ pub fn listMetrics(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) 
 
         const cdata = repo.store.get(io, current) catch break;
         defer allocator.free(cdata);
-        const commit = commit_mod.Commit.deserialize(allocator, cdata) catch break;
+        const commit = commit_mod.Commit.deserialize(allocator, io, cdata) catch break;
         defer allocator.free(commit.author);
         defer allocator.free(commit.message);
 

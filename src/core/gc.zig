@@ -7,6 +7,7 @@ const blob_mod = @import("blob.zig");
 
 fn collectReachable(
     allocator: std.mem.Allocator,
+    io: std.Io,
     store: *blob_mod.BlobStore,
     start_cid: cid_mod.CID,
     reachable: *std.AutoHashMap([32]u8, void),
@@ -17,23 +18,23 @@ fn collectReachable(
     const data = store.get(start_cid) catch return;
     defer allocator.free(data);
 
-    if (commit_mod.Commit.deserialize(allocator, data)) |commit| {
+    if (commit_mod.Commit.deserialize(allocator, io, data)) |commit| {
         defer allocator.free(commit.author);
         defer allocator.free(commit.message);
 
-        try collectReachable(allocator, store, commit.tree_cid, reachable);
+        try collectReachable(allocator, io, store, commit.tree_cid, reachable);
 
         if (commit.parent_cid) |parent| {
-            try collectReachable(allocator, store, parent, reachable);
+            try collectReachable(allocator, io, store, parent, reachable);
         }
         return;
     } else |_| {}
 
-    if (tree_mod.Tree.deserialize(allocator, data)) |*tree| {
+    if (tree_mod.Tree.deserialize(allocator, io, data)) |*tree| {
         var t = tree.*;
         defer t.deinit();
         for (t.entries.items) |entry| {
-            try collectReachable(allocator, store, entry.cid, reachable);
+            try collectReachable(allocator, io, store, entry.cid, reachable);
         }
         return;
     } else |_| {}
@@ -41,6 +42,7 @@ fn collectReachable(
 
 fn collectAllReachable(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     reachable: *std.AutoHashMap([32]u8, void),
 ) !void {
@@ -73,7 +75,7 @@ fn collectAllReachable(
         }
 
         const branch_cid = cid_mod.CID{ .hash = hash };
-        try collectReachable(allocator, &repo.store, branch_cid, reachable);
+        try collectReachable(allocator, io, &repo.store, branch_cid, reachable);
     }
 
     const tags_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "refs", "tags" });
@@ -111,7 +113,7 @@ fn collectAllReachable(
         }
 
         const tag_cid = cid_mod.CID{ .hash = hash };
-        try collectReachable(allocator, &repo.store, tag_cid, reachable);
+        try collectReachable(allocator, io, &repo.store, tag_cid, reachable);
     }
 }
 
@@ -121,7 +123,8 @@ pub const GCResult = struct {
     bytes_freed: usize,
 };
 
-pub fn runGC(allocator: std.mem.Allocator, repo: *Repository, dry_run: bool) !GCResult {
+pub fn runGC(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository, dry_run: bool) !GCResult {
     var result = GCResult{
         .objects_checked = 0,
         .objects_removed = 0,
@@ -132,7 +135,7 @@ pub fn runGC(allocator: std.mem.Allocator, repo: *Repository, dry_run: bool) !GC
     defer reachable.deinit();
 
     std.debug.print("🔍 Scanning reachable objects...\n", .{});
-    try collectAllReachable(allocator, repo, &reachable);
+    try collectAllReachable(allocator, io, repo, &reachable);
     std.debug.print("✅ Found {} reachable objects\n", .{reachable.count()});
 
     const objects_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "objects" });

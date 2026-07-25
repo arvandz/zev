@@ -7,7 +7,7 @@ pub fn checkoutTree(allocator: std.mem.Allocator, io: std.Io, repo: *Repository,
     const tree_data = try repo.store.get(io, tree_cid);
     defer allocator.free(tree_data);
 
-    var tree = try tree_mod.Tree.deserialize(allocator, tree_data);
+    var tree = try tree_mod.Tree.deserialize(allocator, io, tree_data);
     defer tree.deinit();
 
     if (path.len > 0) {
@@ -54,7 +54,7 @@ pub fn checkoutCommit(allocator: std.mem.Allocator, io: std.Io, repo: *Repositor
     const commit_data = try repo.store.get(io, commit_cid);
     defer allocator.free(commit_data);
 
-    const commit = try commit_mod.Commit.deserialize(allocator, commit_data);
+    const commit = try commit_mod.Commit.deserialize(allocator, io, commit_data);
     defer allocator.free(commit.author);
     defer allocator.free(commit.message);
 
@@ -69,7 +69,7 @@ pub fn cleanWorkingDirectory(allocator: std.mem.Allocator, io: std.Io, repo: *Re
     const tree_data = try repo.store.get(io, tree_cid);
     defer allocator.free(tree_data);
 
-    var tree = try tree_mod.Tree.deserialize(allocator, tree_data);
+    var tree = try tree_mod.Tree.deserialize(allocator, io, tree_data);
     defer tree.deinit();
 
     for (tree.entries.items) |entry| {

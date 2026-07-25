@@ -183,12 +183,13 @@ fn computeFileCid(allocator: std.mem.Allocator, io: std.Io, file_path: []const u
     const content = std.Io.Dir.cwd().readFileAlloc(io, file_path, allocator, .limited(64 * 1024 * 1024)) catch
         return try allocator.dupe(u8, "unknown");
     defer allocator.free(content);
-    const c = cid_mod.CID.fromBytes(content);
+    const c = cid_mod.CID.fromBytes(io, content);
     return try c.toString(allocator);
 }
 
-fn computePromptHash(allocator: std.mem.Allocator, prompt: []const u8) ![]u8 {
-    const c = cid_mod.CID.fromBytes(prompt);
+fn computePromptHash(allocator: std.mem.Allocator,
+    io: std.Io, prompt: []const u8) ![]u8 {
+    const c = cid_mod.CID.fromBytes(io, prompt);
     return try c.toString(allocator);
 }
 
@@ -198,10 +199,11 @@ fn getHeadHash(allocator: std.mem.Allocator, repo: *Repository) ![]u8 {
     return try head.toString(allocator);
 }
 
-fn makeRecordId(allocator: std.mem.Allocator, file_path: []const u8, ts: i64) ![]u8 {
+fn makeRecordId(allocator: std.mem.Allocator,
+    io: std.Io, file_path: []const u8, ts: i64) ![]u8 {
     const raw = try std.fmt.allocPrint(allocator, "ctx:{s}:{d}", .{ file_path, ts });
     defer allocator.free(raw);
-    const c = cid_mod.CID.fromBytes(raw);
+    const c = cid_mod.CID.fromBytes(io, raw);
     return try c.toString(allocator);
 }
 
@@ -250,6 +252,7 @@ fn iterateRecords(
 
 pub fn contextAdd(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     file_path: []const u8,
     model: []const u8,
@@ -257,7 +260,7 @@ pub fn contextAdd(
     notes: ?[]const u8,
     kind_str: []const u8,
 ) !void {
-    const now = (std.time.Instant.now() catch unreachable).timestamp.sec;
+    const now = @divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s);
 
     std.Io.Dir.cwd().access(file_path, .{}) catch {
         std.debug.print("Error: file '{s}' not found\n", .{file_path});
@@ -269,7 +272,7 @@ pub fn contextAdd(
 
     const prompt_text = prompt orelse "";
     const prompt_hash = if (prompt_text.len > 0)
-        try computePromptHash(allocator, prompt_text)
+        try computePromptHash(allocator, io, prompt_text)
     else
         try allocator.dupe(u8, "none");
     defer allocator.free(prompt_hash);
@@ -277,7 +280,7 @@ pub fn contextAdd(
     const commit_hash = try getHeadHash(allocator, repo);
     defer allocator.free(commit_hash);
 
-    const record_id = try makeRecordId(allocator, file_path, now);
+    const record_id = try makeRecordId(allocator, io, file_path, now);
     defer allocator.free(record_id);
 
     const author_kind = parseKind(kind_str);
@@ -391,6 +394,7 @@ pub fn contextShow(
 
 pub fn contextBlame(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
 ) !void {
     const dir_path = try contextDir(allocator, repo);
@@ -466,6 +470,7 @@ pub fn contextBlame(
 
 pub fn contextStats(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
 ) !void {
     const dir_path = try contextDir(allocator, repo);
@@ -577,6 +582,7 @@ pub fn contextStats(
 
 pub fn contextQuery(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     model_filter: ?[]const u8,
     kind_filter: ?[]const u8,
@@ -768,7 +774,7 @@ pub fn contextAutoDetect(
     std.debug.print("   Kind:   {s}\n", .{detected_kind});
     std.debug.print("   Source: {s}\n\n", .{source});
 
-    try contextAdd(allocator, repo, file_path, detected_model, null, null, detected_kind);
+    try contextAdd(allocator, io, repo, file_path, detected_model, null, null, detected_kind);
 }
 
 pub fn contextAutoDetectAll(

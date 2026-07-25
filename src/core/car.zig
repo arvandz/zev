@@ -10,7 +10,8 @@ pub const CarWriter = struct {
     block_count: usize,
     byte_count: u64,
 
-    pub fn init(allocator: std.mem.Allocator, file: std.fs.File) CarWriter {
+    pub fn init(allocator: std.mem.Allocator,
+    io: std.Io, file: std.fs.File) CarWriter {
         return .{
             .allocator = allocator,
             .file = file,
@@ -159,7 +160,7 @@ pub fn dagExport(
     max_depth: usize,
     to_ipfs: bool,
 ) !void {
-    var store = try ipld.BlockStore.init(allocator, repo.path);
+    var store = try ipld.BlockStore.init(allocator, io, io, io, repo.path);
     defer store.deinit();
 
     var root_cids: std.ArrayList(ipld.CID) = .empty;
@@ -192,7 +193,7 @@ pub fn dagExport(
     };
     defer f.close();
 
-    var writer = CarWriter.init(allocator, f);
+    var writer = CarWriter.init(allocator, io, io, io, f);
     defer writer.deinit();
 
     for (root_cids.items) |c| try writer.addRoot(c);
@@ -229,7 +230,7 @@ pub fn dagExport(
 
     if (to_ipfs) {
         std.debug.print("🌐 Importing to IPFS...\n", .{});
-        try importToIPFS(allocator, output_path);
+        try importToIPFS(allocator, io, output_path);
     } else {
         std.debug.print("   Import anywhere: ipfs dag import {s}\n", .{output_path});
         std.debug.print("   Re-import here:  zev dag import {s}\n\n", .{output_path});
@@ -291,7 +292,7 @@ pub fn dagImport(
     repo: *Repository,
     car_path: []const u8,
 ) !void {
-    var store = try ipld.BlockStore.init(allocator, repo.path);
+    var store = try ipld.BlockStore.init(allocator, io, io, io, repo.path);
     defer store.deinit();
 
     std.debug.print("📥 Importing CAR: {s}\n\n", .{car_path});
@@ -342,8 +343,11 @@ pub fn dagImport(
                     const cid_str = try root_cid.toShort(allocator);
                     defer allocator.free(cid_str);
                     const f2 = try std.Io.Dir.cwd().createFile(io, head_path, .{});
-                    defer f2.close();
-                    try f2.writeAll(cid_str);
+                    defer f2.close(io);
+                    var f2_buffer: [512]u8 = undefined;
+                    var f2_writer = f2.writer(io, &f2_buffer);
+                    try f2_writer.interface.writeAll(cid_str);
+                    try f2_writer.flush();
                     break;
                 }
             }
@@ -392,7 +396,8 @@ fn resolveHEAD(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) !ipl
     return ipld.CID.fromHex(std.mem.trim(u8, head, "\n\r "));
 }
 
-fn importToIPFS(allocator: std.mem.Allocator, car_path: []const u8) !void {
+fn importToIPFS(allocator: std.mem.Allocator,
+    io: std.Io, car_path: []const u8) !void {
     const argv = [_][]const u8{ "ipfs", "dag", "import", car_path };
     var child = std.process.Child.init(&argv, allocator);
     child.stdout_behavior = .Inherit;
@@ -402,7 +407,7 @@ fn importToIPFS(allocator: std.mem.Allocator, car_path: []const u8) !void {
         std.debug.print("   ipfs dag import {s}\n\n", .{car_path});
         return;
     };
-    const result = child.wait() catch return;
+    const result = child.wait(io) catch return;
     _ = result;
 }
 

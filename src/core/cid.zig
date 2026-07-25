@@ -3,7 +3,7 @@ const std = @import("std");
 pub const CID = struct {
     hash: [32]u8,
 
-    pub fn fromBytes(data: []const u8) CID {
+    pub fn fromBytes(io: std.Io, data: []const u8) CID {
         var hasher = std.crypto.hash.sha2.Sha256.init(.{});
         hasher.update(data);
         var hash: [32]u8 = undefined;
@@ -23,14 +23,14 @@ pub const CID = struct {
         return result;
     }
 
-    pub fn equals(self: CID, other: CID) bool {
+    pub fn equals(io: std.Io, self: CID, other: CID) bool {
         return std.mem.eql(u8, &self.hash, &other.hash);
     }
 };
 
 test "CID generation" {
     const data = "hello world";
-    const cid = CID.fromBytes(data);
+    const cid = CID.fromBytes(io, data);
 
     try std.testing.expect(cid.hash.len == 32);
 }
@@ -38,7 +38,7 @@ test "CID generation" {
 test "CID to string" {
     const allocator = std.testing.allocator;
     const data = "hello world";
-    const cid = CID.fromBytes(data);
+    const cid = CID.fromBytes(io, data);
 
     const str = try cid.toString(allocator);
     defer allocator.free(str);
@@ -51,10 +51,10 @@ test "CID equality" {
     const data2 = "hello world";
     const data3 = "goodbye world";
 
-    const cid1 = CID.fromBytes(data1);
-    const cid2 = CID.fromBytes(data2);
-    const cid3 = CID.fromBytes(data3);
+    const cid1 = CID.fromBytes(io, data1);
+    const cid2 = CID.fromBytes(io, data2);
+    const cid3 = CID.fromBytes(io, data3);
 
-    try std.testing.expect(cid1.equals(cid2));
-    try std.testing.expect(!cid1.equals(cid3));
+    try std.testing.expect(cid1.equals(io, cid2));
+    try std.testing.expect(!cid1.equals(io, cid3));
 }

@@ -51,7 +51,7 @@ pub fn blame(
         const cdata = repo.store.get(io, current) catch break;
         defer allocator.free(cdata);
 
-        const c = commit_mod.Commit.deserialize(allocator, cdata) catch break;
+        const c = commit_mod.Commit.deserialize(allocator, io, cdata) catch break;
         errdefer allocator.free(c.author);
         errdefer allocator.free(c.message);
 
@@ -158,7 +158,7 @@ fn getFileAtCommit(
     const tree_data = try repo.store.get(io, tree_cid);
     defer allocator.free(tree_data);
 
-    var t = try tree_mod.Tree.deserialize(allocator, tree_data);
+    var t = try tree_mod.Tree.deserialize(allocator, io, tree_data);
     defer t.deinit();
 
     for (t.entries.items) |entry| {

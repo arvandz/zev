@@ -50,7 +50,8 @@ pub const MergeNode = struct {
 const MetricMap = struct {
     entries: std.StringHashMap(f64),
 
-    pub fn init(allocator: std.mem.Allocator) MetricMap {
+    pub fn init(allocator: std.mem.Allocator
+    io: std.Io,) MetricMap {
         return .{ .entries = std.StringHashMap(f64).init(allocator) };
     }
 
@@ -69,6 +70,7 @@ const MetricMap = struct {
 
 fn collectMetrics(
     allocator: std.mem.Allocator,
+    io: std.Io,
     store: *ipld.BlockStore,
     root_cid: ipld.CID,
     out: *MetricMap,
@@ -266,7 +268,7 @@ pub fn mergeFromCar(
     dry_run: bool,
     sign_result: bool,
 ) !void {
-    var store = try ipld.BlockStore.init(allocator, repo.path);
+    var store = try ipld.BlockStore.init(allocator, io, io, io, repo.path);
     defer store.deinit();
 
     std.debug.print("🔀 Federated Merge\n\n", .{});
@@ -339,13 +341,13 @@ pub fn mergeFromCar(
     std.debug.print("   HEAD A (ours):   {s}\n", .{short_a});
     std.debug.print("   HEAD B (theirs): {s}\n\n", .{short_b});
 
-    var metrics_a = MetricMap.init(allocator);
+    var metrics_a = MetricMap.init(allocator, io, io, io, );
     defer metrics_a.deinit();
-    var metrics_b = MetricMap.init(allocator);
+    var metrics_b = MetricMap.init(allocator, io, io, io, );
     defer metrics_b.deinit();
 
-    try collectMetrics(allocator, &store, head_a, &metrics_a);
-    try collectMetrics(allocator, &store, head_b, &metrics_b);
+    try collectMetrics(allocator, io, &store, head_a, &metrics_a);
+    try collectMetrics(allocator, io, &store, head_b, &metrics_b);
 
     std.debug.print("📊 Metrics comparison:\n\n", .{});
     var all_keys = std.StringHashMap(void).init(allocator);
@@ -415,7 +417,7 @@ pub fn mergeFromCar(
         return;
     }
 
-    const now = (std.time.Instant.now() catch unreachable).timestamp.sec;
+    const now = @divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s);
     const identity = try crypto.Identity.loadOrCreate(allocator, repo.path);
     const pk_str = identity.publicKeyB64();
 
@@ -428,7 +430,7 @@ pub fn mergeFromCar(
         .merged_by = &pk_str,
     };
 
-    var arena = std.heap.ArenaAllocator.init(allocator);
+    var arena = std.heap.ArenaAllocator.init(allocator, io, io, io, );
     defer arena.deinit();
     const aa = arena.allocator();
 
@@ -436,7 +438,7 @@ pub fn mergeFromCar(
     var merge_cid = try store.putNode(aa, mn_val);
 
     if (sign_result) {
-        merge_cid = try crypto.signCommitNode(allocator, &store, repo, merge_cid);
+        merge_cid = try crypto.signCommitNode(allocator, io, &store, repo, merge_cid);
     }
 
     const head_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "ipld_head" });

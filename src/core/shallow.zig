@@ -22,7 +22,7 @@ pub fn shallowCopy(
         defer allocator.free(commit_data);
         _ = try to_repo.store.put(io, commit_data);
 
-        const commit = try commit_mod.Commit.deserialize(allocator, commit_data);
+        const commit = try commit_mod.Commit.deserialize(allocator, io, commit_data);
         defer allocator.free(commit.author);
         defer allocator.free(commit.message);
 
@@ -61,7 +61,7 @@ fn copyTree(
     defer allocator.free(tree_data);
     _ = try to_repo.store.put(io, tree_data);
 
-    var tree = try tree_mod.Tree.deserialize(allocator, tree_data);
+    var tree = try tree_mod.Tree.deserialize(allocator, io, tree_data);
     defer tree.deinit();
 
     for (tree.entries.items) |entry| {

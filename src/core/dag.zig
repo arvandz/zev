@@ -4,10 +4,11 @@ const ipld = @import("ipld.zig");
 
 pub fn dagShow(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     cid_str: []const u8,
 ) !void {
-    var store = try ipld.BlockStore.init(allocator, repo.path);
+    var store = try ipld.BlockStore.init(allocator, io, io, io, repo.path);
     defer store.deinit();
 
     const c = parseCID(cid_str) catch {
@@ -34,11 +35,12 @@ pub fn dagShow(
 
 pub fn dagWalk(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     cid_str: []const u8,
     max_depth: usize,
 ) !void {
-    var store = try ipld.BlockStore.init(allocator, repo.path);
+    var store = try ipld.BlockStore.init(allocator, io, io, io, repo.path);
     defer store.deinit();
 
     const c = parseCID(cid_str) catch {
@@ -108,7 +110,7 @@ pub fn dagPut(
     repo: *Repository,
     file_path: []const u8,
 ) !void {
-    var store = try ipld.BlockStore.init(allocator, repo.path);
+    var store = try ipld.BlockStore.init(allocator, io, io, io, repo.path);
     defer store.deinit();
 
     const data = std.Io.Dir.cwd().readFileAlloc(io, file_path, allocator, .limited(64 * 1024 * 1024)) catch |err| {
@@ -142,7 +144,7 @@ pub fn dagPut(
 }
 
 pub fn dagStat(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) !void {
-    var store = try ipld.BlockStore.init(allocator, repo.path);
+    var store = try ipld.BlockStore.init(allocator, io, io, io, repo.path);
     defer store.deinit();
 
     const block_count = store.count();
@@ -231,14 +233,14 @@ pub fn graftAdd(
     description: []const u8,
     fetch_from_ipfs: bool,
 ) !void {
-    const now = (std.time.Instant.now() catch unreachable).timestamp.sec;
+    const now = @divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s);
 
     const c = parseCID(cid_str) catch {
         std.debug.print("❌ Invalid CID: {s}\n", .{cid_str});
         return;
     };
 
-    var store = try ipld.BlockStore.init(allocator, repo.path);
+    var store = try ipld.BlockStore.init(allocator, io, io, io, repo.path);
     defer store.deinit();
 
     const config_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "config" });
@@ -250,7 +252,7 @@ pub fn graftAdd(
         std.debug.print("   Fetching from IPFS...\n", .{});
         const short = try c.toShort(allocator);
         defer allocator.free(short);
-        try fetchFromIPFS(allocator, &store, short);
+        try fetchFromIPFS(allocator, io, &store, short);
     }
 
     const graft = ipld.GraftNode{
@@ -261,7 +263,7 @@ pub fn graftAdd(
         .grafted_by = author,
     };
 
-    var arena = std.heap.ArenaAllocator.init(allocator);
+    var arena = std.heap.ArenaAllocator.init(allocator, io, io, io, );
     defer arena.deinit();
     const aa = arena.allocator();
     const graft_val = try graft.toValue(aa);
@@ -499,14 +501,17 @@ fn saveGraftAlias(
     const graft_short = try graft_cid.toShort(allocator);
     defer allocator.free(graft_short);
 
-    const now = (std.time.Instant.now() catch unreachable).timestamp.sec;
+    const now = @divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s);
 
     const content = try std.fmt.allocPrint(allocator, "alias={s}\ntarget={s}\ngraft_cid={s}\nts={d}\n", .{ alias, target_cid, graft_short, now });
     defer allocator.free(content);
 
     const f = try std.Io.Dir.cwd().createFile(io, path, .{});
-    defer f.close();
-    try f.writeAll(content);
+    defer f.close(io);
+    var f_buffer: [512]u8 = undefined;
+    var f_writer = f.writer(io, &f_buffer);
+    try f_writer.interface.writeAll(content);
+    try f_writer.flush();
 }
 
 fn sanitizeAlias(allocator: std.mem.Allocator, alias: []const u8) ![]u8 {
@@ -519,13 +524,14 @@ fn sanitizeAlias(allocator: std.mem.Allocator, alias: []const u8) ![]u8 {
 
 fn fetchFromIPFS(
     allocator: std.mem.Allocator,
+    io: std.Io,
     store: *ipld.BlockStore,
     cid_short: []const u8,
 ) !void {
     const url = try std.fmt.allocPrint(allocator, "http://127.0.0.1:5001/api/v0/block/get?arg={s}", .{cid_short});
     defer allocator.free(url);
 
-    var child = std.process.Child.init(&.{ "curl", "-s", "-X", "POST", url }, allocator);
+    var child = std.process.Child.init(io, &.{ "curl", "-s", "-X", "POST", url }, allocator);
     child.stdout_behavior = .Pipe;
     child.stderr_behavior = .Ignore;
 
@@ -535,8 +541,10 @@ fn fetchFromIPFS(
     };
 
     var buf: [1024 * 1024]u8 = undefined;
-    const n = child.stdout.?.read(&buf) catch 0;
-    _ = child.wait() catch {};
+    var child_scratch: [4096]u8 = undefined;
+    var child_reader = child.stdout.?.reader(io, &child_scratch);
+    const n = child_reader.interface.readSliceShort(&buf) catch 0;
+    _ = child.wait(io) catch {};
 
     if (n > 0) {
         const c = ipld.CID.raw(buf[0..n]);

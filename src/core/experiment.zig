@@ -117,6 +117,7 @@ fn freeExperiment(allocator: std.mem.Allocator, exp: Experiment) void {
 
 pub fn experimentStart(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     name: []const u8,
     description: []const u8,
@@ -151,7 +152,7 @@ pub fn experimentStart(
         } else return err;
     };
 
-    const now = (std.time.Instant.now() catch unreachable).timestamp.sec;
+    const now = @divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s);
 
     const exp = Experiment{
         .name = name,

@@ -20,8 +20,8 @@ pub fn blake3Keyed(context: []const u8, data: []const u8) [32]u8 {
 pub const Blake3Hasher = struct {
     inner: Blake3,
 
-    pub fn init() Blake3Hasher {
-        return .{ .inner = Blake3.init(.{}) };
+    pub fn init(io: std.Io, ) Blake3Hasher {
+        return .{ .inner = Blake3.init(io, .{}) };
     }
 
     pub fn update(self: *Blake3Hasher, data: []const u8) void {
@@ -137,7 +137,7 @@ pub const Identity = struct {
     }
 };
 
-pub fn verify(
+pub fn verify(io: std.Io, 
     data: []const u8,
     sig_b64: []const u8,
     pubkey_b64: []const u8,
@@ -145,18 +145,18 @@ pub fn verify(
     const sig_bytes = try b64Decode64(sig_b64);
     const pk_bytes = try b64Decode32(pubkey_b64);
 
-    const sig = Ed25519.Signature.fromBytes(sig_bytes);
-    const pk = try Ed25519.PublicKey.fromBytes(pk_bytes);
-    try sig.verify(data, pk);
+    const sig = Ed25519.Signature.fromBytes(io, sig_bytes);
+    const pk = try Ed25519.PublicKey.fromBytes(io, pk_bytes);
+    try sig.verify(io, data, pk);
 }
 
-pub fn verifyHash(
+pub fn verifyHash(io: std.Io, 
     data: []const u8,
     sig_b64: []const u8,
     pubkey_b64: []const u8,
 ) !void {
     const hash = blake3(data);
-    try verify(&hash, sig_b64, pubkey_b64);
+    try verify(io, &hash, sig_b64, pubkey_b64);
 }
 
 const ipld = @import("ipld.zig");
@@ -164,6 +164,7 @@ const Repository = @import("repository.zig").Repository;
 
 pub fn signCommitNode(
     allocator: std.mem.Allocator,
+    io: std.Io,
     store: *ipld.BlockStore,
     repo: *Repository,
     commit_cid: ipld.CID,
@@ -180,7 +181,7 @@ pub fn signCommitNode(
     defer existing.deinit(allocator);
     if (existing != .map) return error.NotAMap;
 
-    var arena = std.heap.ArenaAllocator.init(allocator);
+    var arena = std.heap.ArenaAllocator.init(allocator, io, io, io, );
     defer arena.deinit();
     const aa = arena.allocator();
 
@@ -210,6 +211,7 @@ pub fn signCommitNode(
 
 pub fn verifyCID(
     allocator: std.mem.Allocator,
+    io: std.Io,
     store: *ipld.BlockStore,
     cid: ipld.CID,
 ) !VerifyResult {
@@ -221,7 +223,7 @@ pub fn verifyCID(
     const sig_b64 = node.getString("sig") orelse return VerifyResult{ .unsigned = .{} };
     const pk_b64 = node.getString("sig_pk") orelse return VerifyResult{ .unsigned = .{} };
 
-    var arena = std.heap.ArenaAllocator.init(allocator);
+    var arena = std.heap.ArenaAllocator.init(allocator, io, io, io, );
     defer arena.deinit();
     const aa = arena.allocator();
 
@@ -240,7 +242,7 @@ pub fn verifyCID(
     const pk_owned = try allocator.dupe(u8, pk_b64);
     errdefer allocator.free(pk_owned);
 
-    verifyHash(unsigned_bytes, sig_b64, pk_b64) catch |err| {
+    verifyHash(io, unsigned_bytes, sig_b64, pk_b64) catch |err| {
         return VerifyResult{ .invalid = .{
             .reason = @errorName(err),
             .pk = pk_owned,
@@ -258,10 +260,11 @@ pub const VerifyResult = union(enum) {
 
 pub fn cmdSign(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     cid_str: []const u8,
 ) !void {
-    var store = try ipld.BlockStore.init(allocator, repo.path);
+    var store = try ipld.BlockStore.init(allocator, io, io, io, repo.path);
     defer store.deinit();
 
     const cid = ipld.CID.fromHex(cid_str) catch {
@@ -269,7 +272,7 @@ pub fn cmdSign(
         return;
     };
 
-    const signed_cid = signCommitNode(allocator, &store, repo, cid) catch |err| {
+    const signed_cid = signCommitNode(allocator, io, &store, repo, cid) catch |err| {
         std.debug.print("❌ Sign failed: {}\n", .{err});
         return;
     };
@@ -291,10 +294,11 @@ pub fn cmdSign(
 
 pub fn cmdVerify(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     cid_str: []const u8,
 ) !void {
-    var store = try ipld.BlockStore.init(allocator, repo.path);
+    var store = try ipld.BlockStore.init(allocator, io, io, io, repo.path);
     defer store.deinit();
 
     const cid = ipld.CID.fromHex(cid_str) catch {
@@ -307,7 +311,7 @@ pub fn cmdVerify(
 
     std.debug.print("🔍 Verifying: {s}\n\n", .{short});
 
-    const result = verifyCID(allocator, &store, cid) catch |err| {
+    const result = verifyCID(allocator, io, &store, cid) catch |err| {
         std.debug.print("❌ Verification error: {}\n\n", .{err});
         return;
     };

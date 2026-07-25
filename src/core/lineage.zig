@@ -182,7 +182,7 @@ pub fn lineageAdd(
                 .node_type = node_type,
                 .description = description,
                 .file_cid = "",
-                .created_at = (std.time.Instant.now() catch unreachable).timestamp.sec,
+                .created_at = @divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s),
                 .tags = tags,
                 .parents = "",
                 .version = version,
@@ -193,7 +193,7 @@ pub fn lineageAdd(
         };
         defer allocator.free(file_data);
 
-        const content_cid = cid_mod.CID.fromBytes(file_data);
+        const content_cid = cid_mod.CID.fromBytes(io, file_data);
         allocator.free(file_cid);
         file_cid = try content_cid.toString(allocator);
 
@@ -201,7 +201,7 @@ pub fn lineageAdd(
         std.debug.print("   Stored {s} in object store\n", .{fp});
     }
 
-    const now = (std.time.Instant.now() catch unreachable).timestamp.sec;
+    const now = @divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s);
     const node = LineageNode{
         .id = id,
         .node_type = node_type,

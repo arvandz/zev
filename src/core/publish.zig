@@ -218,7 +218,8 @@ fn buildSnapshotPayload(
     , .{ snap_name, snap_id, desc_esc, commit_hash, branch, metrics, tags, permanent, username, repo_name });
 }
 
-fn httpPost(allocator: std.mem.Allocator, endpoint: []const u8, token: []const u8, payload: []const u8) !struct { status: u32, body: []u8 } {
+fn httpPost(allocator: std.mem.Allocator,
+    io: std.Io, endpoint: []const u8, token: []const u8, payload: []const u8) !struct { status: u32, body: []u8 } {
     const tmp_path = "/tmp/zev_publish_payload.json";
     const tmp_file = try std.Io.Dir.cwd().createFile(tmp_path, .{});
     try tmp_file.writeAll(payload);
@@ -242,7 +243,7 @@ fn httpPost(allocator: std.mem.Allocator, endpoint: []const u8, token: []const u
     }
     try argv.append(allocator, endpoint);
 
-    var child = std.process.Child.init(argv.items, allocator);
+    var child = std.process.Child.init(io, argv.items, allocator);
     child.stdout_behavior = .Pipe;
     child.stderr_behavior = .Pipe;
     try child.spawn();
@@ -295,7 +296,7 @@ pub fn publishCommit(
 
     const commit_data = try repo.store.get(io, head);
     defer allocator.free(commit_data);
-    const commit = try commit_mod.Commit.deserialize(allocator, commit_data);
+    const commit = try commit_mod.Commit.deserialize(allocator, io, commit_data);
     defer allocator.free(commit.author);
     defer allocator.free(commit.message);
 
@@ -325,7 +326,7 @@ pub fn publishCommit(
     const endpoint = try std.fmt.allocPrint(allocator, "{s}/commits", .{cfg.endpoint});
     defer allocator.free(endpoint);
 
-    const result = httpPost(allocator, endpoint, cfg.token, payload) catch |err| {
+    const result = httpPost(allocator, io, endpoint, cfg.token, payload) catch |err| {
         std.debug.print("❌ Publish failed: {}\n", .{err});
         std.debug.print("   (Is your endpoint reachable? Try --dry-run to preview the payload)\n", .{});
         return;
@@ -427,7 +428,7 @@ pub fn publishExperiment(
     const endpoint = try std.fmt.allocPrint(allocator, "{s}/experiments", .{cfg.endpoint});
     defer allocator.free(endpoint);
 
-    const result = httpPost(allocator, endpoint, cfg.token, payload) catch |err| {
+    const result = httpPost(allocator, io, endpoint, cfg.token, payload) catch |err| {
         std.debug.print("❌ Publish failed: {}\n", .{err});
         return;
     };
@@ -556,7 +557,7 @@ pub fn publishSnapshot(
     const endpoint = try std.fmt.allocPrint(allocator, "{s}/snapshots", .{cfg.endpoint});
     defer allocator.free(endpoint);
 
-    const result = httpPost(allocator, endpoint, cfg.token, payload) catch |err| {
+    const result = httpPost(allocator, io, endpoint, cfg.token, payload) catch |err| {
         std.debug.print("❌ Publish failed: {}\n", .{err});
         return;
     };

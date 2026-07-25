@@ -149,6 +149,7 @@ fn readMetricsForCommit(
 
 pub fn textCommitToIPLD(
     allocator: std.mem.Allocator,
+    io: std.Io,
     store: *ipld.BlockStore,
     tc: TextCommit,
     parent_ipld_cid: ?ipld.CID,
@@ -166,7 +167,7 @@ pub fn textCommitToIPLD(
             metric_entries[i] = .{ .key = m.key, .value = m.value };
         }
 
-        var arena = std.heap.ArenaAllocator.init(allocator);
+        var arena = std.heap.ArenaAllocator.init(allocator, io, io, io, );
         defer arena.deinit();
         const aa = arena.allocator();
 
@@ -180,7 +181,7 @@ pub fn textCommitToIPLD(
         break :blk mcid;
     } else null;
 
-    var arena = std.heap.ArenaAllocator.init(allocator);
+    var arena = std.heap.ArenaAllocator.init(allocator, io, io, io, );
     defer arena.deinit();
     const aa = arena.allocator();
 
@@ -204,9 +205,10 @@ pub fn textCommitToIPLD(
 
 pub fn migrateCommitsToIPLD(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
 ) !void {
-    var store = try ipld.BlockStore.init(allocator, repo.path);
+    var store = try ipld.BlockStore.init(allocator, io, io, io, repo.path);
     defer store.deinit();
 
     const head_hash = try resolveHEAD(allocator, repo);
@@ -251,7 +253,7 @@ pub fn migrateCommitsToIPLD(
 
         const existing_cid = loadCommitCIDMapping(allocator, repo, hash) catch null;
         const commit_cid = if (existing_cid) |e| e else blk: {
-            const c = try textCommitToIPLD(allocator, &store, tc, parent_ipld_cid, metrics);
+            const c = try textCommitToIPLD(allocator, io, &store, tc, parent_ipld_cid, metrics);
             try saveCommitCIDMapping(allocator, repo, hash, c);
             break :blk c;
         };
@@ -285,10 +287,11 @@ pub fn migrateCommitsToIPLD(
 
 pub fn onNewCommit(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     commit_hash: []const u8,
 ) !void {
-    var store = try ipld.BlockStore.init(allocator, repo.path);
+    var store = try ipld.BlockStore.init(allocator, io, io, io, repo.path);
     defer store.deinit();
 
     const tc = readTextCommit(allocator, repo, commit_hash) catch return;
@@ -301,7 +304,7 @@ pub fn onNewCommit(
 
     const empty_metrics: []MetricEntry = &.{};
 
-    const commit_cid = try textCommitToIPLD(allocator, &store, tc, parent_ipld_cid, empty_metrics);
+    const commit_cid = try textCommitToIPLD(allocator, io, &store, tc, parent_ipld_cid, empty_metrics);
 
     try saveCommitCIDMapping(allocator, repo, commit_hash, commit_cid);
     try saveIPLDHead(allocator, repo, commit_cid);
@@ -313,12 +316,13 @@ pub fn onNewCommit(
 
 pub fn onMetricsSet(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     commit_hash: []const u8,
     metric_key: []const u8,
     metric_value: f64,
 ) !void {
-    var store = try ipld.BlockStore.init(allocator, repo.path);
+    var store = try ipld.BlockStore.init(allocator, io, io, io, repo.path);
     defer store.deinit();
 
     const all_metrics = try readMetricsForCommit(allocator, repo, commit_hash);
@@ -342,14 +346,14 @@ pub fn onMetricsSet(
     const commit_cid_for_metrics = ipld.CID.fromHex(commit_hash) catch
         ipld.CID.raw(commit_hash);
 
-    var arena = std.heap.ArenaAllocator.init(allocator);
+    var arena = std.heap.ArenaAllocator.init(allocator, io, io, io, );
     defer arena.deinit();
     const aa = arena.allocator();
 
     const mn = ipld.MetricsNode{
         .commit = commit_cid_for_metrics,
         .entries = metrics.items,
-        .timestamp = (std.time.Instant.now() catch unreachable).timestamp.sec,
+        .timestamp = @divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s),
     };
     const mv = try mn.toValue(aa);
     const metrics_cid = try store.putNode(aa, mv);
@@ -371,10 +375,11 @@ fn cloneValueShallow(allocator: std.mem.Allocator, v: ipld.Value) !ipld.Value {
 
 pub fn ipldLog(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     max_entries: usize,
 ) !void {
-    var store = try ipld.BlockStore.init(allocator, repo.path);
+    var store = try ipld.BlockStore.init(allocator, io, io, io, repo.path);
     defer store.deinit();
 
     const head_cid = loadIPLDHead(allocator, repo) catch blk: {

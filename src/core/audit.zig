@@ -100,7 +100,7 @@ fn collectCommits(
         const commit_data = repo.store.get(io, commit_cid) catch break;
         defer allocator.free(commit_data);
 
-        const c = commit_mod.Commit.deserialize(allocator, commit_data) catch break;
+        const c = commit_mod.Commit.deserialize(allocator, io, commit_data) catch break;
         defer allocator.free(c.author);
         defer allocator.free(c.message);
 
@@ -748,6 +748,7 @@ fn printSummary(events: []const AuditEvent) void {
 
 pub fn runAudit(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     filter_snapshot: ?[]const u8,
     format: []const u8,
@@ -764,7 +765,7 @@ pub fn runAudit(
         events.deinit(allocator);
     }
 
-    try collectCommits(allocator, repo, &events);
+    try collectCommits(allocator, io, repo, &events);
     try collectSnapshots(allocator, repo, &events, filter_snapshot);
     try collectNotarizations(allocator, repo, &events, filter_snapshot);
     try collectDriftHistory(allocator, repo, &events);

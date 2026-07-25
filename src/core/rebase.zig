@@ -13,6 +13,7 @@ pub const RebaseResult = enum {
 
 fn collectCommits(
     allocator: std.mem.Allocator,
+    io: std.Io,
     store: *blob_mod.BlobStore,
     start: cid_mod.CID,
     base: cid_mod.CID,
@@ -21,12 +22,12 @@ fn collectCommits(
     var current = start;
 
     while (true) {
-        if (current.equals(base)) break;
+        if (current.equals(io, base)) break;
 
         const data = store.get(current) catch break;
         defer allocator.free(data);
 
-        const c = commit_mod.Commit.deserialize(allocator, data) catch break;
+        const c = commit_mod.Commit.deserialize(allocator, io, data) catch break;
         defer allocator.free(c.author);
         defer allocator.free(c.message);
 
@@ -43,6 +44,7 @@ fn collectCommits(
 
 fn findCommonAncestor(
     allocator: std.mem.Allocator,
+    io: std.Io,
     store: *blob_mod.BlobStore,
     a: cid_mod.CID,
     b: cid_mod.CID,
@@ -56,7 +58,7 @@ fn findCommonAncestor(
         try a_ancestors.put(current.hash, {});
         const data = store.get(current) catch break;
         defer allocator.free(data);
-        const c = commit_mod.Commit.deserialize(allocator, data) catch break;
+        const c = commit_mod.Commit.deserialize(allocator, io, data) catch break;
         defer allocator.free(c.author);
         defer allocator.free(c.message);
         if (c.parent_cid) |parent| {
@@ -70,7 +72,7 @@ fn findCommonAncestor(
         if (a_ancestors.contains(current.hash)) return current;
         const data = store.get(current) catch break;
         defer allocator.free(data);
-        const c = commit_mod.Commit.deserialize(allocator, data) catch break;
+        const c = commit_mod.Commit.deserialize(allocator, io, data) catch break;
         defer allocator.free(c.author);
         defer allocator.free(c.message);
         if (c.parent_cid) |parent| {
@@ -91,7 +93,7 @@ fn replayCommit(
     const data = try repo.store.get(io, commit_cid);
     defer allocator.free(data);
 
-    const c = try commit_mod.Commit.deserialize(allocator, data);
+    const c = try commit_mod.Commit.deserialize(allocator, io, data);
     defer allocator.free(c.author);
     defer allocator.free(c.message);
 
@@ -120,7 +122,7 @@ fn copyTreeObjects(
     const tree_data = repo.store.get(io, tree_cid) catch return;
     defer allocator.free(tree_data);
 
-    var t = tree_mod.Tree.deserialize(allocator, tree_data) catch return;
+    var t = tree_mod.Tree.deserialize(allocator, io, tree_data) catch return;
     defer t.deinit();
 
     for (t.entries.items) |entry| {
@@ -160,12 +162,12 @@ pub fn rebase(
     }
     const onto_head = cid_mod.CID{ .hash = onto_hash };
 
-    if (current_head.equals(onto_head)) {
+    if (current_head.equals(io, onto_head)) {
         std.debug.print("Already up to date.\n", .{});
         return .nothing_to_rebase;
     }
 
-    const ancestor = try findCommonAncestor(allocator, &repo.store, current_head, onto_head);
+    const ancestor = try findCommonAncestor(allocator, io, &repo.store, current_head, onto_head);
     if (ancestor == null) {
         std.debug.print("Error: No common ancestor found\n", .{});
         return .nothing_to_rebase;
@@ -173,7 +175,7 @@ pub fn rebase(
 
     std.debug.print("🔀 Rebasing onto {s}...\n", .{onto_branch});
 
-    var commits_to_replay = try collectCommits(allocator, &repo.store, current_head, ancestor.?);
+    var commits_to_replay = try collectCommits(allocator, io, &repo.store, current_head, ancestor.?);
     defer commits_to_replay.deinit(allocator);
 
     if (commits_to_replay.items.len == 0) {
@@ -187,7 +189,7 @@ pub fn rebase(
     for (commits_to_replay.items) |commit_cid| {
         const cdata = try repo.store.get(io, commit_cid);
         defer allocator.free(cdata);
-        const c = try commit_mod.Commit.deserialize(allocator, cdata);
+        const c = try commit_mod.Commit.deserialize(allocator, io, cdata);
         defer allocator.free(c.author);
         defer allocator.free(c.message);
         const msg = std.mem.trim(u8, c.message, " \n\r\t");

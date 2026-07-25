@@ -33,11 +33,12 @@ pub const HookResult = enum {
     not_found,
 };
 
-pub fn runHook(allocator: std.mem.Allocator, repo_path: []const u8, hook_type: HookType, args: []const []const u8) !HookResult {
+pub fn runHook(allocator: std.mem.Allocator,
+    io: std.Io, repo_path: []const u8, hook_type: HookType, args: []const []const u8) !HookResult {
     const hook_path = try std.fs.path.join(allocator, &.{ repo_path, ".zev", "hooks", hook_type.toString() });
     defer allocator.free(hook_path);
 
-    std.Io.Dir.cwd().access(hook_path, .{}) catch |err| {
+    std.Io.Dir.cwd().access(io, hook_path, .{}) catch |err| {
         if (err == error.FileNotFound) return .not_found;
         return .not_found;
     };
@@ -51,15 +52,15 @@ pub fn runHook(allocator: std.mem.Allocator, repo_path: []const u8, hook_type: H
         try argv.append(allocator, arg);
     }
 
-    var child = std.process.Child.init(argv.items, allocator);
-    child.stdout_behavior = .Inherit;
-    child.stderr_behavior = .Inherit;
-
-    try child.spawn();
-    const term = try child.wait();
+    var child = try std.process.spawn(io, .{
+        .argv = argv.items,
+        .stdout = .inherit,
+        .stderr = .inherit,
+    });
+    const term = try child.wait(io);
 
     switch (term) {
-        .Exited => |code| {
+        .exited => |code| {
             if (code == 0) {
                 return .success;
             } else {

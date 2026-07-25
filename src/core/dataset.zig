@@ -244,7 +244,7 @@ pub fn datasetRegister(
         return;
     };
 
-    const now = (std.time.Instant.now() catch unreachable).timestamp.sec;
+    const now = @divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s);
     const format = detectFormat(source_path);
     const byte_size = getFileSize(source_path);
 
@@ -254,7 +254,7 @@ pub fn datasetRegister(
         break :blk try allocator.dupe(u8, fake);
     };
     defer allocator.free(src_content);
-    const src_cid_obj = cid_mod.CID.fromBytes(src_content);
+    const src_cid_obj = cid_mod.CID.fromBytes(io, src_content);
     const src_cid = try src_cid_obj.toString(allocator);
     defer allocator.free(src_cid);
 
@@ -294,13 +294,14 @@ pub fn datasetRegister(
 
 pub fn datasetSplit(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     dataset_name: []const u8,
     num_shards: usize,
     strategy_str: []const u8,
     seed: u64,
 ) !void {
-    const now = (std.time.Instant.now() catch unreachable).timestamp.sec;
+    const now = @divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s);
 
     const dir = try datasetDir(allocator, repo);
     defer allocator.free(dir);
@@ -328,9 +329,9 @@ pub fn datasetSplit(
         std.mem.eql(u8, ds.format, "text");
 
     if (is_line_based and ds.total_rows > 0) {
-        try splitLinesBased(allocator, repo, ds, num_shards, strategy_str, seed, now);
+        try splitLinesBased(allocator, io, repo, ds, num_shards, strategy_str, seed, now);
     } else {
-        try splitBytesBased(allocator, repo, ds, num_shards, strategy_str, now);
+        try splitBytesBased(allocator, io, repo, ds, num_shards, strategy_str, now);
     }
 
     ds.total_shards = num_shards;
@@ -361,6 +362,7 @@ pub fn datasetSplit(
 
 fn splitLinesBased(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     ds: DatasetRecord,
     num_shards: usize,
@@ -406,7 +408,7 @@ fn splitLinesBased(
 
         const shard_raw = try std.fmt.allocPrint(allocator, "shard:{s}:{d}:{d}:{d}:{d}", .{ ds.source_cid, si, row_start, row_end, seed });
         defer allocator.free(shard_raw);
-        const shard_cid_obj = cid_mod.CID.fromBytes(shard_raw);
+        const shard_cid_obj = cid_mod.CID.fromBytes(io, shard_raw);
         const shard_cid = try shard_cid_obj.toString(allocator);
         defer allocator.free(shard_cid);
 
@@ -440,6 +442,7 @@ fn splitLinesBased(
 
 fn splitBytesBased(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     ds: DatasetRecord,
     num_shards: usize,
@@ -463,7 +466,7 @@ fn splitBytesBased(
 
         const shard_raw = try std.fmt.allocPrint(allocator, "shard:{s}:{d}:{d}:{d}", .{ ds.source_cid, si, byte_start, byte_end });
         defer allocator.free(shard_raw);
-        const shard_cid_obj = cid_mod.CID.fromBytes(shard_raw);
+        const shard_cid_obj = cid_mod.CID.fromBytes(io, shard_raw);
         const shard_cid = try shard_cid_obj.toString(allocator);
         defer allocator.free(shard_cid);
 
@@ -492,12 +495,13 @@ fn splitBytesBased(
 
 pub fn datasetAssign(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     dataset_name: []const u8,
     shard_indices: []const usize,
     notes: []const u8,
 ) !void {
-    const now = (std.time.Instant.now() catch unreachable).timestamp.sec;
+    const now = @divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s);
 
     const head = repo.getHeadCommit() catch {
         std.debug.print("❌ No commits yet. Commit first.\n", .{});

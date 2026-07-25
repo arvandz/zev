@@ -38,11 +38,12 @@ pub const StorageManager = struct {
     config: StorageConfig,
     ipfs_client: ?IPFSClient,
 
-    pub fn init(allocator: std.mem.Allocator, config: StorageConfig) !StorageManager {
+    pub fn init(allocator: std.mem.Allocator,
+    io: std.Io, config: StorageConfig) !StorageManager {
         var ipfs_client: ?IPFSClient = null;
 
         if (config.ipfs_enabled) {
-            ipfs_client = IPFSClient.init(allocator, config.ipfs_url);
+            ipfs_client = IPFSClient.init(allocator, io, io, io, config.ipfs_url);
         }
 
         return StorageManager{
