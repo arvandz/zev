@@ -331,7 +331,7 @@ pub fn datasetSplit(
     if (is_line_based and ds.total_rows > 0) {
         try splitLinesBased(allocator, repo, ds, num_shards, strategy_str, seed, now);
     } else {
-        try splitBytesBased(allocator, io, repo, ds, num_shards, strategy_str, now);
+        try splitBytesBased(allocator, repo, ds, num_shards, strategy_str, now);
     }
 
     ds.total_shards = num_shards;
@@ -441,7 +441,6 @@ fn splitLinesBased(
 
 fn splitBytesBased(
     allocator: std.mem.Allocator,
-    io: std.Io,
     repo: *Repository,
     ds: DatasetRecord,
     num_shards: usize,

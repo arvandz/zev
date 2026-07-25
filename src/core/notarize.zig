@@ -618,8 +618,7 @@ pub fn notarizeCommit(
     std.debug.print("   Verify: zev notarize verify {s}\n", .{rec_id[0..16]});
 }
 
-pub fn notarizeVerify(allocator: std.mem.Allocator,
-    io: std.Io, repo: *Repository, rec_id_prefix: []const u8) !void {
+pub fn notarizeVerify(allocator: std.mem.Allocator, repo: *Repository, rec_id_prefix: []const u8) !void {
     const dir = try notarizeDir(allocator, repo);
     defer allocator.free(dir);
 

@@ -13,7 +13,6 @@ pub const RebaseResult = enum {
 
 fn collectCommits(
     allocator: std.mem.Allocator,
-    io: std.Io,
     store: *blob_mod.BlobStore,
     start: cid_mod.CID,
     base: cid_mod.CID,

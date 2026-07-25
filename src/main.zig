@@ -1718,7 +1718,7 @@ pub fn main(init: std.process.Init) !void {
                 std.debug.print("Usage: zev notarize verify <record-id-prefix>\n", .{});
                 return;
             }
-            try notarize_mod.notarizeVerify(allocator, io, &repo, args[3]);
+            try notarize_mod.notarizeVerify(allocator, &repo, args[3]);
         } else if (std.mem.eql(u8, sub, "list")) {
             try notarize_mod.notarizeList(allocator, &repo);
         } else if (std.mem.eql(u8, sub, "config")) {
