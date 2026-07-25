@@ -16,7 +16,7 @@ from pathlib import Path
 
 SRC = Path("src")
 
-FRAGMENT = re.compile(r"^(allocator|io)\s*,.*[;,{]\s*$")
+FRAGMENT = re.compile(r"^(allocator|io)\s*,")
 def is_complete_line(line):
     """A line is complete (self-contained) if its parens are balanced -
     regardless of whether it ends in ; , or { (all three are valid
