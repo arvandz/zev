@@ -255,7 +255,6 @@ pub fn datasetRegister(
     };
     defer allocator.free(src_content);
     const src_cid_obj = cid_mod.CID.fromBytes(src_content);
-io, src_content);
     const src_cid = try src_cid_obj.toString(allocator);
     defer allocator.free(src_cid);
 
@@ -410,7 +409,6 @@ fn splitLinesBased(
         const shard_raw = try std.fmt.allocPrint(allocator, "shard:{s}:{d}:{d}:{d}:{d}", .{ ds.source_cid, si, row_start, row_end, seed });
         defer allocator.free(shard_raw);
         const shard_cid_obj = cid_mod.CID.fromBytes(shard_raw);
-io, shard_raw);
         const shard_cid = try shard_cid_obj.toString(allocator);
         defer allocator.free(shard_cid);
 
@@ -469,7 +467,6 @@ fn splitBytesBased(
         const shard_raw = try std.fmt.allocPrint(allocator, "shard:{s}:{d}:{d}:{d}", .{ ds.source_cid, si, byte_start, byte_end });
         defer allocator.free(shard_raw);
         const shard_cid_obj = cid_mod.CID.fromBytes(shard_raw);
-io, shard_raw);
         const shard_cid = try shard_cid_obj.toString(allocator);
         defer allocator.free(shard_cid);
 

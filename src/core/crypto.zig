@@ -146,9 +146,7 @@ pub fn verify(io: std.Io,
     const pk_bytes = try b64Decode32(pubkey_b64);
 
     const sig = Ed25519.Signature.fromBytes(sig_bytes);
-io, sig_bytes);
     const pk = try Ed25519.PublicKey.fromBytes(pk_bytes);
-io, pk_bytes);
     try sig.verify(io, data, pk);
 }
 

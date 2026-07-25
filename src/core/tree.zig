@@ -93,7 +93,7 @@ pub const Tree = struct {
 
     pub fn deserialize(allocator: std.mem.Allocator,
     io: std.Io, data: []const u8) !Tree {
-        var tree_obj = Tree.init(allocator, io, io, io, );
+        var tree_obj = Tree.init(allocator);
         errdefer tree_obj.deinit();
 
         if (data.len == 0) {
@@ -118,11 +118,10 @@ pub const Tree = struct {
 test "tree serialization" {
     const allocator = std.testing.allocator;
 
-    var tree_obj = Tree.init(allocator, io, io, io, );
+    var tree_obj = Tree.init(allocator);
     defer tree_obj.deinit();
 
     const test_cid = cid.CID.fromBytes("test content");
-io, "test content");
     try tree_obj.addEntry("file.txt", test_cid, 100, 0o644);
 
     const serialized = try tree_obj.serialize();

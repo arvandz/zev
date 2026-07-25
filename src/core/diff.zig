@@ -173,7 +173,6 @@ pub fn diffUnstaged(allocator: std.mem.Allocator, io: std.Io, repo: *repository.
         defer allocator.free(working_content);
 
         const working_cid = cid.CID.fromBytes(working_content);
-io, working_content);
 
         if (!working_cid.equals(entry.cid)) {
 io, entry.cid)) {

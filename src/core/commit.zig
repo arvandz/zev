@@ -108,7 +108,6 @@ test "commit serialization" {
     const allocator = std.testing.allocator;
 
     const tree_cid = cid.CID.fromBytes("test tree");
-io, "test tree");
     const commit = Commit.init(io, tree_cid, null, "Test Author", "Initial commit");
 
     const serialized = try commit.serialize(allocator);

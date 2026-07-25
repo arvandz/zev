@@ -1356,7 +1356,6 @@ pub fn main(init: std.process.Init) !void {
             try context_mod.contextShow(allocator, &repo, args[3]);
         } else if (std.mem.eql(u8, sub, "blame")) {
             try context_mod.contextBlame(allocator, &repo);
-allocator, io, &repo);
         } else if (std.mem.eql(u8, sub, "stats")) {
             try context_mod.contextStats(allocator, io, &repo);
         } else if (std.mem.eql(u8, sub, "list")) {
@@ -2118,7 +2117,6 @@ allocator, io, &repo);
                 return;
             }
             try snapshot_mod.snapshotDiff(allocator, &repo, args[3], args[4]);
-allocator, io, &repo, args[3], args[4]);
         } else {
             std.debug.print("Unknown snapshot subcommand: {s}\n", .{sub});
         }

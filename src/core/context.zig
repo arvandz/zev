@@ -184,14 +184,12 @@ fn computeFileCid(allocator: std.mem.Allocator, io: std.Io, file_path: []const u
         return try allocator.dupe(u8, "unknown");
     defer allocator.free(content);
     const c = cid_mod.CID.fromBytes(content);
-io, content);
     return try c.toString(allocator);
 }
 
 fn computePromptHash(allocator: std.mem.Allocator,
     io: std.Io, prompt: []const u8) ![]u8 {
     const c = cid_mod.CID.fromBytes(prompt);
-io, prompt);
     return try c.toString(allocator);
 }
 
@@ -206,7 +204,6 @@ fn makeRecordId(allocator: std.mem.Allocator,
     const raw = try std.fmt.allocPrint(allocator, "ctx:{s}:{d}", .{ file_path, ts });
     defer allocator.free(raw);
     const c = cid_mod.CID.fromBytes(raw);
-io, raw);
     return try c.toString(allocator);
 }
 

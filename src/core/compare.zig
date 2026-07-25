@@ -210,10 +210,8 @@ io, eb.value_ptr.*)) {
     }
 
     var metrics_a = try readMetricsForHash(allocator, repo, hash_a);
-allocator, io, repo, hash_a);
     defer freeStrMap(allocator, &metrics_a);
     var metrics_b = try readMetricsForHash(allocator, repo, hash_b);
-allocator, io, repo, hash_b);
     defer freeStrMap(allocator, &metrics_b);
 
     if (metrics_a.count() > 0 or metrics_b.count() > 0) {
@@ -308,10 +306,8 @@ pub fn compareExperiments(allocator: std.mem.Allocator,
         const hash_b = std.mem.trim(u8, hash_b_raw, " \n\r\t");
 
         var metrics_a = try readMetricsForHash(allocator, repo, hash_a);
-allocator, io, repo, hash_a);
         defer freeStrMap(allocator, &metrics_a);
         var metrics_b = try readMetricsForHash(allocator, repo, hash_b);
-allocator, io, repo, hash_b);
         defer freeStrMap(allocator, &metrics_b);
 
         if (metrics_a.count() > 0 or metrics_b.count() > 0) {

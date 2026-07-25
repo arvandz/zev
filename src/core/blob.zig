@@ -113,6 +113,5 @@ test "blob store has" {
     try std.testing.expect(try store.has(content_id));
 
     const fake_cid = cid.CID.fromBytes("nonexistent");
-io, "nonexistent");
     try std.testing.expect(!try store.has(fake_cid));
 }

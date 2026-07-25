@@ -36,7 +36,6 @@ fn computeSnapshotId(allocator: std.mem.Allocator,
     const fingerprint = try std.fmt.allocPrint(allocator, "snapshot:{s}:{s}:{d}", .{ name, commit_hash, created_at });
     defer allocator.free(fingerprint);
     const content_cid = cid_mod.CID.fromBytes(fingerprint);
-io, fingerprint);
     return try content_cid.toString(allocator);
 }
 

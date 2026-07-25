@@ -419,7 +419,6 @@ fn doReproduce(
     const id_raw = try std.fmt.allocPrint(allocator, "repro:{s}:{d}", .{ commit_hash, now });
     defer allocator.free(id_raw);
     const id_cid = cid_mod.CID.fromBytes(id_raw);
-io, id_raw);
     const rec_id = try id_cid.toString(allocator);
     defer allocator.free(rec_id);
     const rec_id_short = rec_id[0..16];
@@ -549,7 +548,6 @@ io, id_raw);
 
     const output = output_buf[0..output_len];
     var repro_metrics = try parseMetricsFromOutput(allocator, output);
-allocator, io, output);
     defer freeMetricsMap(allocator, &repro_metrics);
 
     const metrics_out_path = try std.fs.path.join(allocator, &.{ work_dir, "metrics.txt" });
