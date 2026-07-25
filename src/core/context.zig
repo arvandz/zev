@@ -578,7 +578,6 @@ pub fn contextStats(
 
 pub fn contextQuery(
     allocator: std.mem.Allocator,
-    io: std.Io,
     repo: *Repository,
     model_filter: ?[]const u8,
     kind_filter: ?[]const u8,

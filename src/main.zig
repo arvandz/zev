@@ -1409,7 +1409,7 @@ pub fn main(init: std.process.Init) !void {
                     show_prompt = true;
                 }
             }
-            try context_mod.contextQuery(allocator, io, &repo, model_filter, kind_filter, show_prompt);
+            try context_mod.contextQuery(allocator, &repo, model_filter, kind_filter, show_prompt);
         } else {
             std.debug.print("Unknown context subcommand: {s}\n", .{sub});
         }
