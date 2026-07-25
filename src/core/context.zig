@@ -278,8 +278,7 @@ pub fn contextAdd(
     const commit_hash = try getHeadHash(allocator, repo);
     defer allocator.free(commit_hash);
 
-    const record_id = try     const record_id = try makeRecordId(allocator, file_path, now);
-allocator, io, file_path, now);
+    const record_id = try makeRecordId(allocator, file_path, now);
     defer allocator.free(record_id);
 
     const author_kind = parseKind(kind_str);
