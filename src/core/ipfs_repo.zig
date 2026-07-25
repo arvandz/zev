@@ -14,8 +14,7 @@ pub const IPFSRepo = struct {
 
         allocator: std.mem.Allocator,
 
-        pub fn init(allocator: std.mem.Allocator
-    io: std.Io,) Metadata {
+        pub fn init(allocator: std.mem.Allocator) Metadata {
             return .{
                 .version = "1.0",
                 .head_ref = "refs/heads/main",
@@ -240,7 +239,7 @@ pub const IPFSRepo = struct {
         const local_cid_str = try obj_cid.toString(allocator);
         try objects_map.put(local_cid_str, ipfs_cid);
 
-        if (commit_mod.Commit.deserialize(allocator, io, obj_data)) |commit_obj| {
+        if (commit_mod.Commit.deserialize(allocator, obj_data)) |commit_obj| {
             defer allocator.free(commit_obj.author);
             defer allocator.free(commit_obj.message);
 

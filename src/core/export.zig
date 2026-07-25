@@ -33,7 +33,8 @@ fn hexEncode(allocator: std.mem.Allocator, data: []const u8) ![]u8 {
 
 fn computeChecksum(allocator: std.mem.Allocator,
     io: std.Io, data: []const u8) ![]u8 {
-    const c = cid_mod.CID.fromBytes(io, data);
+    const c = cid_mod.CID.fromBytes(data);
+io, data);
     return try c.toString(allocator);
 }
 
@@ -215,7 +216,8 @@ pub fn exportRepo(
         written_files += 1;
     }
 
-    const manifest_cid = cid_mod.CID.fromBytes(io, manifest_hash.items);
+    const manifest_cid = cid_mod.CID.fromBytes(manifest_hash.items);
+io, manifest_hash.items);
     const manifest_str = try manifest_cid.toString(allocator);
     defer allocator.free(manifest_str);
 
@@ -310,7 +312,8 @@ pub fn importArchive(
             const stored_manifest = content[pos .. pos + mnl];
             pos += mnl + 1;
 
-            const computed = cid_mod.CID.fromBytes(io, manifest_acc.items);
+            const computed = cid_mod.CID.fromBytes(manifest_acc.items);
+io, manifest_acc.items);
             const computed_str = try computed.toString(allocator);
             defer allocator.free(computed_str);
 

@@ -50,8 +50,7 @@ pub const MergeNode = struct {
 const MetricMap = struct {
     entries: std.StringHashMap(f64),
 
-    pub fn init(allocator: std.mem.Allocator
-    io: std.Io,) MetricMap {
+    pub fn init(allocator: std.mem.Allocator) MetricMap {
         return .{ .entries = std.StringHashMap(f64).init(allocator) };
     }
 

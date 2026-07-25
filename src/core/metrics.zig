@@ -132,7 +132,7 @@ pub fn listMetrics(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) 
 
         const cdata = repo.store.get(io, current) catch break;
         defer allocator.free(cdata);
-        const commit = commit_mod.Commit.deserialize(allocator, io, cdata) catch break;
+        const commit = commit_mod.Commit.deserialize(allocator, cdata) catch break;
         defer allocator.free(commit.author);
         defer allocator.free(commit.message);
 

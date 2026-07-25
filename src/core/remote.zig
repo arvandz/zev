@@ -561,7 +561,7 @@ fn copyCommitHistory(allocator: std.mem.Allocator, io: std.Io, from_repo: *Repos
 
         _ = try to_repo.store.put(io, data);
 
-        const commit_obj = commit.Commit.deserialize(allocator, io, data) catch continue;
+        const commit_obj = commit.Commit.deserialize(allocator, data) catch continue;
         defer allocator.free(commit_obj.author);
         defer allocator.free(commit_obj.message);
 

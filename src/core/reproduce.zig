@@ -304,7 +304,7 @@ fn checkoutCommit(
 
     const commit_data = try repo.store.get(io, commit_cid);
     defer allocator.free(commit_data);
-    const c = try commit_mod.Commit.deserialize(allocator, io, commit_data);
+    const c = try commit_mod.Commit.deserialize(allocator, commit_data);
     defer allocator.free(c.author);
     defer allocator.free(c.message);
 
@@ -331,7 +331,6 @@ fn checkoutCommit(
 
 fn parseMetricsFromOutput(
     allocator: std.mem.Allocator,
-    io: std.Io,
     output: []const u8,
 ) !std.StringHashMap(f64) {
     var map = std.StringHashMap(f64).init(allocator);
@@ -419,7 +418,8 @@ fn doReproduce(
 
     const id_raw = try std.fmt.allocPrint(allocator, "repro:{s}:{d}", .{ commit_hash, now });
     defer allocator.free(id_raw);
-    const id_cid = cid_mod.CID.fromBytes(io, id_raw);
+    const id_cid = cid_mod.CID.fromBytes(id_raw);
+io, id_raw);
     const rec_id = try id_cid.toString(allocator);
     defer allocator.free(rec_id);
     const rec_id_short = rec_id[0..16];
@@ -548,7 +548,8 @@ fn doReproduce(
     std.debug.print("   Completed in {d}ms, exit code: {d}\n\n", .{ elapsed_ms, exit_code });
 
     const output = output_buf[0..output_len];
-    var repro_metrics = try parseMetricsFromOutput(allocator, io, output);
+    var repro_metrics = try parseMetricsFromOutput(allocator, output);
+allocator, io, output);
     defer freeMetricsMap(allocator, &repro_metrics);
 
     const metrics_out_path = try std.fs.path.join(allocator, &.{ work_dir, "metrics.txt" });

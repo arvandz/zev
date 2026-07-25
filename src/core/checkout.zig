@@ -54,7 +54,7 @@ pub fn checkoutCommit(allocator: std.mem.Allocator, io: std.Io, repo: *Repositor
     const commit_data = try repo.store.get(io, commit_cid);
     defer allocator.free(commit_data);
 
-    const commit = try commit_mod.Commit.deserialize(allocator, io, commit_data);
+    const commit = try commit_mod.Commit.deserialize(allocator, commit_data);
     defer allocator.free(commit.author);
     defer allocator.free(commit.message);
 

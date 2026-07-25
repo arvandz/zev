@@ -49,8 +49,7 @@ pub const IgnoreList = struct {
         return list;
     }
 
-    pub fn loadDefault(allocator: std.mem.Allocator
-    io: std.Io,) !IgnoreList {
+    pub fn loadDefault(allocator: std.mem.Allocator) !IgnoreList {
         var list = IgnoreList.init(allocator, io, io, io, );
         errdefer list.deinit();
         try list.patterns.append(allocator, try allocator.dupe(u8, ".zev"));

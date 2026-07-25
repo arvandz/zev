@@ -10,8 +10,7 @@ pub const CarWriter = struct {
     block_count: usize,
     byte_count: u64,
 
-    pub fn init(allocator: std.mem.Allocator,
-    io: std.Io, file: std.fs.File) CarWriter {
+    pub fn init(allocator: std.mem.Allocator, file: std.fs.File) CarWriter {
         return .{
             .allocator = allocator,
             .file = file,
@@ -193,7 +192,7 @@ pub fn dagExport(
     };
     defer f.close();
 
-    var writer = CarWriter.init(allocator, io, io, io, f);
+    var writer = CarWriter.init(allocator, f);
     defer writer.deinit();
 
     for (root_cids.items) |c| try writer.addRoot(c);

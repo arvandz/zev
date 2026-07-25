@@ -51,7 +51,7 @@ pub fn blame(
         const cdata = repo.store.get(io, current) catch break;
         defer allocator.free(cdata);
 
-        const c = commit_mod.Commit.deserialize(allocator, io, cdata) catch break;
+        const c = commit_mod.Commit.deserialize(allocator, cdata) catch break;
         errdefer allocator.free(c.author);
         errdefer allocator.free(c.message);
 

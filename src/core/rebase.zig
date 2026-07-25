@@ -22,12 +22,13 @@ fn collectCommits(
     var current = start;
 
     while (true) {
-        if (current.equals(io, base)) break;
+        if (current.        if (current.equals(base)) break;
+io, base)) break;
 
         const data = store.get(current) catch break;
         defer allocator.free(data);
 
-        const c = commit_mod.Commit.deserialize(allocator, io, data) catch break;
+        const c = commit_mod.Commit.deserialize(allocator, data) catch break;
         defer allocator.free(c.author);
         defer allocator.free(c.message);
 
@@ -58,7 +59,7 @@ fn findCommonAncestor(
         try a_ancestors.put(current.hash, {});
         const data = store.get(current) catch break;
         defer allocator.free(data);
-        const c = commit_mod.Commit.deserialize(allocator, io, data) catch break;
+        const c = commit_mod.Commit.deserialize(allocator, data) catch break;
         defer allocator.free(c.author);
         defer allocator.free(c.message);
         if (c.parent_cid) |parent| {
@@ -72,7 +73,7 @@ fn findCommonAncestor(
         if (a_ancestors.contains(current.hash)) return current;
         const data = store.get(current) catch break;
         defer allocator.free(data);
-        const c = commit_mod.Commit.deserialize(allocator, io, data) catch break;
+        const c = commit_mod.Commit.deserialize(allocator, data) catch break;
         defer allocator.free(c.author);
         defer allocator.free(c.message);
         if (c.parent_cid) |parent| {
@@ -93,7 +94,7 @@ fn replayCommit(
     const data = try repo.store.get(io, commit_cid);
     defer allocator.free(data);
 
-    const c = try commit_mod.Commit.deserialize(allocator, io, data);
+    const c = try commit_mod.Commit.deserialize(allocator, data);
     defer allocator.free(c.author);
     defer allocator.free(c.message);
 
@@ -162,7 +163,8 @@ pub fn rebase(
     }
     const onto_head = cid_mod.CID{ .hash = onto_hash };
 
-    if (current_head.equals(io, onto_head)) {
+    if (current_head.equals(onto_head)) {
+io, onto_head)) {
         std.debug.print("Already up to date.\n", .{});
         return .nothing_to_rebase;
     }
@@ -189,7 +191,7 @@ pub fn rebase(
     for (commits_to_replay.items) |commit_cid| {
         const cdata = try repo.store.get(io, commit_cid);
         defer allocator.free(cdata);
-        const c = try commit_mod.Commit.deserialize(allocator, io, cdata);
+        const c = try commit_mod.Commit.deserialize(allocator, cdata);
         defer allocator.free(c.author);
         defer allocator.free(c.message);
         const msg = std.mem.trim(u8, c.message, " \n\r\t");

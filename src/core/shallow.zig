@@ -22,7 +22,7 @@ pub fn shallowCopy(
         defer allocator.free(commit_data);
         _ = try to_repo.store.put(io, commit_data);
 
-        const commit = try commit_mod.Commit.deserialize(allocator, io, commit_data);
+        const commit = try commit_mod.Commit.deserialize(allocator, commit_data);
         defer allocator.free(commit.author);
         defer allocator.free(commit.message);
 

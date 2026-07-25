@@ -11,8 +11,7 @@ fn readFile(allocator: std.mem.Allocator, io: std.Io, path: []const u8) !?[]u8 {
     };
 }
 
-fn readMetricsForHash(allocator: std.mem.Allocator,
-    io: std.Io, repo: *Repository, hash: []const u8) !std.StringHashMap([]u8) {
+fn readMetricsForHash(allocator: std.mem.Allocator, repo: *Repository, hash: []const u8) !std.StringHashMap([]u8) {
     var map = std.StringHashMap([]u8).init(allocator);
     const path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "metrics", hash });
     defer allocator.free(path);
@@ -134,10 +133,10 @@ pub fn compareCommits(allocator: std.mem.Allocator, io: std.Io, repo: *Repositor
     };
     defer allocator.free(data_b);
 
-    const ca = try commit_mod.Commit.deserialize(allocator, io, data_a);
+    const ca = try commit_mod.Commit.deserialize(allocator, data_a);
     defer allocator.free(ca.author);
     defer allocator.free(ca.message);
-    const cb = try commit_mod.Commit.deserialize(allocator, io, data_b);
+    const cb = try commit_mod.Commit.deserialize(allocator, data_b);
     defer allocator.free(cb.author);
     defer allocator.free(cb.message);
 
@@ -166,7 +165,8 @@ pub fn compareCommits(allocator: std.mem.Allocator, io: std.Io, repo: *Repositor
     var it_b = files_b.iterator();
     while (it_b.next()) |eb| {
         if (files_a.get(eb.key_ptr.*)) |cid_in_a| {
-            if (!cid_in_a.equals(io, eb.value_ptr.*)) modified += 1;
+            if (!cid_in_a.            if (!cid_in_a.equals(eb.value_ptr.*)) modified += 1;
+io, eb.value_ptr.*)) modified += 1;
         } else {
             added += 1;
         }
@@ -199,7 +199,8 @@ pub fn compareCommits(allocator: std.mem.Allocator, io: std.Io, repo: *Repositor
         var it4 = files_b.iterator();
         while (it4.next()) |eb| {
             if (files_a.get(eb.key_ptr.*)) |cid_in_a| {
-                if (!cid_in_a.equals(io, eb.value_ptr.*)) {
+                if (!cid_in_a.                if (!cid_in_a.equals(eb.value_ptr.*)) {
+io, eb.value_ptr.*)) {
                     std.debug.print("   ~ {s}\n", .{eb.key_ptr.*});
                 }
             }
@@ -208,9 +209,11 @@ pub fn compareCommits(allocator: std.mem.Allocator, io: std.Io, repo: *Repositor
         std.debug.print("   (identical file trees)\n", .{});
     }
 
-    var metrics_a = try readMetricsForHash(allocator, io, repo, hash_a);
+    var metrics_a = try readMetricsForHash(allocator, repo, hash_a);
+allocator, io, repo, hash_a);
     defer freeStrMap(allocator, &metrics_a);
-    var metrics_b = try readMetricsForHash(allocator, io, repo, hash_b);
+    var metrics_b = try readMetricsForHash(allocator, repo, hash_b);
+allocator, io, repo, hash_b);
     defer freeStrMap(allocator, &metrics_b);
 
     if (metrics_a.count() > 0 or metrics_b.count() > 0) {
@@ -304,9 +307,11 @@ pub fn compareExperiments(allocator: std.mem.Allocator,
         const hash_a = std.mem.trim(u8, hash_a_raw, " \n\r\t");
         const hash_b = std.mem.trim(u8, hash_b_raw, " \n\r\t");
 
-        var metrics_a = try readMetricsForHash(allocator, io, repo, hash_a);
+        var metrics_a = try readMetricsForHash(allocator, repo, hash_a);
+allocator, io, repo, hash_a);
         defer freeStrMap(allocator, &metrics_a);
-        var metrics_b = try readMetricsForHash(allocator, io, repo, hash_b);
+        var metrics_b = try readMetricsForHash(allocator, repo, hash_b);
+allocator, io, repo, hash_b);
         defer freeStrMap(allocator, &metrics_b);
 
         if (metrics_a.count() > 0 or metrics_b.count() > 0) {
@@ -499,7 +504,7 @@ pub fn compareBranches(allocator: std.mem.Allocator, io: std.Io, repo: *Reposito
             if (depth > 1000) break;
             const data = repo.store.get(io, cur) catch break;
             defer allocator.free(data);
-            const c = commit_mod.Commit.deserialize(allocator, io, data) catch break;
+            const c = commit_mod.Commit.deserialize(allocator, data) catch break;
             defer allocator.free(c.author);
             defer allocator.free(c.message);
             current_opt = c.parent_cid;
@@ -526,7 +531,7 @@ pub fn compareBranches(allocator: std.mem.Allocator, io: std.Io, repo: *Reposito
             if (depth > 1000) break;
             const data = repo.store.get(io, cur) catch break;
             defer allocator.free(data);
-            const c = commit_mod.Commit.deserialize(allocator, io, data) catch break;
+            const c = commit_mod.Commit.deserialize(allocator, data) catch break;
             defer allocator.free(c.author);
             defer allocator.free(c.message);
             current_opt = c.parent_cid;
@@ -568,7 +573,7 @@ pub fn compareBranches(allocator: std.mem.Allocator, io: std.Io, repo: *Reposito
         defer allocator.free(hs);
         const data = repo.store.get(io, cur) catch break;
         defer allocator.free(data);
-        const c = commit_mod.Commit.deserialize(allocator, io, data) catch break;
+        const c = commit_mod.Commit.deserialize(allocator, data) catch break;
         defer allocator.free(c.author);
         defer allocator.free(c.message);
         const msg = std.mem.trim(u8, c.message, " \n\r\t");

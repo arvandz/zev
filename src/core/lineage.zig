@@ -193,7 +193,8 @@ pub fn lineageAdd(
         };
         defer allocator.free(file_data);
 
-        const content_cid = cid_mod.CID.fromBytes(io, file_data);
+        const content_cid = cid_mod.CID.fromBytes(file_data);
+io, file_data);
         allocator.free(file_cid);
         file_cid = try content_cid.toString(allocator);
 

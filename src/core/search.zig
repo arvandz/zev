@@ -90,7 +90,7 @@ pub fn searchCommits(allocator: std.mem.Allocator, io: std.Io, repo: *Repository
 
         const data = repo.store.get(io, current) catch break;
         defer allocator.free(data);
-        const commit = commit_mod.Commit.deserialize(allocator, io, data) catch break;
+        const commit = commit_mod.Commit.deserialize(allocator, data) catch break;
         defer allocator.free(commit.author);
         defer allocator.free(commit.message);
 
@@ -258,7 +258,7 @@ pub fn searchMetrics(allocator: std.mem.Allocator, io: std.Io, repo: *Repository
                     break;
                 };
                 defer allocator.free(data);
-                const commit = commit_mod.Commit.deserialize(allocator, io, data) catch break;
+                const commit = commit_mod.Commit.deserialize(allocator, data) catch break;
                 defer allocator.free(commit.author);
                 defer allocator.free(commit.message);
 
@@ -281,7 +281,7 @@ pub fn searchMetrics(allocator: std.mem.Allocator, io: std.Io, repo: *Repository
 
         const data = repo.store.get(io, current) catch break;
         defer allocator.free(data);
-        const commit = commit_mod.Commit.deserialize(allocator, io, data) catch break;
+        const commit = commit_mod.Commit.deserialize(allocator, data) catch break;
         defer allocator.free(commit.author);
         defer allocator.free(commit.message);
         current_opt = commit.parent_cid;

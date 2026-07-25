@@ -183,13 +183,15 @@ fn computeFileCid(allocator: std.mem.Allocator, io: std.Io, file_path: []const u
     const content = std.Io.Dir.cwd().readFileAlloc(io, file_path, allocator, .limited(64 * 1024 * 1024)) catch
         return try allocator.dupe(u8, "unknown");
     defer allocator.free(content);
-    const c = cid_mod.CID.fromBytes(io, content);
+    const c = cid_mod.CID.fromBytes(content);
+io, content);
     return try c.toString(allocator);
 }
 
 fn computePromptHash(allocator: std.mem.Allocator,
     io: std.Io, prompt: []const u8) ![]u8 {
-    const c = cid_mod.CID.fromBytes(io, prompt);
+    const c = cid_mod.CID.fromBytes(prompt);
+io, prompt);
     return try c.toString(allocator);
 }
 
@@ -203,7 +205,8 @@ fn makeRecordId(allocator: std.mem.Allocator,
     io: std.Io, file_path: []const u8, ts: i64) ![]u8 {
     const raw = try std.fmt.allocPrint(allocator, "ctx:{s}:{d}", .{ file_path, ts });
     defer allocator.free(raw);
-    const c = cid_mod.CID.fromBytes(io, raw);
+    const c = cid_mod.CID.fromBytes(raw);
+io, raw);
     return try c.toString(allocator);
 }
 
@@ -394,7 +397,6 @@ pub fn contextShow(
 
 pub fn contextBlame(
     allocator: std.mem.Allocator,
-    io: std.Io,
     repo: *Repository,
 ) !void {
     const dir_path = try contextDir(allocator, repo);

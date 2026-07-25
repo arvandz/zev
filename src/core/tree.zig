@@ -104,7 +104,7 @@ pub const Tree = struct {
         while (lines.next()) |line| {
             if (line.len == 0) continue;
 
-            const entry = FileEntry.deserialize(allocator, io, line) catch |err| {
+            const entry = FileEntry.deserialize(allocator, line) catch |err| {
                 std.debug.print("Failed to deserialize line: '{s}'\n", .{line});
                 return err;
             };
@@ -121,7 +121,8 @@ test "tree serialization" {
     var tree_obj = Tree.init(allocator, io, io, io, );
     defer tree_obj.deinit();
 
-    const test_cid = cid.CID.fromBytes(io, "test content");
+    const test_cid = cid.CID.fromBytes("test content");
+io, "test content");
     try tree_obj.addEntry("file.txt", test_cid, 100, 0o644);
 
     const serialized = try tree_obj.serialize();

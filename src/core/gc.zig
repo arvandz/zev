@@ -18,7 +18,7 @@ fn collectReachable(
     const data = store.get(start_cid) catch return;
     defer allocator.free(data);
 
-    if (commit_mod.Commit.deserialize(allocator, io, data)) |commit| {
+    if (commit_mod.Commit.deserialize(allocator, data)) |commit| {
         defer allocator.free(commit.author);
         defer allocator.free(commit.message);
 

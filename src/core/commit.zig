@@ -44,8 +44,7 @@ pub const Commit = struct {
         return buffer.toOwnedSlice(allocator);
     }
 
-    pub fn deserialize(allocator: std.mem.Allocator,
-    io: std.Io, data: []const u8) !Commit {
+    pub fn deserialize(allocator: std.mem.Allocator, data: []const u8) !Commit {
         var lines = std.mem.splitSequence(u8, data, "\n");
 
         var tree_cid_opt: ?cid.CID = null;
@@ -108,7 +107,8 @@ pub const Commit = struct {
 test "commit serialization" {
     const allocator = std.testing.allocator;
 
-    const tree_cid = cid.CID.fromBytes(io, "test tree");
+    const tree_cid = cid.CID.fromBytes("test tree");
+io, "test tree");
     const commit = Commit.init(io, tree_cid, null, "Test Author", "Initial commit");
 
     const serialized = try commit.serialize(allocator);

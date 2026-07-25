@@ -196,7 +196,7 @@ pub fn main(init: std.process.Init) !void {
             return;
         }
         const data = args[2];
-        const content_id = cid.CID.fromBytes(io, data);
+        const content_id = cid.CID.fromBytes(data);
         const hash_str = try content_id.toString(allocator);
         defer allocator.free(hash_str);
         std.debug.print("CID: {s}\n", .{hash_str});
@@ -1355,7 +1355,8 @@ pub fn main(init: std.process.Init) !void {
             }
             try context_mod.contextShow(allocator, &repo, args[3]);
         } else if (std.mem.eql(u8, sub, "blame")) {
-            try context_mod.contextBlame(allocator, io, &repo);
+            try context_mod.contextBlame(allocator, &repo);
+allocator, io, &repo);
         } else if (std.mem.eql(u8, sub, "stats")) {
             try context_mod.contextStats(allocator, io, &repo);
         } else if (std.mem.eql(u8, sub, "list")) {
@@ -2116,7 +2117,8 @@ pub fn main(init: std.process.Init) !void {
                 std.debug.print("Usage: zev snapshot diff <name-a> <name-b>\n", .{});
                 return;
             }
-            try snapshot_mod.snapshotDiff(allocator, io, &repo, args[3], args[4]);
+            try snapshot_mod.snapshotDiff(allocator, &repo, args[3], args[4]);
+allocator, io, &repo, args[3], args[4]);
         } else {
             std.debug.print("Unknown snapshot subcommand: {s}\n", .{sub});
         }

@@ -296,7 +296,7 @@ pub fn publishCommit(
 
     const commit_data = try repo.store.get(io, head);
     defer allocator.free(commit_data);
-    const commit = try commit_mod.Commit.deserialize(allocator, io, commit_data);
+    const commit = try commit_mod.Commit.deserialize(allocator, commit_data);
     defer allocator.free(commit.author);
     defer allocator.free(commit.message);
 

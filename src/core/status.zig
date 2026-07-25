@@ -22,7 +22,8 @@ pub fn showStatus(allocator: std.mem.Allocator, io: std.Io, repo: *repository.Re
         if (is_staged) continue;
         const file_data = std.Io.Dir.cwd().readFileAlloc(io, entry.name, allocator, .unlimited) catch continue;
         defer allocator.free(file_data);
-        const file_cid = cid.CID.fromBytes(io, file_data);
+        const file_cid = cid.CID.fromBytes(file_data);
+io, file_data);
         const in_store = try repo.store.has(io, file_cid);
 
         if (!in_store) {

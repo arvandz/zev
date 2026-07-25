@@ -14,7 +14,7 @@ pub fn printLog(allocator: std.mem.Allocator,
         const commit_data = try store.get(commit_cid);
         defer allocator.free(commit_data);
 
-        const current_commit = try commit.Commit.deserialize(allocator, io, commit_data);
+        const current_commit = try commit.Commit.deserialize(allocator, commit_data);
         defer allocator.free(current_commit.author);
         defer allocator.free(current_commit.message);
 

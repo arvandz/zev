@@ -8,7 +8,8 @@ pub const Blob = struct {
 
     pub fn init(io: std.Io, data: []const u8) Blob {
         return Blob{
-            .cid = cid.CID.fromBytes(io, data),
+            .cid = cid.CID.fromBytes(data),
+io, data),
             .data = data,
             .size = data.len,
         };
@@ -111,6 +112,7 @@ test "blob store has" {
 
     try std.testing.expect(try store.has(content_id));
 
-    const fake_cid = cid.CID.fromBytes(io, "nonexistent");
+    const fake_cid = cid.CID.fromBytes("nonexistent");
+io, "nonexistent");
     try std.testing.expect(!try store.has(fake_cid));
 }
