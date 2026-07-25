@@ -35,7 +35,7 @@ pub const Repository = struct {
         try head_writer.interface.writeAll("ref: refs/heads/main\n");
         try head_writer.flush();
 
-        var repo_config = config_mod.Config.init(allocator, io, io, io, );
+        var repo_config = config_mod.Config.init(allocator);
         if (use_ipfs) {
             repo_config.storage_backend = .hybrid;
             repo_config.ipfs_enabled = true;
@@ -50,7 +50,7 @@ pub const Repository = struct {
                 .ipfs_url = repo_config.ipfs_url,
                 .auto_pin = repo_config.ipfs_auto_pin,
             };
-            storage_manager = try storage_mod.StorageManager.init(allocator, io, io, io, storage_config);
+            storage_manager = try storage_mod.StorageManager.init(allocator, io, storage_config);
         }
 
         const store_path = try allocator.dupe(u8, objects_path);
@@ -59,7 +59,7 @@ pub const Repository = struct {
         return Repository{
             .allocator = allocator,
             .path = try allocator.dupe(u8, path),
-            .store = try blob.BlobStore.init(allocator, io, io, io, io, store_path),
+            .store = try blob.BlobStore.init(allocator, io, store_path),
             .index = index.Index.init(allocator, io, io, io, index_path),
             .config = repo_config,
             .storage = storage_manager,
@@ -81,7 +81,7 @@ pub const Repository = struct {
                 .ipfs_url = repo_config.ipfs_url,
                 .auto_pin = repo_config.ipfs_auto_pin,
             };
-            storage_manager = try storage_mod.StorageManager.init(allocator, io, io, io, storage_config);
+            storage_manager = try storage_mod.StorageManager.init(allocator, io, storage_config);
         }
 
         var repo = Repository{
