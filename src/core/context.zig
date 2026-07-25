@@ -271,7 +271,7 @@ pub fn contextAdd(
 
     const prompt_text = prompt orelse "";
     const prompt_hash = if (prompt_text.len > 0)
-        try computePromptHash(allocator, prompt_text);
+        try computePromptHash(allocator, prompt_text)
     else
         try allocator.dupe(u8, "none");
     defer allocator.free(prompt_hash);
