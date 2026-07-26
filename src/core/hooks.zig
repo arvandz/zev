@@ -84,7 +84,7 @@ pub fn installHook(allocator: std.mem.Allocator, repo_path: []const u8, hook_typ
     defer allocator.free(hook_path);
 
     const file = try std.Io.Dir.cwd().createFile(hook_path, .{});
-    defer file.close();
+    defer file.close(io);
     try file.writeAll(script_content);
 
     try file.chmod(0o755);
@@ -102,7 +102,7 @@ pub fn listHooks(allocator: std.mem.Allocator, repo_path: []const u8) !void {
         }
         return err;
     };
-    defer dir.close();
+    defer dir.close(io);
 
     var found_any = false;
     var it = dir.iterate();
@@ -112,8 +112,8 @@ pub fn listHooks(allocator: std.mem.Allocator, repo_path: []const u8) !void {
             const hook_path = try std.fs.path.join(allocator, &.{ hooks_dir, entry.name });
             defer allocator.free(hook_path);
             const file = try std.Io.Dir.cwd().openFile(hook_path, .{});
-            defer file.close();
-            const stat = try file.stat();
+            defer file.close(io);
+            const stat = try file.stat(io);
             const executable = (stat.permissions.toMode() & 0o111) != 0;
             std.debug.print("  {s} {s}\n", .{ entry.name, if (executable) "[executable]" else "[not executable]" });
         }
@@ -140,6 +140,6 @@ pub fn initHooks(allocator: std.mem.Allocator, repo_path: []const u8) !void {
     defer allocator.free(sample_path);
 
     const sample_file = try std.Io.Dir.cwd().createFile(sample_path, .{});
-    defer sample_file.close();
+    defer sample_file.close(io);
     try sample_file.writeAll("#!/bin/sh\n# Sample hook\n");
 }

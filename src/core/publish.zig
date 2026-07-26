@@ -223,7 +223,7 @@ fn httpPost(allocator: std.mem.Allocator,
     const tmp_path = "/tmp/zev_publish_payload.json";
     const tmp_file = try std.Io.Dir.cwd().createFile(tmp_path, .{});
     try tmp_file.writeAll(payload);
-    tmp_file.close();
+    tmp_file.close(io);
 
     const auth_header = if (token.len > 0)
         try std.fmt.allocPrint(allocator, "Authorization: Bearer {s}", .{token})
@@ -243,7 +243,7 @@ fn httpPost(allocator: std.mem.Allocator,
     }
     try argv.append(allocator, endpoint);
 
-    var child = std.process.Child.init(io, argv.items, allocator);
+    var child = std.process.Child.init(argv.items, allocator);
     child.stdout_behavior = .Pipe;
     child.stderr_behavior = .Pipe;
     try child.spawn();
@@ -465,7 +465,7 @@ pub fn publishSnapshot(
         std.debug.print("Error: No snapshots found\n", .{});
         return;
     };
-    defer snap_dir.close();
+    defer snap_dir.close(io);
 
     var found_id: ?[]u8 = null;
     var it = snap_dir.iterate();
@@ -636,7 +636,7 @@ pub fn publishConfig(
     }
 
     const file = try std.Io.Dir.cwd().createFile(config_path, .{});
-    defer file.close();
+    defer file.close(io);
     try file.writeAll(lines.items);
 
     std.debug.print("✅ Publish config updated:\n", .{});

@@ -43,7 +43,7 @@ fn collectDir(
     files: *std.ArrayList(FileEntry),
 ) !void {
     var dir = std.Io.Dir.cwd().openDir(base_path, .{ .iterate = true }) catch return;
-    defer dir.close();
+    defer dir.close(io);
 
     var it = dir.iterate();
     while (try it.next()) |entry| {
@@ -146,7 +146,7 @@ pub fn exportRepo(
             std.debug.print("   No snapshots found\n", .{});
             return;
         };
-        defer sd.close();
+        defer sd.close(io);
         var sit = sd.iterate();
         while (try sit.next()) |entry| {
             if (entry.kind != .file or std.mem.endsWith(u8, entry.name, ".name")) continue;
@@ -180,7 +180,7 @@ pub fn exportRepo(
     std.debug.print("   Writing {d} file(s) to {s}\n\n", .{ export_files.len, output_path });
 
     const out_f = try std.Io.Dir.cwd().createFile(output_path, .{});
-    defer out_f.close();
+    defer out_f.close(io);
 
     var manifest_hash: std.ArrayList(u8) = .empty;
     defer manifest_hash.deinit(allocator);
@@ -378,7 +378,7 @@ pub fn importArchive(
             skipped += 1;
             continue;
         };
-        defer wf.close();
+        defer wf.close(io);
         try wf.writeAll(file_content);
         std.debug.print("   ✅ {s}\n", .{rel_path});
         restored += 1;
@@ -389,7 +389,7 @@ pub fn importArchive(
         defer allocator.free(head_path);
         std.Io.Dir.cwd().access(head_path, .{}) catch {
             const hf = try std.Io.Dir.cwd().createFile(head_path, .{});
-            defer hf.close();
+            defer hf.close(io);
             try hf.writeAll("ref: refs/heads/main\n");
         };
 

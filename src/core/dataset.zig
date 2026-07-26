@@ -85,7 +85,7 @@ fn saveDatasetRecord(
     try out.appendSlice(allocator, s);
 
     const f = try std.Io.Dir.cwd().createFile(path, .{});
-    defer f.close();
+    defer f.close(io);
     try f.writeAll(out.items);
 }
 
@@ -170,7 +170,7 @@ fn saveShardRecord(
     defer allocator.free(s);
 
     const f = try std.Io.Dir.cwd().createFile(path, .{});
-    defer f.close();
+    defer f.close(io);
     try f.writeAll(s);
 }
 
@@ -198,7 +198,7 @@ fn saveAssignment(
     }
 
     const f = try std.Io.Dir.cwd().createFile(path, .{});
-    defer f.close();
+    defer f.close(io);
     try f.writeAll(out.items);
 }
 
@@ -555,7 +555,7 @@ pub fn datasetLineage(
         std.debug.print("   Assign shards: zev dataset assign {s} --shards 0,1,2\n\n", .{dataset_name});
         return;
     };
-    defer dir.close();
+    defer dir.close(io);
 
     std.debug.print("   {s:<12} {s:<30} {s}\n", .{ "Commit", "Shards", "Notes" });
     const divider60 = comptime blk: {
@@ -636,7 +636,7 @@ pub fn datasetImpact(
         std.debug.print("   No assignments found for dataset '{s}'.\n\n", .{dataset_name});
         return;
     };
-    defer dir.close();
+    defer dir.close(io);
 
     var affected: usize = 0;
     var total: usize = 0;
@@ -693,7 +693,7 @@ pub fn datasetList(allocator: std.mem.Allocator, repo: *Repository) !void {
         std.debug.print("Register: zev dataset register <path> --name <name>\n", .{});
         return;
     };
-    defer dir.close();
+    defer dir.close(io);
 
     std.debug.print("📂 Registered Datasets:\n\n", .{});
     var count: usize = 0;

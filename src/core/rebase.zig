@@ -148,9 +148,11 @@ pub fn rebase(
         std.debug.print("Error: Branch '{s}' not found\n", .{onto_branch});
         return .nothing_to_rebase;
     };
-    defer onto_ref_file.close();
+    defer onto_ref_file.close(io);
     var onto_buf: [128]u8 = undefined;
-    const onto_n = try onto_ref_file.read(&onto_buf);
+    var onto_ref_file_scratch: [4096]u8 = undefined;
+    var onto_ref_file_reader = onto_ref_file.reader(io, &onto_ref_file_scratch);
+    const onto_n = try onto_ref_file_reader.interface.readSliceShort(&onto_buf);
     const onto_hash_str = std.mem.trim(u8, onto_buf[0..onto_n], " \n\r\t");
     var onto_hash: [32]u8 = undefined;
     for (0..32) |idx| {
@@ -206,10 +208,12 @@ pub fn rebase(
     defer allocator.free(head_path);
 
     const head_file = try std.Io.Dir.cwd().openFile(head_path, .{});
-    defer head_file.close();
+    defer head_file.close(io);
 
     var buf: [256]u8 = undefined;
-    const n = try head_file.read(&buf);
+    var head_file_scratch: [4096]u8 = undefined;
+    var head_file_reader = head_file.reader(io, &head_file_scratch);
+    const n = try head_file_reader.interface.readSliceShort(&buf);
     const head_content = std.mem.trim(u8, buf[0..n], " \n\r\t");
 
     if (std.mem.startsWith(u8, head_content, "ref: ")) {
@@ -218,7 +222,7 @@ pub fn rebase(
         defer allocator.free(ref_path);
 
         const ref_file = try std.Io.Dir.cwd().createFile(ref_path, .{});
-        defer ref_file.close();
+        defer ref_file.close(io);
 
         const new_hash = try new_head.toString(allocator);
         defer allocator.free(new_hash);

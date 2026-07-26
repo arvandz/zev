@@ -665,7 +665,7 @@ fn renderMarkdown(
     }
 
     const f = try std.Io.Dir.cwd().createFile(output_path, .{});
-    defer f.close();
+    defer f.close(io);
     try f.writeAll(out.items);
 
     std.debug.print("📄 Markdown report: {s} ({d} bytes)\n", .{ output_path, out.items.len });
@@ -700,7 +700,7 @@ fn renderJson(
         std.debug.print("{s}", .{out.items});
     } else {
         const f = try std.Io.Dir.cwd().createFile(output_path, .{});
-        defer f.close();
+        defer f.close(io);
         try f.writeAll(out.items);
         std.debug.print("📄 JSON report: {s} ({d} bytes)\n", .{ output_path, out.items.len });
     }

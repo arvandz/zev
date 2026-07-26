@@ -67,7 +67,7 @@ fn saveNode(allocator: std.mem.Allocator, repo: *Repository, node: LineageNode) 
     defer allocator.free(path);
 
     const file = try std.Io.Dir.cwd().createFile(path, .{});
-    defer file.close();
+    defer file.close(io);
 
     const content = try std.fmt.allocPrint(allocator, "id={s}\ntype={s}\ndescription={s}\nfile_cid={s}\ncreated_at={d}\ntags={s}\nparents={s}\nversion={s}\n", .{ node.id, node.node_type.toString(), node.description, node.file_cid, node.created_at, node.tags, node.parents, node.version });
     defer allocator.free(content);
@@ -338,7 +338,7 @@ pub fn lineageList(allocator: std.mem.Allocator, repo: *Repository) !void {
         std.debug.print("Add one with: zev lineage add <id> <type> <description>\n", .{});
         return;
     };
-    defer dir.close();
+    defer dir.close(io);
 
     std.debug.print("🔗 Lineage Graph:\n\n", .{});
 
@@ -389,7 +389,7 @@ pub fn lineageGraph(allocator: std.mem.Allocator, repo: *Repository) !void {
         std.debug.print("No lineage nodes yet.\n", .{});
         return;
     };
-    defer dir.close();
+    defer dir.close(io);
 
     std.debug.print("\n🔗 Lineage DAG:\n\n", .{});
 
@@ -436,7 +436,7 @@ fn printDescendants(
     defer allocator.free(dir_path);
 
     var dir = std.Io.Dir.cwd().openDir(dir_path, .{ .iterate = true }) catch return;
-    defer dir.close();
+    defer dir.close(io);
 
     var child_iter = dir.iterate();
     while (try child_iter.next()) |entry| {
@@ -465,7 +465,7 @@ pub fn lineageProvenance(allocator: std.mem.Allocator, repo: *Repository, cid_pr
         std.debug.print("No lineage nodes yet.\n", .{});
         return;
     };
-    defer dir.close();
+    defer dir.close(io);
 
     std.debug.print("🔍 Searching for CID prefix: {s}\n\n", .{cid_prefix});
     var found: usize = 0;

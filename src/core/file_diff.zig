@@ -81,7 +81,7 @@ fn findObject(
     if (std.Io.Dir.cwd().access(exact, .{})) |_| return exact else |_| allocator.free(exact);
 
     var dir = try std.Io.Dir.cwd().openDir(objects_dir, .{ .iterate = true });
-    defer dir.close();
+    defer dir.close(io);
     var it = dir.iterate();
     while (try it.next()) |entry| {
         if (std.mem.startsWith(u8, entry.name, hash_prefix[0..@min(hash_prefix.len, 16)])) {

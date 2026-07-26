@@ -117,7 +117,7 @@ pub const Identity = struct {
 
         const encoded = b64Encode32(seed);
         const f = try std.Io.Dir.cwd().createFile(id_path, .{ .mode = 0o600 });
-        defer f.close();
+        defer f.close(io);
         try f.writeAll(&encoded);
         try f.writeAll("\n");
     }
@@ -181,7 +181,7 @@ pub fn signCommitNode(
     defer existing.deinit(allocator);
     if (existing != .map) return error.NotAMap;
 
-    var arena = std.heap.ArenaAllocator.init(allocator, io, io, io, );
+    var arena = std.heap.ArenaAllocator.init(allocator);
     defer arena.deinit();
     const aa = arena.allocator();
 
@@ -223,7 +223,7 @@ pub fn verifyCID(
     const sig_b64 = node.getString("sig") orelse return VerifyResult{ .unsigned = .{} };
     const pk_b64 = node.getString("sig_pk") orelse return VerifyResult{ .unsigned = .{} };
 
-    var arena = std.heap.ArenaAllocator.init(allocator, io, io, io, );
+    var arena = std.heap.ArenaAllocator.init(allocator);
     defer arena.deinit();
     const aa = arena.allocator();
 
@@ -264,7 +264,7 @@ pub fn cmdSign(
     repo: *Repository,
     cid_str: []const u8,
 ) !void {
-    var store = try ipld.BlockStore.init(allocator, io, io, io, repo.path);
+    var store = try ipld.BlockStore.init(allocator, repo.path);
     defer store.deinit();
 
     const cid = ipld.CID.fromHex(cid_str) catch {
@@ -298,7 +298,7 @@ pub fn cmdVerify(
     repo: *Repository,
     cid_str: []const u8,
 ) !void {
-    var store = try ipld.BlockStore.init(allocator, io, io, io, repo.path);
+    var store = try ipld.BlockStore.init(allocator, repo.path);
     defer store.deinit();
 
     const cid = ipld.CID.fromHex(cid_str) catch {

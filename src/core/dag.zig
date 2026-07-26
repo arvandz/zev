@@ -8,7 +8,7 @@ pub fn dagShow(
     repo: *Repository,
     cid_str: []const u8,
 ) !void {
-    var store = try ipld.BlockStore.init(allocator, io, io, io, repo.path);
+    var store = try ipld.BlockStore.init(allocator, repo.path);
     defer store.deinit();
 
     const c = parseCID(cid_str) catch {
@@ -40,7 +40,7 @@ pub fn dagWalk(
     cid_str: []const u8,
     max_depth: usize,
 ) !void {
-    var store = try ipld.BlockStore.init(allocator, io, io, io, repo.path);
+    var store = try ipld.BlockStore.init(allocator, repo.path);
     defer store.deinit();
 
     const c = parseCID(cid_str) catch {
@@ -110,7 +110,7 @@ pub fn dagPut(
     repo: *Repository,
     file_path: []const u8,
 ) !void {
-    var store = try ipld.BlockStore.init(allocator, io, io, io, repo.path);
+    var store = try ipld.BlockStore.init(allocator, repo.path);
     defer store.deinit();
 
     const data = std.Io.Dir.cwd().readFileAlloc(io, file_path, allocator, .limited(64 * 1024 * 1024)) catch |err| {
@@ -144,7 +144,7 @@ pub fn dagPut(
 }
 
 pub fn dagStat(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) !void {
-    var store = try ipld.BlockStore.init(allocator, io, io, io, repo.path);
+    var store = try ipld.BlockStore.init(allocator, repo.path);
     defer store.deinit();
 
     const block_count = store.count();
@@ -167,7 +167,7 @@ pub fn dagStat(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) !voi
         std.debug.print("   zev graft <cid> --as <alias>\n\n", .{});
         return;
     };
-    defer root_dir.close();
+    defer root_dir.close(io);
 
     var root_it = root_dir.iterate();
     while (try root_it.next()) |shard_entry| {
@@ -175,7 +175,7 @@ pub fn dagStat(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) !voi
         const shard_path = try std.fs.path.join(allocator, &.{ ipld_path, shard_entry.name });
         defer allocator.free(shard_path);
         var shard_dir = std.Io.Dir.cwd().openDir(shard_path, .{ .iterate = true }) catch continue;
-        defer shard_dir.close();
+        defer shard_dir.close(io);
         var shard_it = shard_dir.iterate();
         while (try shard_it.next()) |block_entry| {
             if (block_entry.kind != .file) continue;
@@ -240,7 +240,7 @@ pub fn graftAdd(
         return;
     };
 
-    var store = try ipld.BlockStore.init(allocator, io, io, io, repo.path);
+    var store = try ipld.BlockStore.init(allocator, repo.path);
     defer store.deinit();
 
     const config_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "config" });
@@ -263,7 +263,7 @@ pub fn graftAdd(
         .grafted_by = author,
     };
 
-    var arena = std.heap.ArenaAllocator.init(allocator, io, io, io, );
+    var arena = std.heap.ArenaAllocator.init(allocator);
     defer arena.deinit();
     const aa = arena.allocator();
     const graft_val = try graft.toValue(aa);
@@ -307,7 +307,7 @@ pub fn graftList(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) !v
         std.debug.print("  zev graft <cid> --as dataset/imagenet-v2\n\n", .{});
         return;
     };
-    defer dir.close();
+    defer dir.close(io);
 
     std.debug.print("🔗 Grafted External Links:\n\n", .{});
     std.debug.print("   {s:<30} {s:<20} {s}\n", .{ "Alias", "Target CID", "Description" });
@@ -531,7 +531,7 @@ fn fetchFromIPFS(
     const url = try std.fmt.allocPrint(allocator, "http://127.0.0.1:5001/api/v0/block/get?arg={s}", .{cid_short});
     defer allocator.free(url);
 
-    var child = std.process.Child.init(io, &.{ "curl", "-s", "-X", "POST", url }, allocator);
+    var child = std.process.Child.init(&.{ "curl", "-s", "-X", "POST", url }, allocator);
     child.stdout_behavior = .Pipe;
     child.stderr_behavior = .Ignore;
 

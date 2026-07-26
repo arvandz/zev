@@ -50,7 +50,7 @@ fn collectAllReachable(
     defer allocator.free(heads_path);
 
     var dir = std.Io.Dir.cwd().openDir(heads_path, .{ .iterate = true }) catch return;
-    defer dir.close();
+    defer dir.close(io);
 
     var it = dir.iterate();
     while (try it.next()) |entry| {
@@ -60,10 +60,12 @@ fn collectAllReachable(
         defer allocator.free(ref_path);
 
         const file = std.Io.Dir.cwd().openFile(ref_path, .{}) catch continue;
-        defer file.close();
+        defer file.close(io);
 
         var buf: [128]u8 = undefined;
-        const n = try file.read(&buf);
+        var file_scratch: [4096]u8 = undefined;
+        var file_reader = file.reader(io, &file_scratch);
+        const n = try file_reader.interface.readSliceShort(&buf);
         const hash_str = std.mem.trim(u8, buf[0..n], " \n\r\t");
         if (hash_str.len != 64) continue;
 
@@ -82,7 +84,7 @@ fn collectAllReachable(
     defer allocator.free(tags_path);
 
     var tags_dir = std.Io.Dir.cwd().openDir(tags_path, .{ .iterate = true }) catch return;
-    defer tags_dir.close();
+    defer tags_dir.close(io);
 
     var tags_it = tags_dir.iterate();
     while (try tags_it.next()) |entry| {
@@ -92,10 +94,10 @@ fn collectAllReachable(
         defer allocator.free(tag_path);
 
         const file = std.Io.Dir.cwd().openFile(tag_path, .{}) catch continue;
-        defer file.close();
+        defer file.close(io);
 
         var buf: [256]u8 = undefined;
-        const n = try file.read(&buf);
+        const n = try file_reader.interface.readSliceShort(&buf);
         var content = std.mem.trim(u8, buf[0..n], " \n\r\t");
 
         if (std.mem.startsWith(u8, content, "commit ")) {
@@ -144,7 +146,7 @@ pub fn runGC(allocator: std.mem.Allocator,
     var objects_dir = std.Io.Dir.cwd().openDir(objects_path, .{ .iterate = true }) catch {
         return result;
     };
-    defer objects_dir.close();
+    defer objects_dir.close(io);
 
     var obj_it = objects_dir.iterate();
     while (try obj_it.next()) |obj_entry| {
@@ -172,11 +174,11 @@ pub fn runGC(allocator: std.mem.Allocator,
             defer allocator.free(obj_path);
 
             const file = std.Io.Dir.cwd().openFile(obj_path, .{}) catch continue;
-            const stat = file.stat() catch {
-                file.close();
+            const stat = file.stat(io) catch {
+                file.close(io);
                 continue;
             };
-            file.close();
+            file.close(io);
 
             result.bytes_freed += stat.size;
             result.objects_removed += 1;

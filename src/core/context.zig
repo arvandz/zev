@@ -83,7 +83,7 @@ fn saveRecord(
     }
 
     const f = try std.Io.Dir.cwd().createFile(path, .{});
-    defer f.close();
+    defer f.close(io);
     try f.writeAll(out.items);
 }
 
@@ -233,7 +233,7 @@ fn iterateRecords(
     defer allocator.free(dir_path);
 
     var dir = std.Io.Dir.cwd().openDir(dir_path, .{ .iterate = true }) catch return;
-    defer dir.close();
+    defer dir.close(io);
 
     var it = dir.iterate();
     while (try it.next()) |entry| {
@@ -324,7 +324,7 @@ pub fn contextShow(
         std.debug.print("No context records yet.\n", .{});
         return;
     };
-    defer dir.close();
+    defer dir.close(io);
 
     std.debug.print("🔍 Context for '{s}':\n\n", .{file_path});
     var found: usize = 0;
@@ -412,7 +412,7 @@ pub fn contextBlame(
         std.debug.print("Add context: zev context add <file> --model <model>\n", .{});
         return;
     };
-    defer dir.close();
+    defer dir.close(io);
 
     var it = dir.iterate();
     while (try it.next()) |entry| {
@@ -508,7 +508,7 @@ pub fn contextStats(
         std.debug.print("No context records yet.\n", .{});
         return;
     };
-    defer dir.close();
+    defer dir.close(io);
 
     var it = dir.iterate();
     while (try it.next()) |entry| {
@@ -590,7 +590,7 @@ pub fn contextQuery(
         std.debug.print("No context records.\n", .{});
         return;
     };
-    defer dir.close();
+    defer dir.close(io);
 
     var latest = std.StringHashMap(ContextRecord).init(allocator);
     defer {
@@ -663,7 +663,7 @@ pub fn contextList(allocator: std.mem.Allocator, repo: *Repository) !void {
         std.debug.print("Add context: zev context add <file> --model <model>\n", .{});
         return;
     };
-    defer dir.close();
+    defer dir.close(io);
 
     std.debug.print("📋 All context records:\n\n", .{});
     var count: usize = 0;

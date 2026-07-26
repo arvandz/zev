@@ -113,7 +113,7 @@ fn readMetricsForCommit(
 
     var dir = std.Io.Dir.cwd().openDir(io, metrics_dir, .{ .iterate = true }) catch
         return try allocator.alloc(MetricEntry, 0);
-    defer dir.close();
+    defer dir.close(io);
 
     var entries: std.ArrayList(MetricEntry) = .empty;
 
@@ -167,7 +167,7 @@ pub fn textCommitToIPLD(
             metric_entries[i] = .{ .key = m.key, .value = m.value };
         }
 
-        var arena = std.heap.ArenaAllocator.init(allocator, io, io, io, );
+        var arena = std.heap.ArenaAllocator.init(allocator);
         defer arena.deinit();
         const aa = arena.allocator();
 
@@ -181,7 +181,7 @@ pub fn textCommitToIPLD(
         break :blk mcid;
     } else null;
 
-    var arena = std.heap.ArenaAllocator.init(allocator, io, io, io, );
+    var arena = std.heap.ArenaAllocator.init(allocator);
     defer arena.deinit();
     const aa = arena.allocator();
 
@@ -208,7 +208,7 @@ pub fn migrateCommitsToIPLD(
     io: std.Io,
     repo: *Repository,
 ) !void {
-    var store = try ipld.BlockStore.init(allocator, io, io, io, repo.path);
+    var store = try ipld.BlockStore.init(allocator, repo.path);
     defer store.deinit();
 
     const head_hash = try resolveHEAD(allocator, repo);
@@ -291,7 +291,7 @@ pub fn onNewCommit(
     repo: *Repository,
     commit_hash: []const u8,
 ) !void {
-    var store = try ipld.BlockStore.init(allocator, io, io, io, repo.path);
+    var store = try ipld.BlockStore.init(allocator, repo.path);
     defer store.deinit();
 
     const tc = readTextCommit(allocator, repo, commit_hash) catch return;
@@ -322,7 +322,7 @@ pub fn onMetricsSet(
     metric_key: []const u8,
     metric_value: f64,
 ) !void {
-    var store = try ipld.BlockStore.init(allocator, io, io, io, repo.path);
+    var store = try ipld.BlockStore.init(allocator, repo.path);
     defer store.deinit();
 
     const all_metrics = try readMetricsForCommit(allocator, repo, commit_hash);
@@ -346,7 +346,7 @@ pub fn onMetricsSet(
     const commit_cid_for_metrics = ipld.CID.fromHex(commit_hash) catch
         ipld.CID.raw(commit_hash);
 
-    var arena = std.heap.ArenaAllocator.init(allocator, io, io, io, );
+    var arena = std.heap.ArenaAllocator.init(allocator);
     defer arena.deinit();
     const aa = arena.allocator();
 
@@ -379,7 +379,7 @@ pub fn ipldLog(
     repo: *Repository,
     max_entries: usize,
 ) !void {
-    var store = try ipld.BlockStore.init(allocator, io, io, io, repo.path);
+    var store = try ipld.BlockStore.init(allocator, repo.path);
     defer store.deinit();
 
     const head_cid = loadIPLDHead(allocator, repo) catch blk: {
@@ -389,14 +389,14 @@ pub fn ipldLog(
             std.debug.print("No IPLD history yet. Run: zev ipld migrate\n\n", .{});
             return;
         };
-        defer root_dir.close();
+        defer root_dir.close(io);
         var rit = root_dir.iterate();
         while (try rit.next()) |shard| {
             if (shard.kind != .directory) continue;
             const sp = try std.fs.path.join(allocator, &.{ store.base_path, shard.name });
             defer allocator.free(sp);
             var sd = std.Io.Dir.cwd().openDir(sp, .{ .iterate = true }) catch continue;
-            defer sd.close();
+            defer sd.close(io);
             var si = sd.iterate();
             while (try si.next()) |block| {
                 if (block.kind != .file) continue;
@@ -497,7 +497,7 @@ fn saveCommitCIDMapping(
     defer allocator.free(cid_str);
 
     const f = try std.Io.Dir.cwd().createFile(path, .{});
-    defer f.close();
+    defer f.close(io);
     try f.writeAll(cid_str);
 }
 
@@ -532,7 +532,7 @@ fn saveIPLDHead(
     defer allocator.free(cid_str);
 
     const f = try std.Io.Dir.cwd().createFile(path, .{});
-    defer f.close();
+    defer f.close(io);
     try f.writeAll(cid_str);
 }
 

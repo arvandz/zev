@@ -516,7 +516,7 @@ pub fn dagQuery(
     query_str: []const u8,
     output_format: []const u8,
 ) !void {
-    var store = try ipld.BlockStore.init(allocator, io, io, io, repo.path);
+    var store = try ipld.BlockStore.init(allocator, repo.path);
     defer store.deinit();
 
     std.debug.print("🔍 Query: {s}\n\n", .{query_str});
@@ -534,7 +534,7 @@ pub fn dagQuery(
     };
     defer pq.deinit();
 
-    var engine = SelectorEngine.init(allocator, io, io, io, &store, pq.type_filter);
+    var engine = SelectorEngine.init(allocator, &store, pq.type_filter);
     defer engine.deinit();
 
     if (pq.root_cid.version == 0) {
@@ -638,7 +638,7 @@ fn scanAllBlocks(
     const ipld_path = store.base_path;
 
     var root_dir = std.Io.Dir.cwd().openDir(ipld_path, .{ .iterate = true }) catch return;
-    defer root_dir.close();
+    defer root_dir.close(io);
 
     var root_it = root_dir.iterate();
     while (try root_it.next()) |shard_entry| {
@@ -646,7 +646,7 @@ fn scanAllBlocks(
         const shard_path = try std.fs.path.join(allocator, &.{ ipld_path, shard_entry.name });
         defer allocator.free(shard_path);
         var shard_dir = std.Io.Dir.cwd().openDir(shard_path, .{ .iterate = true }) catch continue;
-        defer shard_dir.close();
+        defer shard_dir.close(io);
         var shard_it = shard_dir.iterate();
         while (try shard_it.next()) |block_entry| {
             if (block_entry.kind != .file) continue;

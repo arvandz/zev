@@ -112,7 +112,7 @@ pub fn listRemotes(allocator: std.mem.Allocator, repo: *Repository) !void {
         }
         return err;
     };
-    defer remotes_dir.close();
+    defer remotes_dir.close(io);
 
     var iterator = remotes_dir.iterate();
     while (try iterator.next()) |entry| {
@@ -207,10 +207,12 @@ fn pushFile(allocator: std.mem.Allocator, repo: *Repository, remote_url: []const
     defer allocator.free(branch_path);
 
     const branch_file = try std.Io.Dir.cwd().openFile(branch_path, .{});
-    defer branch_file.close();
+    defer branch_file.close(io);
 
     var buffer: [256]u8 = undefined;
-    const bytes_read = try branch_file.read(&buffer);
+    var branch_file_scratch: [4096]u8 = undefined;
+    var branch_file_reader = branch_file.reader(io, &branch_file_scratch);
+    const bytes_read = try branch_file_reader.interface.readSliceShort(&buffer);
     const commit_hash = std.mem.trim(u8, buffer[0..bytes_read], " \n\r\t");
 
     var hash: [32]u8 = undefined;
@@ -227,7 +229,7 @@ fn pushFile(allocator: std.mem.Allocator, repo: *Repository, remote_url: []const
     defer allocator.free(remote_branch_path);
 
     const remote_branch_file = try std.Io.Dir.cwd().createFile(remote_branch_path, .{});
-    defer remote_branch_file.close();
+    defer remote_branch_file.close(io);
 
     try remote_branch_file.writeAll(commit_hash);
 
@@ -251,10 +253,12 @@ fn pullFile(allocator: std.mem.Allocator, repo: *Repository, remote_url: []const
     defer allocator.free(remote_branch_path);
 
     const remote_branch_file = try std.Io.Dir.cwd().openFile(remote_branch_path, .{});
-    defer remote_branch_file.close();
+    defer remote_branch_file.close(io);
 
     var buffer: [256]u8 = undefined;
-    const bytes_read = try remote_branch_file.read(&buffer);
+    var remote_branch_file_scratch: [4096]u8 = undefined;
+    var remote_branch_file_reader = remote_branch_file.reader(io, &remote_branch_file_scratch);
+    const bytes_read = try remote_branch_file_reader.interface.readSliceShort(&buffer);
     const commit_hash = std.mem.trim(u8, buffer[0..bytes_read], " \n\r\t");
 
     var hash: [32]u8 = undefined;
@@ -274,7 +278,7 @@ fn pullFile(allocator: std.mem.Allocator, repo: *Repository, remote_url: []const
     defer allocator.free(local_branch_path);
 
     const local_branch_file = try std.Io.Dir.cwd().createFile(local_branch_path, .{});
-    defer local_branch_file.close();
+    defer local_branch_file.close(io);
 
     try local_branch_file.writeAll(commit_hash);
 

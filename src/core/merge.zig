@@ -49,7 +49,7 @@ pub fn merge(
         const cur_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", ref });
         defer allocator.free(cur_path);
         const f = std.Io.Dir.cwd().createFile(cur_path, .{}) catch return .ConflictDetected;
-        defer f.close();
+        defer f.close(io);
         try f.writeAll(src_trimmed);
     }
 

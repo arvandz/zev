@@ -202,10 +202,11 @@ pub const Repository = struct {
         defer self.allocator.free(head_path);
 
         const head_file = try std.Io.Dir.cwd().openFile(io, head_path, .{});
-        defer head_file.close();
+        defer head_file.close(io);
 
-        var buffer: [256]u8 = undefined;
-        const bytes_read = try head_file.read(&buffer);
+        var head_scratch: [256]u8 = undefined;
+        var head_reader = head_file.reader(io, &head_scratch);
+        const bytes_read = try head_reader.interface.readSliceShort(&buffer);
         const head_content = std.mem.trim(u8, buffer[0..bytes_read], " \n\r\t");
 
         if (std.mem.startsWith(u8, head_content, "ref: ")) {
@@ -214,7 +215,7 @@ pub const Repository = struct {
             defer self.allocator.free(full_ref_path);
 
             const ref_file = try std.Io.Dir.cwd().createFile(full_ref_path, .{});
-            defer ref_file.close();
+            defer ref_file.close(io);
 
             const commit_hash = try commit_cid.toString(self.allocator);
             defer self.allocator.free(commit_hash);

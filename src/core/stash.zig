@@ -81,7 +81,7 @@ pub fn stashList(allocator: std.mem.Allocator, repo: *Repository) !void {
         }
         return err;
     };
-    defer dir.close();
+    defer dir.close(io);
 
     var found_any = false;
     var it = dir.iterate();
@@ -94,10 +94,12 @@ pub fn stashList(allocator: std.mem.Allocator, repo: *Repository) !void {
         defer allocator.free(file_path);
 
         const file = try std.Io.Dir.cwd().openFile(file_path, .{});
-        defer file.close();
+        defer file.close(io);
 
         var buf: [512]u8 = undefined;
-        const n = try file.read(&buf);
+        var file_scratch: [4096]u8 = undefined;
+        var file_reader = file.reader(io, &file_scratch);
+        const n = try file_reader.interface.readSliceShort(&buf);
         const content = buf[0..n];
 
         var msg: []const u8 = "unknown";
@@ -127,7 +129,7 @@ pub fn stashApply(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, s
         if (err == error.FileNotFound) return error.StashNotFound;
         return err;
     };
-    defer file.close();
+    defer file.close(io);
 
     const stat = try file.stat(io, );
     const content = try allocator.alloc(u8, @intCast(stat.size));
@@ -198,7 +200,7 @@ pub fn stashDrop(allocator: std.mem.Allocator, repo: *Repository, stash_id: usiz
 
 fn getNextStashId(allocator: std.mem.Allocator, stash_dir: []const u8) !usize {
     var dir = std.Io.Dir.cwd().openDir(stash_dir, .{ .iterate = true }) catch return 0;
-    defer dir.close();
+    defer dir.close(io);
 
     var max_id: usize = 0;
     var it = dir.iterate();

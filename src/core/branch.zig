@@ -18,7 +18,7 @@ pub fn createBranch(allocator: std.mem.Allocator, repo: *repository.Repository, 
     }
 
     const branch_file = try std.Io.Dir.cwd().createFile(branch_path, .{});
-    defer branch_file.close();
+    defer branch_file.close(io);
 
     const cid_str = try head_cid.toString(allocator);
     defer allocator.free(cid_str);
@@ -41,7 +41,7 @@ pub fn checkoutBranch(allocator: std.mem.Allocator, repo: *repository.Repository
     defer allocator.free(head_path);
 
     const head_file = try std.Io.Dir.cwd().createFile(head_path, .{});
-    defer head_file.close();
+    defer head_file.close(io);
 
     const ref_content = try std.fmt.allocPrint(allocator, "ref: refs/heads/{s}\n", .{branch_name});
     defer allocator.free(ref_content);
@@ -57,10 +57,12 @@ pub fn getCurrentBranch(allocator: std.mem.Allocator, repo: *repository.Reposito
     defer allocator.free(head_path);
 
     const head_file = try std.Io.Dir.cwd().openFile(head_path, .{});
-    defer head_file.close();
+    defer head_file.close(io);
 
     var buffer: [256]u8 = undefined;
-    const bytes_read = try head_file.read(&buffer);
+    var head_file_scratch: [4096]u8 = undefined;
+    var head_file_reader = head_file.reader(io, &head_file_scratch);
+    const bytes_read = try head_file_reader.interface.readSliceShort(&buffer);
     const head_content = std.mem.trim(u8, buffer[0..bytes_read], " \n\r\t");
 
     if (std.mem.startsWith(u8, head_content, "ref: refs/heads/")) {
@@ -79,7 +81,7 @@ pub fn listBranches(allocator: std.mem.Allocator, repo: *repository.Repository) 
     defer allocator.free(heads_path);
 
     var heads_dir = try std.Io.Dir.cwd().openDir(heads_path, .{ .iterate = true });
-    defer heads_dir.close();
+    defer heads_dir.close(io);
 
     const current_branch = getCurrentBranch(allocator, repo) catch "HEAD";
     defer allocator.free(current_branch);

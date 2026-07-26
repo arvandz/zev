@@ -131,7 +131,7 @@ pub fn searchExperiments(allocator: std.mem.Allocator, io: std.Io, repo: *Reposi
         std.debug.print("No experiments yet.\n", .{});
         return;
     };
-    defer dir.close();
+    defer dir.close(io);
 
     std.debug.print("🔍 Searching experiments", .{});
     if (query.len > 0) std.debug.print(" for: \"{s}\"", .{query});
@@ -302,7 +302,7 @@ pub fn searchLineage(allocator: std.mem.Allocator, io: std.Io, repo: *Repository
         std.debug.print("No lineage nodes yet.\n", .{});
         return;
     };
-    defer dir.close();
+    defer dir.close(io);
 
     std.debug.print("🔍 Searching lineage", .{});
     if (query.len > 0) std.debug.print(" for: \"{s}\"", .{query});
@@ -389,7 +389,7 @@ pub fn searchSnapshots(allocator: std.mem.Allocator, io: std.Io, repo: *Reposito
         std.debug.print("No snapshots yet.\n", .{});
         return;
     };
-    defer dir.close();
+    defer dir.close(io);
 
     std.debug.print("🔍 Searching snapshots", .{});
     if (query.len > 0) std.debug.print(" for: \"{s}\"", .{query});

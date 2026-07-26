@@ -19,7 +19,7 @@ pub fn bisectStart(allocator: std.mem.Allocator, repo: *Repository) !void {
     defer allocator.free(state_path);
 
     const file = try std.Io.Dir.cwd().createFile(state_path, .{});
-    defer file.close();
+    defer file.close(io);
     try file.writeAll("good=\nbad=\ncurrent=\n");
 
     std.debug.print("🔍 Bisect started\n", .{});
@@ -33,9 +33,9 @@ fn loadState(allocator: std.mem.Allocator, repo: *Repository) !?struct { good: [
     defer allocator.free(state_path);
 
     const file = std.Io.Dir.cwd().openFile(state_path, .{}) catch return null;
-    defer file.close();
+    defer file.close(io);
 
-    const stat = try file.stat();
+    const stat = try file.stat(io);
     const content = try allocator.alloc(u8, @intCast(stat.size));
     defer allocator.free(content);
     _ = try file.read(content);
@@ -65,7 +65,7 @@ fn saveState(allocator: std.mem.Allocator, repo: *Repository, good: []const u8, 
     defer allocator.free(state_path);
 
     const file = try std.Io.Dir.cwd().createFile(state_path, .{});
-    defer file.close();
+    defer file.close(io);
 
     var buf: [256]u8 = undefined;
     const line = try std.fmt.bufPrint(&buf, "good={s}\nbad={s}\ncurrent={s}\n", .{ good, bad, current });

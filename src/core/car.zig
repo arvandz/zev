@@ -159,7 +159,7 @@ pub fn dagExport(
     max_depth: usize,
     to_ipfs: bool,
 ) !void {
-    var store = try ipld.BlockStore.init(allocator, io, io, io, repo.path);
+    var store = try ipld.BlockStore.init(allocator, repo.path);
     defer store.deinit();
 
     var root_cids: std.ArrayList(ipld.CID) = .empty;
@@ -190,7 +190,7 @@ pub fn dagExport(
         std.debug.print("❌ Cannot create {s}: {}\n", .{ output_path, err });
         return;
     };
-    defer f.close();
+    defer f.close(io);
 
     var writer = CarWriter.init(allocator, f);
     defer writer.deinit();
@@ -291,7 +291,7 @@ pub fn dagImport(
     repo: *Repository,
     car_path: []const u8,
 ) !void {
-    var store = try ipld.BlockStore.init(allocator, io, io, io, repo.path);
+    var store = try ipld.BlockStore.init(allocator, repo.path);
     defer store.deinit();
 
     std.debug.print("📥 Importing CAR: {s}\n\n", .{car_path});
@@ -360,14 +360,14 @@ fn collectAllCIDs(
     out: *std.ArrayList(ipld.CID),
 ) !void {
     var root_dir = std.Io.Dir.cwd().openDir(store.base_path, .{ .iterate = true }) catch return;
-    defer root_dir.close();
+    defer root_dir.close(io);
     var it = root_dir.iterate();
     while (try it.next()) |shard| {
         if (shard.kind != .directory) continue;
         const sp = try std.fs.path.join(allocator, &.{ store.base_path, shard.name });
         defer allocator.free(sp);
         var sd = std.Io.Dir.cwd().openDir(sp, .{ .iterate = true }) catch continue;
-        defer sd.close();
+        defer sd.close(io);
         var si = sd.iterate();
         while (try si.next()) |block| {
             if (block.kind != .file) continue;

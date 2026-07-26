@@ -34,7 +34,7 @@ fn saveRecord(allocator: std.mem.Allocator, repo: *Repository, rec: Notarization
     defer allocator.free(path);
 
     const f = try std.Io.Dir.cwd().createFile(path, .{});
-    defer f.close();
+    defer f.close(io);
 
     const verified_str: []const u8 = if (rec.verified) "true" else "false";
     const content = try std.fmt.allocPrint(allocator, "id={s}\nsubject_type={s}\nsubject_id={s}\nsubject_cid={s}\nmetrics={s}\nauthor={s}\ntimestamp={d}\nchain={s}\ntx_hash={s}\nblock={s}\nverified={s}\n", .{ rec.id, rec.subject_type, rec.subject_id, rec.subject_cid, rec.metrics, rec.author, rec.timestamp, rec.chain, rec.tx_hash, rec.block, verified_str });
@@ -275,7 +275,7 @@ fn submitEthereum(allocator: std.mem.Allocator,
     const tmp = "/tmp/zev_eth_req.json";
     const tf = try std.Io.Dir.cwd().createFile(tmp, .{});
     try tf.writeAll(nonce_req);
-    tf.close();
+    tf.close(io);
 
     const nonce_resp = try runCmd(allocator, io, &.{
         "curl",   "-s",                     "-X",        "POST", "-H", "Content-Type: application/json",
@@ -340,7 +340,7 @@ fn submitArweave(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, pa
     var tf_writer = tf.writer(io, &tf_buffer);
     try tf_writer.interface.writeAll(payload);
     try tf_writer.flush();
-    tf.close();
+    tf.close(io);
 
     const resp = runCmd(allocator, io, &.{
         "arkb",           "deploy",    tmp_payload,
@@ -627,7 +627,7 @@ pub fn notarizeVerify(allocator: std.mem.Allocator, repo: *Repository, rec_id_pr
         std.debug.print("No notarizations yet.\n", .{});
         return;
     };
-    defer d.close();
+    defer d.close(io);
 
     var it = d.iterate();
     while (try it.next()) |entry| {
@@ -680,7 +680,7 @@ pub fn notarizeList(allocator: std.mem.Allocator, repo: *Repository) !void {
         std.debug.print("Create one: zev notarize snapshot <name>\n", .{});
         return;
     };
-    defer d.close();
+    defer d.close(io);
 
     std.debug.print("⛓️  Notarizations:\n\n", .{});
     var count: usize = 0;
@@ -768,7 +768,7 @@ pub fn notarizeConfig(
     }
 
     const f = try std.Io.Dir.cwd().createFile(config_path, .{});
-    defer f.close();
+    defer f.close(io);
     try f.writeAll(lines.items);
 
     std.debug.print("✅ Notarize config updated for chain: {s}\n", .{chain});

@@ -91,7 +91,7 @@ pub fn cherryPick(
             try std.Io.Dir.cwd().makePath(dir);
         }
         const out_file = try std.Io.Dir.cwd().createFile(pick_entry.name, .{});
-        defer out_file.close();
+        defer out_file.close(io);
         try out_file.writeAll(new_content);
 
         var found = false;
@@ -171,10 +171,12 @@ fn updateHead(allocator: std.mem.Allocator, repo: *Repository, new_cid: cid_mod.
     defer allocator.free(head_path);
 
     const head_file = try std.Io.Dir.cwd().openFile(head_path, .{});
-    defer head_file.close();
+    defer head_file.close(io);
 
     var buf: [256]u8 = undefined;
-    const n = try head_file.read(&buf);
+    var head_file_scratch: [4096]u8 = undefined;
+    var head_file_reader = head_file.reader(io, &head_file_scratch);
+    const n = try head_file_reader.interface.readSliceShort(&buf);
     const head_content = std.mem.trim(u8, buf[0..n], " \n\r\t");
 
     if (std.mem.startsWith(u8, head_content, "ref: ")) {
@@ -183,7 +185,7 @@ fn updateHead(allocator: std.mem.Allocator, repo: *Repository, new_cid: cid_mod.
         defer allocator.free(ref_path);
 
         const ref_file = try std.Io.Dir.cwd().createFile(ref_path, .{});
-        defer ref_file.close();
+        defer ref_file.close(io);
 
         const hash = try new_cid.toString(allocator);
         defer allocator.free(hash);

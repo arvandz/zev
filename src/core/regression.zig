@@ -88,7 +88,7 @@ pub fn saveThreshold(
     if (!found) try appendThresholdLine(allocator, &lines, cfg);
 
     const f = try std.Io.Dir.cwd().createFile(path, .{});
-    defer f.close();
+    defer f.close(io);
     try f.writeAll(lines.items);
 }
 
@@ -151,7 +151,7 @@ pub fn appendMetricHistory(
         } else |_| {}
         break :blk try std.Io.Dir.cwd().createFile(path, .{});
     };
-    defer f.close();
+    defer f.close(io);
     try f.seekFromEnd(0);
     const line = try std.fmt.allocPrint(allocator, "{s} {s} {d:.6} {d}\n", .{ commit_short, metric, value, now });
     defer allocator.free(line);
@@ -410,7 +410,7 @@ pub fn recordMetricsToHistory(
         defer allocator.free(cd_path);
         if (std.Io.Dir.cwd().openDir(cd_path, .{ .iterate = true })) |*dir| {
             var cdir = dir.*;
-            defer cdir.close();
+            defer cdir.close(io);
             var cit = cdir.iterate();
             while (cit.next() catch null) |entry| {
                 if (entry.kind != .file) continue;
@@ -430,7 +430,7 @@ pub fn recordMetricsToHistory(
     }
 
     var root_dir = std.Io.Dir.cwd().openDir(store.base_path, .{ .iterate = true }) catch return;
-    defer root_dir.close();
+    defer root_dir.close(io);
 
     var rit = root_dir.iterate();
     while (try rit.next()) |shard| {
@@ -438,7 +438,7 @@ pub fn recordMetricsToHistory(
         const sp = try std.fs.path.join(allocator, &.{ store.base_path, shard.name });
         defer allocator.free(sp);
         var sd = std.Io.Dir.cwd().openDir(sp, .{ .iterate = true }) catch continue;
-        defer sd.close();
+        defer sd.close(io);
         var si = sd.iterate();
         while (try si.next()) |block| {
             if (block.kind != .file) continue;
@@ -557,7 +557,7 @@ pub fn cmdCheck(
     repo: *Repository,
     ref: []const u8,
 ) !u8 {
-    var store = try ipld.BlockStore.init(allocator, io, io, io, repo.path);
+    var store = try ipld.BlockStore.init(allocator, repo.path);
     defer store.deinit();
 
     std.debug.print("🔎 Regression check: {s}\n\n", .{ref});

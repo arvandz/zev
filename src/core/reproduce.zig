@@ -82,7 +82,7 @@ fn saveReproduceRecord(
     }
 
     const f = try std.Io.Dir.cwd().createFile(path, .{});
-    defer f.close();
+    defer f.close(io);
     try f.writeAll(out.items);
 }
 
@@ -106,7 +106,7 @@ pub fn captureRun(
     const cmd_path = try std.fs.path.join(allocator, &.{ dir, commit_hash });
     defer allocator.free(cmd_path);
     const f = try std.Io.Dir.cwd().createFile(cmd_path, .{});
-    defer f.close();
+    defer f.close(io);
 
     const content = try std.fmt.allocPrint(allocator, "run={s}\ncommit={s}\n", .{ run_command, commit_hash });
     defer allocator.free(content);
@@ -115,7 +115,7 @@ pub fn captureRun(
     const rc_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "run_command" });
     defer allocator.free(rc_path);
     const rcf = try std.Io.Dir.cwd().createFile(rc_path, .{});
-    defer rcf.close();
+    defer rcf.close(io);
     try rcf.writeAll(run_command);
 
     if (env_file) |ef| {
@@ -127,7 +127,7 @@ pub fn captureRun(
         };
         defer allocator.free(env_content);
         const edf = try std.Io.Dir.cwd().createFile(env_dst, .{});
-        defer edf.close();
+        defer edf.close(io);
         try edf.writeAll(env_content);
         std.debug.print("   Environment captured from: {s}\n", .{ef});
     } else {
@@ -142,7 +142,7 @@ pub fn captureRun(
 
 fn captureAutoEnv(allocator: std.mem.Allocator,
     io: std.Io, capture_dir: []const u8) !void {
-    var pip_child = std.process.Child.init(io, &.{ "pip", "freeze" }, allocator);
+    var pip_child = std.process.Child.init(&.{ "pip", "freeze" }, allocator);
     pip_child.stdout_behavior = .Pipe;
     pip_child.stderr_behavior = .Ignore;
     if (pip_child.spawn()) |_| {
@@ -155,14 +155,14 @@ fn captureAutoEnv(allocator: std.mem.Allocator,
             const env_path = try std.fs.path.join(allocator, &.{ capture_dir, "pip_freeze.txt" });
             defer allocator.free(env_path);
             const ef = try std.Io.Dir.cwd().createFile(env_path, .{});
-            defer ef.close();
+            defer ef.close(io);
             try ef.writeAll(buf[0..n]);
             std.debug.print("   Python env captured (pip freeze → .zev/capture/pip_freeze.txt)\n", .{});
             return;
         }
     } else |_| {}
 
-    var conda_child = std.process.Child.init(io, &.{ "conda", "env", "export" }, allocator);
+    var conda_child = std.process.Child.init(&.{ "conda", "env", "export" }, allocator);
     conda_child.stdout_behavior = .Pipe;
     conda_child.stderr_behavior = .Ignore;
     if (conda_child.spawn()) |_| {
@@ -175,7 +175,7 @@ fn captureAutoEnv(allocator: std.mem.Allocator,
             const env_path = try std.fs.path.join(allocator, &.{ capture_dir, "conda_env.yml" });
             defer allocator.free(env_path);
             const ef = try std.Io.Dir.cwd().createFile(env_path, .{});
-            defer ef.close();
+            defer ef.close(io);
             try ef.writeAll(buf[0..n]);
             std.debug.print("   Conda env captured → .zev/capture/conda_env.yml\n", .{});
             return;
@@ -233,7 +233,7 @@ fn loadMetricsFromSnapshot(allocator: std.mem.Allocator, io: std.Io, repo: *Repo
     const dir_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "snapshots" });
     defer allocator.free(dir_path);
     var dir = std.Io.Dir.cwd().openDir(dir_path, .{ .iterate = true }) catch return null;
-    defer dir.close();
+    defer dir.close(io);
     var it = dir.iterate();
     while (try it.next()) |entry| {
         if (entry.kind != .file or std.mem.endsWith(u8, entry.name, ".name")) continue;
@@ -322,7 +322,7 @@ fn checkoutCommit(
         defer allocator.free(file_path);
 
         const f = try std.Io.Dir.cwd().createFile(file_path, .{});
-        defer f.close();
+        defer f.close(io);
         try f.writeAll(blob_data);
         count += 1;
     }
@@ -451,7 +451,7 @@ fn doReproduce(
 
         std.debug.print("\n   Files checked out to {s}:\n", .{work_dir});
         var wd = std.Io.Dir.cwd().openDir(work_dir, .{ .iterate = true }) catch return;
-        defer wd.close();
+        defer wd.close(io);
         var wdit = wd.iterate();
         while (try wdit.next()) |e| {
             std.debug.print("   - {s}\n", .{e.name});
@@ -474,7 +474,7 @@ fn doReproduce(
     }
 
     std.debug.print("\n   ⏱️  Running...\n", .{});
-    const start_inst = std.time.Instant.now() catch unreachable;
+    const start_inst = std.Io.Timestamp.now(io, .awake);
 
     var argv: std.ArrayList([]const u8) = .empty;
     defer argv.deinit(allocator);
@@ -498,12 +498,12 @@ fn doReproduce(
         }
     }
 
-    var child = std.process.Child.init(io, argv.items, allocator);
+    var child = std.process.Child.init(argv.items, allocator);
     {
         const cap_dir_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "capture" });
         defer allocator.free(cap_dir_path);
         var repo_dir = std.Io.Dir.cwd().openDir(repo.path, .{ .iterate = true }) catch unreachable;
-        defer repo_dir.close();
+        defer repo_dir.close(io);
         var rdit = repo_dir.iterate();
         while (try rdit.next()) |entry| {
             if (entry.kind != .file) continue;
@@ -516,7 +516,7 @@ fn doReproduce(
                 const data = std.Io.Dir.cwd().readFileAlloc(io, src, allocator, .limited(1024 * 1024)) catch continue;
                 defer allocator.free(data);
                 const wf = std.Io.Dir.cwd().createFile(dst, .{}) catch continue;
-                defer wf.close();
+                defer wf.close(io);
                 wf.writeAll(data) catch continue;
             };
         }
@@ -533,7 +533,7 @@ fn doReproduce(
         var child_scratch: [4096]u8 = undefined;
         var child_reader = child.stdout.?.reader(io, &child_scratch);
         output_len = child_reader.interface.readSliceShort(&output_buf) catch 0;
-        const term = child.wait(io) catch std.process.Child.Term{ .Exited = 1 };
+        const term = child.wait(io) catch std.process.Child.Term{ .exited = 1 };
         exit_code = switch (term) {
             .exited => |c| @intCast(c),
             else => -1,
@@ -543,7 +543,7 @@ fn doReproduce(
         exit_code = -1;
     }
 
-    const elapsed_ms: u64 = (std.time.Instant.now() catch unreachable).since(start_inst) / std.time.ns_per_ms;
+    const elapsed_ms: u64 = @intCast(start_inst.durationTo(std.Io.Timestamp.now(io, .awake)).toMilliseconds());
     std.debug.print("   Completed in {d}ms, exit code: {d}\n\n", .{ elapsed_ms, exit_code });
 
     const output = output_buf[0..output_len];
@@ -727,7 +727,7 @@ pub fn reproduceStatus(allocator: std.mem.Allocator, io: std.Io, repo: *Reposito
         std.debug.print("Run: zev reproduce <snapshot-name>\n", .{});
         return;
     };
-    defer d.close();
+    defer d.close(io);
 
     var entries: std.ArrayList([]u8) = .empty;
     defer {

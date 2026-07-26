@@ -43,7 +43,7 @@ fn saveSnapshot(allocator: std.mem.Allocator, repo: *Repository, snap: Snapshot)
     defer allocator.free(path);
 
     const file = try std.Io.Dir.cwd().createFile(path, .{});
-    defer file.close();
+    defer file.close(io);
 
     const permanent_str: []const u8 = if (snap.permanent) "true" else "false";
     const content = try std.fmt.allocPrint(allocator, "id={s}\nname={s}\ndescription={s}\ncommit_hash={s}\nbranch={s}\ncreated_at={d}\ntags={s}\nauthor={s}\nexperiment_ref={s}\nlineage_refs={s}\nmetrics_snapshot={s}\npermanent={s}\n", .{ snap.id, snap.name, snap.description, snap.commit_hash, snap.branch, snap.created_at, snap.tags, snap.author, snap.experiment_ref, snap.lineage_refs, snap.metrics_snapshot, permanent_str });
@@ -53,7 +53,7 @@ fn saveSnapshot(allocator: std.mem.Allocator, repo: *Repository, snap: Snapshot)
     const index_path = try std.fmt.allocPrint(allocator, "{s}.name", .{path});
     defer allocator.free(index_path);
     const idx = try std.Io.Dir.cwd().createFile(index_path, .{});
-    defer idx.close();
+    defer idx.close(io);
     try idx.writeAll(snap.id);
 }
 
@@ -163,7 +163,7 @@ fn resolveSnapshotId(allocator: std.mem.Allocator, io: std.Io, repo: *Repository
     defer allocator.free(dir_path);
 
     var dir = std.Io.Dir.cwd().openDir(dir_path, .{ .iterate = true }) catch return null;
-    defer dir.close();
+    defer dir.close(io);
 
     var it = dir.iterate();
     while (try it.next()) |entry| {
@@ -317,7 +317,7 @@ pub fn snapshotList(allocator: std.mem.Allocator, repo: *Repository) !void {
         std.debug.print("Create one: zev snapshot create <name> [description]\n", .{});
         return;
     };
-    defer dir.close();
+    defer dir.close(io);
 
     std.debug.print("📸 Snapshots:\n\n", .{});
     var count: usize = 0;

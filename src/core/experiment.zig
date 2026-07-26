@@ -41,7 +41,7 @@ fn saveExperiment(allocator: std.mem.Allocator, repo: *Repository, exp: Experime
     defer allocator.free(path);
 
     const file = try std.Io.Dir.cwd().createFile(path, .{});
-    defer file.close();
+    defer file.close(io);
 
     const content = try std.fmt.allocPrint(allocator, "name={s}\ndescription={s}\nhypothesis={s}\nstatus={s}\nbranch={s}\ncreated_at={d}\ntags={s}\n", .{ exp.name, exp.description, exp.hypothesis, exp.status, exp.branch, exp.created_at, exp.tags });
     defer allocator.free(content);
@@ -205,7 +205,7 @@ pub fn experimentComplete(allocator: std.mem.Allocator, repo: *Repository, name:
         const results_path = try experimentPath(allocator, repo, try std.fmt.allocPrint(allocator, "{s}.results", .{name}));
         defer allocator.free(results_path);
         const f = try std.Io.Dir.cwd().createFile(results_path, .{});
-        defer f.close();
+        defer f.close(io);
         try f.writeAll(notes);
     }
 
@@ -279,7 +279,7 @@ pub fn experimentList(allocator: std.mem.Allocator, repo: *Repository) !void {
         std.debug.print("Start one with: zev experiment start <name> [description]\n", .{});
         return;
     };
-    defer dir.close();
+    defer dir.close(io);
 
     std.debug.print("🧪 Experiments:\n\n", .{});
 

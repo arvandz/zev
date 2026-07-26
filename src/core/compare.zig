@@ -334,7 +334,7 @@ fn findSnapshotById(allocator: std.mem.Allocator, repo: *Repository, name: []con
     defer allocator.free(dir_path);
 
     var dir = std.Io.Dir.cwd().openDir(dir_path, .{ .iterate = true }) catch return null;
-    defer dir.close();
+    defer dir.close(io);
 
     var it = dir.iterate();
     while (try it.next()) |entry| {

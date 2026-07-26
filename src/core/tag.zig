@@ -29,7 +29,7 @@ pub fn createTag(allocator: std.mem.Allocator, repo: *Repository, tag_name: []co
         try std.Io.Dir.cwd().makePath(tags_dir);
 
         const tag_file = try std.Io.Dir.cwd().createFile(tag_path, .{ .exclusive = false });
-        defer tag_file.close();
+        defer tag_file.close(io);
         try tag_file.writeAll(commit_hash);
         try tag_file.writeAll("\n");
     }
@@ -50,7 +50,7 @@ pub fn createAnnotatedTag(allocator: std.mem.Allocator, repo: *Repository, tag_n
     defer allocator.free(tag_path);
 
     const tag_file = try std.Io.Dir.cwd().createFile(tag_path, .{ .exclusive = false });
-    defer tag_file.close();
+    defer tag_file.close(io);
 
     const timestamp: u64 = 0;
     var buf: [1024]u8 = undefined;
@@ -69,7 +69,7 @@ pub fn listTags(allocator: std.mem.Allocator, repo: *Repository) !void {
         }
         return err;
     };
-    defer dir.close();
+    defer dir.close(io);
 
     var found_any = false;
     var it = dir.iterate();
@@ -80,10 +80,12 @@ pub fn listTags(allocator: std.mem.Allocator, repo: *Repository) !void {
             defer allocator.free(tag_path);
 
             const tag_file = try std.Io.Dir.cwd().openFile(tag_path, .{});
-            defer tag_file.close();
+            defer tag_file.close(io);
 
             var buf: [512]u8 = undefined;
-            const bytes = try tag_file.read(&buf);
+            var tag_file_scratch: [4096]u8 = undefined;
+            var tag_file_reader = tag_file.reader(io, &tag_file_scratch);
+            const bytes = try tag_file_reader.interface.readSliceShort(&buf);
             const content = buf[0..bytes];
 
             if (std.mem.startsWith(u8, content, "commit ")) {
@@ -118,10 +120,12 @@ pub fn getTagCommit(allocator: std.mem.Allocator, repo: *Repository, tag_name: [
         if (err == error.FileNotFound) return error.TagNotFound;
         return err;
     };
-    defer tag_file.close();
+    defer tag_file.close(io);
 
     var buf: [512]u8 = undefined;
-    const bytes = try tag_file.read(&buf);
+    var tag_file_scratch: [4096]u8 = undefined;
+    var tag_file_reader = tag_file.reader(io, &tag_file_scratch);
+    const bytes = try tag_file_reader.interface.readSliceShort(&buf);
     var content = std.mem.trim(u8, buf[0..bytes], " \n\r\t");
 
     if (std.mem.startsWith(u8, content, "commit ")) {

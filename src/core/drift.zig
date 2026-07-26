@@ -52,7 +52,7 @@ fn driftHistoryDir(allocator: std.mem.Allocator, repo: *Repository) ![]u8 {
 fn writeFile(allocator: std.mem.Allocator, path: []const u8, content: []const u8) !void {
     _ = allocator;
     const f = try std.Io.Dir.cwd().createFile(path, .{});
-    defer f.close();
+    defer f.close(io);
     try f.writeAll(content);
 }
 
@@ -185,7 +185,7 @@ fn loadMetricsFromSnapshot(allocator: std.mem.Allocator, io: std.Io, repo: *Repo
     const dir_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "snapshots" });
     defer allocator.free(dir_path);
     var dir = std.Io.Dir.cwd().openDir(dir_path, .{ .iterate = true }) catch return null;
-    defer dir.close();
+    defer dir.close(io);
     var it = dir.iterate();
     while (try it.next()) |entry| {
         if (entry.kind != .file or std.mem.endsWith(u8, entry.name, ".name")) continue;
@@ -515,7 +515,7 @@ pub fn driftHistory(allocator: std.mem.Allocator, io: std.Io, repo: *Repository,
         std.debug.print("No drift history yet. Run: zev drift check\n", .{});
         return;
     };
-    defer d.close();
+    defer d.close(io);
 
     var entries: std.ArrayList([]u8) = .empty;
     defer {

@@ -77,14 +77,14 @@ fn collectMetrics(
     defer allocator.free(root_short);
 
     var root_dir = std.Io.Dir.cwd().openDir(store.base_path, .{ .iterate = true }) catch return;
-    defer root_dir.close();
+    defer root_dir.close(io);
     var rit = root_dir.iterate();
     while (try rit.next()) |shard| {
         if (shard.kind != .directory) continue;
         const sp = try std.fs.path.join(allocator, &.{ store.base_path, shard.name });
         defer allocator.free(sp);
         var sd = std.Io.Dir.cwd().openDir(sp, .{ .iterate = true }) catch continue;
-        defer sd.close();
+        defer sd.close(io);
         var si = sd.iterate();
         while (try si.next()) |block| {
             if (block.kind != .file) continue;
@@ -188,14 +188,14 @@ fn findHeadCommit(
     var best_ts: i64 = -1;
 
     var root_dir = std.Io.Dir.cwd().openDir(store.base_path, .{ .iterate = true }) catch return null;
-    defer root_dir.close();
+    defer root_dir.close(io);
     var rit = root_dir.iterate();
     while (try rit.next()) |shard| {
         if (shard.kind != .directory) continue;
         const sp = try std.fs.path.join(allocator, &.{ store.base_path, shard.name });
         defer allocator.free(sp);
         var sd = std.Io.Dir.cwd().openDir(sp, .{ .iterate = true }) catch continue;
-        defer sd.close();
+        defer sd.close(io);
         var si = sd.iterate();
         while (try si.next()) |block| {
             if (block.kind != .file) continue;
@@ -266,7 +266,7 @@ pub fn mergeFromCar(
     dry_run: bool,
     sign_result: bool,
 ) !void {
-    var store = try ipld.BlockStore.init(allocator, io, io, io, repo.path);
+    var store = try ipld.BlockStore.init(allocator, repo.path);
     defer store.deinit();
 
     std.debug.print("🔀 Federated Merge\n\n", .{});
@@ -428,7 +428,7 @@ pub fn mergeFromCar(
         .merged_by = &pk_str,
     };
 
-    var arena = std.heap.ArenaAllocator.init(allocator, io, io, io, );
+    var arena = std.heap.ArenaAllocator.init(allocator);
     defer arena.deinit();
     const aa = arena.allocator();
 
@@ -445,7 +445,7 @@ pub fn mergeFromCar(
     defer allocator.free(merge_short);
     {
         const f = try std.Io.Dir.cwd().createFile(head_path, .{});
-        defer f.close();
+        defer f.close(io);
         try f.writeAll(merge_short);
     }
 
