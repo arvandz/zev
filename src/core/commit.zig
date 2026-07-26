@@ -18,7 +18,7 @@ pub const Commit = struct {
             .parent_cid = parent_cid,
             .author = author,
             .message = message,
-            .timestamp = epoch_seconds,
+            .timestamp = @intCast(epoch_seconds),
         };
     }
 
