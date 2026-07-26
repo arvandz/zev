@@ -38,7 +38,8 @@ fn computeSnapshotId(allocator: std.mem.Allocator, name: []const u8, commit_hash
     return try content_cid.toString(allocator);
 }
 
-fn saveSnapshot(allocator: std.mem.Allocator, repo: *Repository, snap: Snapshot) !void {
+fn saveSnapshot(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository, snap: Snapshot) !void {
     const path = try snapshotPath(allocator, repo, snap.id);
     defer allocator.free(path);
 
@@ -241,7 +242,7 @@ pub fn snapshotCreate(
     const commit_hash = try head.toString(allocator);
     defer allocator.free(commit_hash);
 
-    const branch = try getCurrentBranch(allocator, repo);
+    const branch = try getCurrentBranch(allocator, io, repo);
     defer allocator.free(branch);
 
     const now = @divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s);
@@ -290,7 +291,7 @@ pub fn snapshotCreate(
         .permanent = permanent,
     };
 
-    try saveSnapshot(allocator, repo, snap);
+    try saveSnapshot(allocator, io, repo, snap);
 
     const perm_icon: []const u8 = if (permanent) "🔒" else "📸";
     std.debug.print("{s} Snapshot '{s}' created!\n", .{ perm_icon, name });
@@ -308,7 +309,8 @@ pub fn snapshotCreate(
     std.debug.print("   Full ID: {s}\n", .{snap_id});
 }
 
-pub fn snapshotList(allocator: std.mem.Allocator, repo: *Repository) !void {
+pub fn snapshotList(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository) !void {
     const dir_path = try snapshotDir(allocator, repo);
     defer allocator.free(dir_path);
 

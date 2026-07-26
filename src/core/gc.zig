@@ -94,10 +94,12 @@ fn collectAllReachable(
         defer allocator.free(tag_path);
 
         const file = std.Io.Dir.cwd().openFile(tag_path, .{}) catch continue;
+        var file_scratch2: [4096]u8 = undefined;
+        var file_reader2 = file.reader(io, &file_scratch2);
         defer file.close(io);
 
         var buf: [256]u8 = undefined;
-        const n = try file_reader.interface.readSliceShort(&buf);
+        const n = try file_reader2.interface.readSliceShort(&buf);
         var content = std.mem.trim(u8, buf[0..n], " \n\r\t");
 
         if (std.mem.startsWith(u8, content, "commit ")) {
@@ -138,7 +140,7 @@ pub fn runGC(allocator: std.mem.Allocator,
 
     std.debug.print("🔍 Scanning reachable objects...\n", .{});
     try collectAllReachable(allocator, io, repo, &reachable);
-    std.debug.print("✅ Found {} reachable objects\n", .{reachable.count()});
+    std.debug.print("✅ Found {} reachable objects\n", .{reachable.count(io, )});
 
     const objects_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "objects" });
     defer allocator.free(objects_path);

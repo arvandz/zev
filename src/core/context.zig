@@ -46,6 +46,7 @@ fn parseKind(s: []const u8) AuthorKind {
 
 fn saveRecord(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     rec: ContextRecord,
 ) !void {
@@ -225,6 +226,7 @@ fn modelIcon(model: []const u8) []const u8 {
 
 fn iterateRecords(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     callback: fn (allocator: std.mem.Allocator, rec: ContextRecord, ctx: *anyopaque) anyerror!bool,
     ctx: *anyopaque,
@@ -296,7 +298,7 @@ pub fn contextAdd(
         .notes = notes orelse "",
     };
 
-    try saveRecord(allocator, repo, rec);
+    try saveRecord(allocator, io, repo, rec);
 
     std.debug.print("{s} Context recorded for '{s}'\n", .{ kindIcon(author_kind), file_path });
     std.debug.print("   Model:   {s}{s}\n", .{ modelIcon(model), model });
@@ -314,6 +316,7 @@ pub fn contextAdd(
 
 pub fn contextShow(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     file_path: []const u8,
 ) !void {
@@ -392,6 +395,7 @@ pub fn contextShow(
 
 pub fn contextBlame(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
 ) !void {
     const dir_path = try contextDir(allocator, repo);
@@ -460,13 +464,14 @@ pub fn contextBlame(
     }
     std.debug.print("   {s}\n", .{divider});
 
-    if (latest.count() == 0) {
+    if (latest.count(io, ) == 0) {
         std.debug.print("  No files with context records.\n\n", .{});
     }
 }
 
 pub fn contextStats(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
 ) !void {
     const dir_path = try contextDir(allocator, repo);
@@ -578,6 +583,7 @@ pub fn contextStats(
 
 pub fn contextQuery(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     model_filter: ?[]const u8,
     kind_filter: ?[]const u8,
@@ -654,7 +660,8 @@ pub fn contextQuery(
     }
 }
 
-pub fn contextList(allocator: std.mem.Allocator, repo: *Repository) !void {
+pub fn contextList(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository) !void {
     const dir_path = try contextDir(allocator, repo);
     defer allocator.free(dir_path);
 

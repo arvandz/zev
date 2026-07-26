@@ -91,7 +91,7 @@ test "blob store put and get" {
     defer std.Io.Dir.cwd().deleteTree(std.testing.io, test_dir) catch {};
 
     const data = "test data for blob store";
-    const content_id = try store.put(data);
+    const content_id = try store.put(std.testing.io, data);
 
     const retrieved = try store.get(content_id);
     defer allocator.free(retrieved);
@@ -107,7 +107,7 @@ test "blob store has" {
     defer std.Io.Dir.cwd().deleteTree(std.testing.io, test_dir) catch {};
 
     const data = "test data";
-    const content_id = try store.put(data);
+    const content_id = try store.put(std.testing.io, data);
 
     try std.testing.expect(try store.has(content_id));
 

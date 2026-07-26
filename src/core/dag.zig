@@ -4,7 +4,6 @@ const ipld = @import("ipld.zig");
 
 pub fn dagShow(
     allocator: std.mem.Allocator,
-    io: std.Io,
     repo: *Repository,
     cid_str: []const u8,
 ) !void {
@@ -122,14 +121,14 @@ pub fn dagPut(
     const c = if (std.mem.startsWith(u8, data, "{") or std.mem.startsWith(u8, data, "[")) blk: {
         const v = simpleJsonToValue(allocator, data) catch {
             const rc = ipld.CID.raw(data);
-            try store.put(rc, data);
+            try store.put(io, rc, data);
             break :blk rc;
         };
         defer v.deinit(allocator);
-        break :blk try store.putNode(allocator, v);
+        break :blk try store.putNode(allocator, io, v);
     } else blk: {
         const rc = ipld.CID.raw(data);
-        try store.put(rc, data);
+        try store.put(io, rc, data);
         break :blk rc;
     };
 
@@ -147,7 +146,7 @@ pub fn dagStat(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) !voi
     var store = try ipld.BlockStore.init(allocator, repo.path);
     defer store.deinit();
 
-    const block_count = store.count();
+    const block_count = store.count(io, );
 
     var total_bytes: u64 = 0;
     var by_type = std.StringHashMap(usize).init(allocator);
@@ -214,7 +213,7 @@ pub fn dagStat(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) !voi
         std.debug.print("   Total size: {d} KB\n\n", .{total_bytes / 1024});
     }
 
-    if (by_type.count() > 0) {
+    if (by_type.count(io, ) > 0) {
         std.debug.print("   By type:\n", .{});
         var it = by_type.iterator();
         while (it.next()) |entry| {
@@ -267,7 +266,7 @@ pub fn graftAdd(
     defer arena.deinit();
     const aa = arena.allocator();
     const graft_val = try graft.toValue(aa);
-    const graft_cid = try store.putNode(aa, graft_val);
+    const graft_cid = try store.putNode(io, aa, graft_val);
 
     try saveGraftAlias(allocator, io, repo, alias, cid_str, graft_cid);
 
@@ -548,7 +547,7 @@ fn fetchFromIPFS(
 
     if (n > 0) {
         const c = ipld.CID.raw(buf[0..n]);
-        try store.put(c, buf[0..n]);
+        try store.put(io, c, buf[0..n]);
         std.debug.print("   ✅ Fetched {d} bytes from IPFS\n", .{n});
     } else {
         std.debug.print("   ⚠️  Block not found on local IPFS node\n", .{});

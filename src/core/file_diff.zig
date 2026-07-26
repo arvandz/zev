@@ -18,7 +18,7 @@ pub fn readTree(
     repo_path: []const u8,
     tree_hash: []const u8,
 ) ![]TreeEntry {
-    const obj_path = try findObject(allocator, repo_path, tree_hash);
+    const obj_path = try findObject(allocator, io, repo_path, tree_hash);
     defer allocator.free(obj_path);
 
     const content = try std.Io.Dir.cwd().readFileAlloc(io, obj_path, allocator, .limited(1024 * 1024));
@@ -64,13 +64,14 @@ pub fn readObject(
     repo_path: []const u8,
     hash: []const u8,
 ) ![]u8 {
-    const path = try findObject(allocator, repo_path, hash);
+    const path = try findObject(allocator, io, repo_path, hash);
     defer allocator.free(path);
     return std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(10 * 1024 * 1024)); // 10MB max
 }
 
 fn findObject(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo_path: []const u8,
     hash_prefix: []const u8,
 ) ![]u8 {
@@ -160,6 +161,7 @@ pub const FileDiff = struct {
 
 fn diffPython(
     allocator: std.mem.Allocator,
+    io: std.Io,
     content_a: []const u8,
     content_b: []const u8,
     out: *std.ArrayList(SemanticChange),
@@ -248,7 +250,7 @@ fn diffPython(
         });
     }
 
-    try diffNumericAssignments(allocator, content_a, content_b, out);
+    try diffNumericAssignments(allocator, io, content_a, content_b, out);
 }
 
 fn extractPythonDefs(allocator: std.mem.Allocator, content: []const u8) ![][]u8 {
@@ -284,6 +286,7 @@ fn extractImports(allocator: std.mem.Allocator, content: []const u8) ![][]u8 {
 
 fn diffNumericAssignments(
     allocator: std.mem.Allocator,
+    io: std.Io,
     content_a: []const u8,
     content_b: []const u8,
     out: *std.ArrayList(SemanticChange),
@@ -347,6 +350,7 @@ fn extractNumericAssigns(
 
 fn diffConfig(
     allocator: std.mem.Allocator,
+    io: std.Io,
     content_a: []const u8,
     content_b: []const u8,
     out: *std.ArrayList(SemanticChange),
@@ -370,8 +374,8 @@ fn diffConfig(
         map_b.deinit();
     }
 
-    try extractConfigPairs(allocator, content_a, &map_a);
-    try extractConfigPairs(allocator, content_b, &map_b);
+    try extractConfigPairs(allocator, io, content_a, &map_a);
+    try extractConfigPairs(allocator, io, content_b, &map_b);
 
     var it_a = map_a.iterator();
     while (it_a.next()) |entry| {
@@ -406,6 +410,7 @@ fn diffConfig(
 
 fn extractConfigPairs(
     allocator: std.mem.Allocator,
+    io: std.Io,
     content: []const u8,
     map: *std.StringHashMap([]u8),
 ) !void {
@@ -482,6 +487,7 @@ fn diffText(
 
 pub fn diffTrees(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo_path: []const u8,
     tree_hash_a: []const u8,
     tree_hash_b: []const u8,
@@ -548,8 +554,8 @@ pub fn diffTrees(
 
         if (content_a != null and content_b != null) {
             switch (ftype) {
-                .python => try diffPython(allocator, content_a.?, content_b.?, &semantic),
-                .json, .yaml, .toml => try diffConfig(allocator, content_a.?, content_b.?, &semantic),
+                .python => try diffPython(allocator, io, content_a.?, content_b.?, &semantic),
+                .json, .yaml, .toml => try diffConfig(allocator, io, content_a.?, content_b.?, &semantic),
                 .text, .markdown => try diffText(allocator, content_a.?, content_b.?, &semantic),
                 .binary => try semantic.append(allocator, .{
                     .kind = .binary_changed,

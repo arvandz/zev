@@ -604,7 +604,7 @@ fn renderMarkdown(
     defer out.deinit(allocator);
 
     const appendStr = struct {
-        fn f(list: *std.ArrayList(u8), alloc: std.mem.Allocator, s: []const u8) !void {
+        fn f( list: *std.ArrayList(u8), alloc: std.mem.Allocator, s: []const u8) !void {
             try list.appendSlice(alloc, s);
         }
     }.f;
@@ -673,6 +673,7 @@ fn renderMarkdown(
 
 fn renderJson(
     allocator: std.mem.Allocator,
+    io: std.Io,
     events: []const AuditEvent,
     repo_path: []const u8,
     output_path: []const u8,
@@ -788,7 +789,7 @@ pub fn runAudit(
         printSummary(events.items);
     } else if (std.mem.eql(u8, format, "json")) {
         const out = output_path orelse "-";
-        try renderJson(allocator, events.items, repo.path, out);
+        try renderJson(allocator, io, events.items, repo.path, out);
     } else {
         renderTerminal(events.items, repo.path, filter_label);
         printSummary(events.items);

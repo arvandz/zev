@@ -10,7 +10,8 @@ pub const Tag = struct {
     timestamp: i64,
 };
 
-pub fn createTag(allocator: std.mem.Allocator, repo: *Repository, tag_name: []const u8) !void {
+pub fn createTag(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository, tag_name: []const u8) !void {
     if (tag_name.len == 0) return error.InvalidTagName;
     for (tag_name) |c| {
         if (c == ' ' or c == '\t' or c == '\n') return error.InvalidTagName;
@@ -35,7 +36,8 @@ pub fn createTag(allocator: std.mem.Allocator, repo: *Repository, tag_name: []co
     }
 }
 
-pub fn createAnnotatedTag(allocator: std.mem.Allocator, repo: *Repository, tag_name: []const u8, message: []const u8, tagger: []const u8) !void {
+pub fn createAnnotatedTag(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository, tag_name: []const u8, message: []const u8, tagger: []const u8) !void {
     if (tag_name.len == 0) return error.InvalidTagName;
 
     const head_cid = try repo.getHeadCommit();
@@ -58,7 +60,8 @@ pub fn createAnnotatedTag(allocator: std.mem.Allocator, repo: *Repository, tag_n
     try tag_file.writeAll(content);
 }
 
-pub fn listTags(allocator: std.mem.Allocator, repo: *Repository) !void {
+pub fn listTags(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository) !void {
     const tags_dir = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "refs", "tags" });
     defer allocator.free(tags_dir);
 
@@ -112,7 +115,8 @@ pub fn deleteTag(allocator: std.mem.Allocator, repo: *Repository, tag_name: []co
     };
 }
 
-pub fn getTagCommit(allocator: std.mem.Allocator, repo: *Repository, tag_name: []const u8) !cid_mod.CID {
+pub fn getTagCommit(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository, tag_name: []const u8) !cid_mod.CID {
     const tag_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "refs", "tags", tag_name });
     defer allocator.free(tag_path);
 

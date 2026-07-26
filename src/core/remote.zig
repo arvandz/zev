@@ -98,7 +98,8 @@ pub fn removeRemote(allocator: std.mem.Allocator, repo: *Repository, name: []con
     try std.Io.Dir.cwd().deleteFile(remote_file_path);
 }
 
-pub fn listRemotes(allocator: std.mem.Allocator, repo: *Repository) !void {
+pub fn listRemotes(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository) !void {
     const zev_path = try std.fs.path.join(allocator, &[_][]const u8{ repo.path, ".zev" });
     defer allocator.free(zev_path);
 
@@ -142,7 +143,7 @@ pub fn push(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, remote_
     std.debug.print("📤 Pushing to {s} ({s})\n", .{ remote_name, remote_url });
 
     switch (protocol) {
-        .file => try pushFile(allocator, repo, remote_url, branch_name),
+        .file => try pushFile(allocator, io, repo, remote_url, branch_name),
         .http, .https => try pushHTTP(allocator, remote_url, branch_name),
         .ssh => try pushSSH(allocator, remote_url, branch_name),
         .ipfs => try pushIPFS(allocator, repo, remote_name, branch_name),
@@ -158,7 +159,7 @@ pub fn pull(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, remote_
     std.debug.print("📥 Pulling from {s} ({s})\n", .{ remote_name, remote_url });
 
     switch (protocol) {
-        .file => try pullFile(allocator, repo, remote_url, branch_name),
+        .file => try pullFile(allocator, io, repo, remote_url, branch_name),
         .http, .https => try pullHTTP(allocator, repo, remote_url, branch_name),
         .ssh => try pullSSH(allocator, repo, remote_url, branch_name),
         .ipfs => try pullIPFS(allocator, repo, remote_url, branch_name),
@@ -187,7 +188,8 @@ pub fn clone(allocator: std.mem.Allocator, io: std.Io, url: []const u8, dest_pat
     }
 }
 
-fn pushFile(allocator: std.mem.Allocator, repo: *Repository, remote_url: []const u8, branch_name: []const u8) !void {
+fn pushFile(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository, remote_url: []const u8, branch_name: []const u8) !void {
     const remote_path = if (std.mem.startsWith(u8, remote_url, "file://"))
         remote_url[7..]
     else
@@ -236,7 +238,8 @@ fn pushFile(allocator: std.mem.Allocator, repo: *Repository, remote_url: []const
     std.debug.print("✅ Pushed {s} to {s}\n", .{ branch_name, remote_path });
 }
 
-fn pullFile(allocator: std.mem.Allocator, repo: *Repository, remote_url: []const u8, branch_name: []const u8) !void {
+fn pullFile(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository, remote_url: []const u8, branch_name: []const u8) !void {
     const remote_path = if (std.mem.startsWith(u8, remote_url, "file://"))
         remote_url[7..]
     else
@@ -475,7 +478,7 @@ fn pullIPFS(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, remote_
 
     std.debug.print("📄 Retrieved repository metadata\n", .{});
 
-    var metadata = try ipfs_repo.IPFSRepo.Metadata.fromJson(allocator, metadata_json);
+    var metadata = try ipfs_repo.IPFSRepo.Metadata.fromJson(allocator, io, metadata_json);
     defer metadata.deinit();
 
     var it = metadata.refs.iterator();

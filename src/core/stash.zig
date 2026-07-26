@@ -26,7 +26,7 @@ pub fn stashSave(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, me
     defer allocator.free(stash_dir);
     try std.Io.Dir.cwd().makePath(stash_dir);
 
-    const stash_id = try getNextStashId(allocator, stash_dir);
+    const stash_id = try getNextStashId(allocator, io, stash_dir);
 
     var buf: std.ArrayList(u8) = .empty;
     defer buf.deinit(allocator);
@@ -70,7 +70,8 @@ pub fn stashSave(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, me
     std.debug.print("✅ Saved stash@{{{}}} : {s}\n", .{ stash_id, msg });
 }
 
-pub fn stashList(allocator: std.mem.Allocator, repo: *Repository) !void {
+pub fn stashList(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository) !void {
     const stash_dir = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "stash" });
     defer allocator.free(stash_dir);
 
@@ -198,7 +199,8 @@ pub fn stashDrop(allocator: std.mem.Allocator, repo: *Repository, stash_id: usiz
     std.debug.print("✅ Dropped stash@{{{}}}\n", .{stash_id});
 }
 
-fn getNextStashId(allocator: std.mem.Allocator, stash_dir: []const u8) !usize {
+fn getNextStashId(allocator: std.mem.Allocator,
+    io: std.Io, stash_dir: []const u8) !usize {
     var dir = std.Io.Dir.cwd().openDir(stash_dir, .{ .iterate = true }) catch return 0;
     defer dir.close(io);
 

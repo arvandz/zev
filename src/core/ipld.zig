@@ -627,7 +627,7 @@ pub const BlockStore = struct {
         return std.fs.path.join(self.allocator, &.{ sub_dir, short });
     }
 
-    pub fn put(self: BlockStore, c: CID, data: []const u8) !void {
+    pub fn put(self: BlockStore, io: std.Io, c: CID, data: []const u8) !void {
         const path = try self.blockPath(c);
         defer self.allocator.free(path);
         std.Io.Dir.cwd().access(path, .{}) catch {
@@ -651,19 +651,21 @@ pub const BlockStore = struct {
         return true;
     }
 
-    pub fn putNode(self: BlockStore, allocator: std.mem.Allocator, value: Value) !CID {
+    pub fn putNode(self: BlockStore, allocator: std.mem.Allocator,
+    io: std.Io, value: Value) !CID {
         const data = try encode(allocator, value);
         defer allocator.free(data);
         const c = CID.dagCbor(data);
-        try self.put(c, data);
+        try self.put(io, c, data);
         return c;
     }
 
-    pub fn putNodeOwned(self: BlockStore, allocator: std.mem.Allocator, value: Value) !CID {
+    pub fn putNodeOwned(self: BlockStore, allocator: std.mem.Allocator,
+    io: std.Io, value: Value) !CID {
         const data = try encode(allocator, value);
         defer allocator.free(data);
         const c = CID.dagCbor(data);
-        try self.put(c, data);
+        try self.put(io, c, data);
         if (value == .map) {
             for (value.map) |entry| allocator.free(entry.key);
             allocator.free(value.map);
@@ -677,7 +679,7 @@ pub const BlockStore = struct {
         return decode(allocator, data);
     }
 
-    pub fn count(self: BlockStore) usize {
+    pub fn count(io: std.Io, self: BlockStore) usize {
         var total: usize = 0;
         var dir = std.Io.Dir.cwd().openDir(self.base_path, .{ .iterate = true }) catch return 0;
         defer dir.close(io);

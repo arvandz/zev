@@ -62,7 +62,8 @@ fn nodePath(allocator: std.mem.Allocator, repo: *Repository, id: []const u8) ![]
     return try std.fs.path.join(allocator, &.{ dir, id });
 }
 
-fn saveNode(allocator: std.mem.Allocator, repo: *Repository, node: LineageNode) !void {
+fn saveNode(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository, node: LineageNode) !void {
     const path = try nodePath(allocator, repo, node.id);
     defer allocator.free(path);
 
@@ -187,7 +188,7 @@ pub fn lineageAdd(
                 .parents = "",
                 .version = version,
             };
-            try saveNode(allocator, repo, node);
+            try saveNode(allocator, io, repo, node);
             std.debug.print("{s} Added lineage node '{s}' [{s}]\n", .{ node_type.icon(), id, node_type.toString() });
             return;
         };
@@ -212,7 +213,7 @@ pub fn lineageAdd(
         .parents = "",
         .version = version,
     };
-    try saveNode(allocator, repo, node);
+    try saveNode(allocator, io, repo, node);
 
     std.debug.print("{s} Added lineage node '{s}'\n", .{ node_type.icon(), id });
     std.debug.print("   Type:    {s}\n", .{node_type.toString()});
@@ -227,6 +228,7 @@ pub fn lineageAdd(
 
 pub fn lineageLink(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     child_id: []const u8,
     parent_id: []const u8,
@@ -259,7 +261,7 @@ pub fn lineageLink(
         .parents = new_parents,
         .version = child.version,
     };
-    try saveNode(allocator, repo, updated);
+    try saveNode(allocator, io, repo, updated);
 
     std.debug.print("🔗 Linked: {s} -> {s}\n", .{ parent_id, child_id });
     std.debug.print("   {s} {s} derives from {s} {s}\n", .{
@@ -329,7 +331,8 @@ fn printAncestors(
     }
 }
 
-pub fn lineageList(allocator: std.mem.Allocator, repo: *Repository) !void {
+pub fn lineageList(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository) !void {
     const dir_path = try lineageDir(allocator, repo);
     defer allocator.free(dir_path);
 
@@ -381,7 +384,8 @@ pub fn lineageList(allocator: std.mem.Allocator, repo: *Repository) !void {
     }
 }
 
-pub fn lineageGraph(allocator: std.mem.Allocator, repo: *Repository) !void {
+pub fn lineageGraph(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository) !void {
     const dir_path = try lineageDir(allocator, repo);
     defer allocator.free(dir_path);
 
@@ -401,7 +405,7 @@ pub fn lineageGraph(allocator: std.mem.Allocator, repo: *Repository) !void {
         defer freeNode(allocator, node);
 
         if (node.parents.len == 0) {
-            try printDescendants(allocator, repo, node.id, 0, 8);
+            try printDescendants(allocator, io, repo, node.id, 0, 8);
             std.debug.print("\n", .{});
         }
     }
@@ -409,6 +413,7 @@ pub fn lineageGraph(allocator: std.mem.Allocator, repo: *Repository) !void {
 
 fn printDescendants(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     id: []const u8,
     depth: usize,
@@ -450,14 +455,15 @@ fn printDescendants(
         while (parent_iter.next()) |pid| {
             const trimmed = std.mem.trim(u8, pid, " ");
             if (std.mem.eql(u8, trimmed, id)) {
-                try printDescendants(allocator, repo, child.id, depth + 1, max_depth);
+                try printDescendants(allocator, io, repo, child.id, depth + 1, max_depth);
                 break;
             }
         }
     }
 }
 
-pub fn lineageProvenance(allocator: std.mem.Allocator, repo: *Repository, cid_prefix: []const u8) !void {
+pub fn lineageProvenance(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository, cid_prefix: []const u8) !void {
     const dir_path = try lineageDir(allocator, repo);
     defer allocator.free(dir_path);
 

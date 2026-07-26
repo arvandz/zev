@@ -538,7 +538,7 @@ pub fn dagQuery(
     defer engine.deinit();
 
     if (pq.root_cid.version == 0) {
-        try scanAllBlocks(allocator, &store, &engine, pq.selector);
+        try scanAllBlocks(allocator, io, &store, &engine, pq.selector);
     } else {
         try engine.execute(pq.root_cid, pq.selector);
     }
@@ -631,6 +631,7 @@ pub fn dagQuery(
 
 fn scanAllBlocks(
     allocator: std.mem.Allocator,
+    io: std.Io,
     store: *ipld.BlockStore,
     engine: *SelectorEngine,
     sel: *const Selector,

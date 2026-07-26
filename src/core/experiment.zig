@@ -36,7 +36,8 @@ fn experimentPath(allocator: std.mem.Allocator, repo: *Repository, name: []const
     return try std.fs.path.join(allocator, &.{ dir, safe });
 }
 
-fn saveExperiment(allocator: std.mem.Allocator, repo: *Repository, exp: Experiment) !void {
+fn saveExperiment(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository, exp: Experiment) !void {
     const path = try experimentPath(allocator, repo, exp.name);
     defer allocator.free(path);
 
@@ -146,7 +147,7 @@ pub fn experimentStart(
     const branch_name = try std.fmt.allocPrint(allocator, "exp/{s}", .{name});
     defer allocator.free(branch_name);
 
-    branch_mod.createBranch(allocator, repo, branch_name) catch |err| {
+    branch_mod.createBranch(allocator, io, repo, branch_name) catch |err| {
         if (err == error.BranchAlreadyExists) {
             std.debug.print("Warning: Branch '{s}' already exists, reusing\n", .{branch_name});
         } else return err;
@@ -164,9 +165,9 @@ pub fn experimentStart(
         .tags = tags,
     };
 
-    try saveExperiment(allocator, repo, exp);
+    try saveExperiment(allocator, io, repo, exp);
 
-    branch_mod.checkoutBranch(allocator, repo, branch_name) catch |err| {
+    branch_mod.checkoutBranch(allocator, io, repo, branch_name) catch |err| {
         std.debug.print("Warning: Could not switch to experiment branch: {}\n", .{err});
     };
 
@@ -183,7 +184,8 @@ pub fn experimentStart(
     std.debug.print("   Then: zev experiment complete {s}\n", .{name});
 }
 
-pub fn experimentComplete(allocator: std.mem.Allocator, repo: *Repository, name: []const u8, notes: []const u8) !void {
+pub fn experimentComplete(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository, name: []const u8, notes: []const u8) !void {
     const exp = (try loadExperiment(allocator, repo, name)) orelse {
         std.debug.print("Error: Experiment '{s}' not found\n", .{name});
         return;
@@ -199,7 +201,7 @@ pub fn experimentComplete(allocator: std.mem.Allocator, repo: *Repository, name:
         .created_at = exp.created_at,
         .tags = exp.tags,
     };
-    try saveExperiment(allocator, repo, updated);
+    try saveExperiment(allocator, io, repo, updated);
 
     if (notes.len > 0) {
         const results_path = try experimentPath(allocator, repo, try std.fmt.allocPrint(allocator, "{s}.results", .{name}));
@@ -216,7 +218,8 @@ pub fn experimentComplete(allocator: std.mem.Allocator, repo: *Repository, name:
     std.debug.print("   Use 'zev metrics show' to see final metrics\n", .{});
 }
 
-pub fn experimentAbandon(allocator: std.mem.Allocator, repo: *Repository, name: []const u8, reason: []const u8) !void {
+pub fn experimentAbandon(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository, name: []const u8, reason: []const u8) !void {
     const exp = (try loadExperiment(allocator, repo, name)) orelse {
         std.debug.print("Error: Experiment '{s}' not found\n", .{name});
         return;
@@ -232,7 +235,7 @@ pub fn experimentAbandon(allocator: std.mem.Allocator, repo: *Repository, name: 
         .created_at = exp.created_at,
         .tags = exp.tags,
     };
-    try saveExperiment(allocator, repo, updated);
+    try saveExperiment(allocator, io, repo, updated);
 
     std.debug.print("🗑️  Experiment '{s}' abandoned\n", .{name});
     if (reason.len > 0)
@@ -270,7 +273,8 @@ pub fn experimentShow(allocator: std.mem.Allocator, io: std.Io, repo: *Repositor
     std.debug.print("\n", .{});
 }
 
-pub fn experimentList(allocator: std.mem.Allocator, repo: *Repository) !void {
+pub fn experimentList(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository) !void {
     const dir_path = try experimentsDir(allocator, repo);
     defer allocator.free(dir_path);
 

@@ -10,7 +10,8 @@ pub const BisectState = struct {
     current: []const u8,
 };
 
-pub fn bisectStart(allocator: std.mem.Allocator, repo: *Repository) !void {
+pub fn bisectStart(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository) !void {
     const head = try repo.getHeadCommit();
     const head_str = try head.toString(allocator);
     defer allocator.free(head_str);
@@ -28,7 +29,8 @@ pub fn bisectStart(allocator: std.mem.Allocator, repo: *Repository) !void {
     std.debug.print("  Or mark current: zev bisect good / zev bisect bad\n", .{});
 }
 
-fn loadState(allocator: std.mem.Allocator, repo: *Repository) !?struct { good: []u8, bad: []u8, current: []u8 } {
+fn loadState(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository) !?struct { good: []u8, bad: []u8, current: []u8 } {
     const state_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "BISECT_STATE" });
     defer allocator.free(state_path);
 
@@ -60,7 +62,8 @@ fn loadState(allocator: std.mem.Allocator, repo: *Repository) !?struct { good: [
     return .{ .good = good, .bad = bad, .current = current };
 }
 
-fn saveState(allocator: std.mem.Allocator, repo: *Repository, good: []const u8, bad: []const u8, current: []const u8) !void {
+fn saveState(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository, good: []const u8, bad: []const u8, current: []const u8) !void {
     const state_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "BISECT_STATE" });
     defer allocator.free(state_path);
 
@@ -130,8 +133,9 @@ fn resolveHash(allocator: std.mem.Allocator, repo: *Repository, hash_opt: ?[]con
     return try head.toString(allocator);
 }
 
-pub fn bisectGood(allocator: std.mem.Allocator, repo: *Repository, hash_opt: ?[]const u8) !void {
-    const state = (try loadState(allocator, repo)) orelse {
+pub fn bisectGood(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository, hash_opt: ?[]const u8) !void {
+    const state = (try loadState(allocator, io, repo)) orelse {
         std.debug.print("No bisect in progress. Run: zev bisect start\n", .{});
         return;
     };
@@ -143,12 +147,13 @@ pub fn bisectGood(allocator: std.mem.Allocator, repo: *Repository, hash_opt: ?[]
     defer allocator.free(good_hash);
 
     std.debug.print("✅ Marked {s} as good\n", .{good_hash[0..8]});
-    try saveState(allocator, repo, good_hash, state.bad, state.current);
+    try saveState(allocator, io, repo, good_hash, state.bad, state.current);
     try bisectStep(allocator, repo, good_hash, state.bad);
 }
 
-pub fn bisectBad(allocator: std.mem.Allocator, repo: *Repository, hash_opt: ?[]const u8) !void {
-    const state = (try loadState(allocator, repo)) orelse {
+pub fn bisectBad(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository, hash_opt: ?[]const u8) !void {
+    const state = (try loadState(allocator, io, repo)) orelse {
         std.debug.print("No bisect in progress. Run: zev bisect start\n", .{});
         return;
     };
@@ -160,7 +165,7 @@ pub fn bisectBad(allocator: std.mem.Allocator, repo: *Repository, hash_opt: ?[]c
     defer allocator.free(bad_hash);
 
     std.debug.print("❌ Marked {s} as bad\n", .{bad_hash[0..8]});
-    try saveState(allocator, repo, state.good, bad_hash, state.current);
+    try saveState(allocator, io, repo, state.good, bad_hash, state.current);
     try bisectStep(allocator, repo, state.good, bad_hash);
 }
 
@@ -215,7 +220,7 @@ fn bisectStep(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, good_
     const mid_str = try mid_cid.toString(allocator);
     defer allocator.free(mid_str);
 
-    try saveState(allocator, repo, good_str, bad_str, mid_str);
+    try saveState(allocator, io, repo, good_str, bad_str, mid_str);
     try checkoutForBisect(allocator, repo, mid_cid);
 
     std.debug.print("  ~{} commits remaining to test\n", .{range / 2});

@@ -27,7 +27,8 @@ fn notarizeDir(allocator: std.mem.Allocator, repo: *Repository) ![]u8 {
     return dir;
 }
 
-fn saveRecord(allocator: std.mem.Allocator, repo: *Repository, rec: NotarizationRecord) !void {
+fn saveRecord(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository, rec: NotarizationRecord) !void {
     const dir = try notarizeDir(allocator, repo);
     defer allocator.free(dir);
     const path = try std.fs.path.join(allocator, &.{ dir, rec.id });
@@ -518,7 +519,7 @@ pub fn notarizeSnapshot(
         .block = result.block,
         .verified = true,
     };
-    try saveRecord(allocator, repo, rec);
+    try saveRecord(allocator, io, repo, rec);
 
     const chain_icon: []const u8 = if (std.mem.eql(u8, actual_chain, "ethereum")) "⟠" else if (std.mem.eql(u8, actual_chain, "arweave")) "◎" else "🔒";
 
@@ -611,14 +612,15 @@ pub fn notarizeCommit(
         .block = result.block,
         .verified = true,
     };
-    try saveRecord(allocator, repo, rec);
+    try saveRecord(allocator, io, repo, rec);
 
     std.debug.print("🔒 Notarized!\n", .{});
     std.debug.print("   Proof:  {s}\n", .{result.tx_hash[0..@min(16, result.tx_hash.len)]});
     std.debug.print("   Verify: zev notarize verify {s}\n", .{rec_id[0..16]});
 }
 
-pub fn notarizeVerify(allocator: std.mem.Allocator, repo: *Repository, rec_id_prefix: []const u8) !void {
+pub fn notarizeVerify(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository, rec_id_prefix: []const u8) !void {
     const dir = try notarizeDir(allocator, repo);
     defer allocator.free(dir);
 
@@ -671,7 +673,8 @@ pub fn notarizeVerify(allocator: std.mem.Allocator, repo: *Repository, rec_id_pr
     std.debug.print("\n", .{});
 }
 
-pub fn notarizeList(allocator: std.mem.Allocator, repo: *Repository) !void {
+pub fn notarizeList(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository) !void {
     const dir = try notarizeDir(allocator, repo);
     defer allocator.free(dir);
 

@@ -177,7 +177,7 @@ pub fn textCommitToIPLD(
             .timestamp = tc.timestamp,
         };
         const mv = try mn.toValue(aa);
-        const mcid = try store.putNode(aa, mv);
+        const mcid = try store.putNode(io, aa, mv);
         break :blk mcid;
     } else null;
 
@@ -200,7 +200,7 @@ pub fn textCommitToIPLD(
     };
 
     const cv = try cn.toValue(aa);
-    return try store.putNode(aa, cv);
+    return try store.putNode(io, aa, cv);
 }
 
 pub fn migrateCommitsToIPLD(
@@ -254,10 +254,10 @@ pub fn migrateCommitsToIPLD(
         const existing_cid = loadCommitCIDMapping(allocator, repo, hash) catch null;
         const commit_cid = if (existing_cid) |e| e else blk: {
             const c = try textCommitToIPLD(allocator, io, &store, tc, parent_ipld_cid, metrics);
-            try saveCommitCIDMapping(allocator, repo, hash, c);
+            try saveCommitCIDMapping(allocator, io, repo, hash, c);
             break :blk c;
         };
-        try saveCommitCIDMapping(allocator, repo, hash, commit_cid);
+        try saveCommitCIDMapping(allocator, io, repo, hash, commit_cid);
 
         parent_ipld_cid = commit_cid;
         migrated += 1;
@@ -272,7 +272,7 @@ pub fn migrateCommitsToIPLD(
     }
 
     if (parent_ipld_cid) |head_cid| {
-        try saveIPLDHead(allocator, repo, head_cid);
+        try saveIPLDHead(allocator, io, repo, head_cid);
         const short = try head_cid.toShort(allocator);
         defer allocator.free(short);
         std.debug.print("\n✅ IPLD HEAD: {s}\n\n", .{short});
@@ -306,8 +306,8 @@ pub fn onNewCommit(
 
     const commit_cid = try textCommitToIPLD(allocator, io, &store, tc, parent_ipld_cid, empty_metrics);
 
-    try saveCommitCIDMapping(allocator, repo, commit_hash, commit_cid);
-    try saveIPLDHead(allocator, repo, commit_cid);
+    try saveCommitCIDMapping(allocator, io, repo, commit_hash, commit_cid);
+    try saveIPLDHead(allocator, io, repo, commit_cid);
 
     const short = try commit_cid.toShort(allocator);
     defer allocator.free(short);
@@ -356,7 +356,7 @@ pub fn onMetricsSet(
         .timestamp = @divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s),
     };
     const mv = try mn.toValue(aa);
-    const metrics_cid = try store.putNode(aa, mv);
+    const metrics_cid = try store.putNode(io, aa, mv);
     _ = metrics_cid;
 }
 
@@ -418,7 +418,7 @@ pub fn ipldLog(
             }
         }
         if (best) |c| {
-            saveIPLDHead(allocator, repo, c) catch {};
+            saveIPLDHead(allocator, io, repo, c) catch {};
             break :blk c;
         }
         std.debug.print("No IPLD history yet. Run: zev ipld migrate\n\n", .{});
@@ -481,6 +481,7 @@ pub fn ipldLog(
 
 fn saveCommitCIDMapping(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     commit_hash: []const u8,
     cid: ipld.CID,
@@ -522,6 +523,7 @@ fn loadCommitCIDMapping(
 
 fn saveIPLDHead(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     cid: ipld.CID,
 ) !void {

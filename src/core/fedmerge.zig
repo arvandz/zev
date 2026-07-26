@@ -69,6 +69,7 @@ const MetricMap = struct {
 
 fn collectMetrics(
     allocator: std.mem.Allocator,
+    io: std.Io,
     store: *ipld.BlockStore,
     root_cid: ipld.CID,
     out: *MetricMap,
@@ -120,11 +121,12 @@ fn collectMetrics(
         while (it.next()) |k| allocator.free(k.*);
         visited.deinit();
     }
-    try collectMetricsInner(allocator, store, root_cid, out, &visited, 3);
+    try collectMetricsInner(allocator, io, store, root_cid, out, &visited, 3);
 }
 
 fn collectMetricsInner(
     allocator: std.mem.Allocator,
+    io: std.Io,
     store: *ipld.BlockStore,
     c: ipld.CID,
     out: *MetricMap,
@@ -175,13 +177,14 @@ fn collectMetricsInner(
 
     for (node.map) |entry| {
         if (entry.value == .link) {
-            try collectMetricsInner(allocator, store, entry.value.link, out, visited, depth - 1);
+            try collectMetricsInner(allocator, io, store, entry.value.link, out, visited, depth - 1);
         }
     }
 }
 
 fn findHeadCommit(
     allocator: std.mem.Allocator,
+    io: std.Io,
     store: *ipld.BlockStore,
 ) !?ipld.CID {
     var best: ?ipld.CID = null;
@@ -283,7 +286,7 @@ pub fn mergeFromCar(
             const trimmed = std.mem.trim(u8, content, "\n\r ");
             if (ipld.CID.fromHex(trimmed)) |c| break :blk c else |_| {}
         } else |_| {}
-        break :blk try findHeadCommit(allocator, &store) orelse {
+        break :blk try findHeadCommit(allocator, io, &store) orelse {
             std.debug.print("❌ No IPLD commits in this repo. Run: zev ipld migrate\n\n", .{});
             return;
         };
@@ -313,7 +316,7 @@ pub fn mergeFromCar(
             pos = block_end;
 
             if (!store.has(c)) {
-                if (!dry_run) try store.put(c, data);
+                if (!dry_run) try store.put(io, c, data);
                 imported_count += 1;
             }
         }
@@ -321,7 +324,7 @@ pub fn mergeFromCar(
     std.debug.print("   Imported: {d} new blocks\n\n", .{imported_count});
 
     const head_b = try findHeadInCar(allocator, &store, car_path) orelse
-        try findHeadCommit(allocator, &store) orelse {
+        try findHeadCommit(allocator, io, &store) orelse {
         std.debug.print("❌ No commit nodes found in foreign CAR.\n\n", .{});
         return;
     };
@@ -344,8 +347,8 @@ pub fn mergeFromCar(
     var metrics_b = MetricMap.init(allocator, io, io, io, );
     defer metrics_b.deinit();
 
-    try collectMetrics(allocator, &store, head_a, &metrics_a);
-    try collectMetrics(allocator, &store, head_b, &metrics_b);
+    try collectMetrics(allocator, io, &store, head_a, &metrics_a);
+    try collectMetrics(allocator, io, &store, head_b, &metrics_b);
 
     std.debug.print("📊 Metrics comparison:\n\n", .{});
     var all_keys = std.StringHashMap(void).init(allocator);
@@ -433,7 +436,7 @@ pub fn mergeFromCar(
     const aa = arena.allocator();
 
     const mn_val = try mn.toValue(aa);
-    var merge_cid = try store.putNode(aa, mn_val);
+    var merge_cid = try store.putNode(io, aa, mn_val);
 
     if (sign_result) {
         merge_cid = try crypto.signCommitNode(allocator, io, &store, repo, merge_cid);
@@ -461,7 +464,7 @@ pub fn mergeFromCar(
             .timestamp = now,
         };
         const mmv = try merged_mn.toValue(aa);
-        _ = try store.putNode(aa, mmv);
+        _ = try store.putNode(io, aa, mmv);
     }
 
     std.debug.print("✅ Merge complete\n\n", .{});

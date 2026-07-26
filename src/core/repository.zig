@@ -204,6 +204,7 @@ pub const Repository = struct {
         const head_file = try std.Io.Dir.cwd().openFile(io, head_path, .{});
         defer head_file.close(io);
 
+        var buffer: [256]u8 = undefined;
         var head_scratch: [256]u8 = undefined;
         var head_reader = head_file.reader(io, &head_scratch);
         const bytes_read = try head_reader.interface.readSliceShort(&buffer);
@@ -214,7 +215,7 @@ pub const Repository = struct {
             const full_ref_path = try std.fs.path.join(self.allocator, &[_][]const u8{ zev_path, ref_path });
             defer self.allocator.free(full_ref_path);
 
-            const ref_file = try std.Io.Dir.cwd().createFile(full_ref_path, .{});
+            const ref_file = try std.Io.Dir.cwd().createFile(io, full_ref_path, .{});
             defer ref_file.close(io);
 
             const commit_hash = try commit_cid.toString(self.allocator);
@@ -229,9 +230,9 @@ pub const Repository = struct {
         return null;
     }
 
-    pub fn saveConfig(self: *Repository) !void {
+    pub fn saveConfig(io: std.Io, self: *Repository) !void {
         if (self.config) |*cfg| {
-            try cfg.save(self.path);
+            try cfg.save(io, self.path);
         }
     }
 };

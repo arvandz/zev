@@ -303,9 +303,9 @@ pub fn main(init: std.process.Init) !void {
         defer repo.deinit();
 
         if (args.len < 3) {
-            try remote.listRemotes(allocator, &repo);
+            try remote.listRemotes(allocator, io, &repo);
         } else if (std.mem.eql(u8, args[2], "list")) {
-            try remote.listRemotes(allocator, &repo);
+            try remote.listRemotes(allocator, io, &repo);
         } else if (std.mem.eql(u8, args[2], "add")) {
             if (args.len < 5) {
                 std.debug.print("Usage: zev remote add <name> <url>\n", .{});
@@ -443,7 +443,7 @@ pub fn main(init: std.process.Init) !void {
         defer repo.deinit();
 
         if (args.len < 3) {
-            try branch.listBranches(allocator, &repo);
+            try branch.listBranches(allocator, io, &repo);
         } else {
             const branch_name = args[2];
 
@@ -453,7 +453,7 @@ pub fn main(init: std.process.Init) !void {
                     return;
                 }
                 const delete_name = args[3];
-                branch.deleteBranch(allocator, &repo, delete_name) catch |err| {
+                branch.deleteBranch(allocator, io, &repo, delete_name) catch |err| {
                     if (err == error.CannotDeleteCurrentBranch) {
                         std.debug.print("Error: Cannot delete the current branch\n", .{});
                     } else {
@@ -463,7 +463,7 @@ pub fn main(init: std.process.Init) !void {
                 };
                 std.debug.print("Deleted branch '{s}'\n", .{delete_name});
             } else {
-                branch.createBranch(allocator, &repo, branch_name) catch |err| {
+                branch.createBranch(allocator, io, &repo, branch_name) catch |err| {
                     if (err == error.BranchAlreadyExists) {
                         std.debug.print("Error: Branch '{s}' already exists\n", .{branch_name});
                     } else {
@@ -489,7 +489,7 @@ pub fn main(init: std.process.Init) !void {
         defer repo.deinit();
 
         const branch_name = args[2];
-        branch.checkoutBranch(allocator, &repo, branch_name) catch |err| {
+        branch.checkoutBranch(allocator, io, &repo, branch_name) catch |err| {
             if (err == error.BranchNotFound) {
                 std.debug.print("Error: Branch '{s}' not found\n", .{branch_name});
             } else {
@@ -757,7 +757,7 @@ pub fn main(init: std.process.Init) !void {
         }
 
         if (std.mem.eql(u8, args[2], "list")) {
-            try hooks_mod.listHooks(allocator, ".");
+            try hooks_mod.listHooks(allocator, io, ".");
         } else if (std.mem.eql(u8, args[2], "add")) {
             if (args.len < 5) {
                 std.debug.print("Usage: zev hook add <type> <script-file>\n", .{});
@@ -770,7 +770,7 @@ pub fn main(init: std.process.Init) !void {
             };
             const script = try std.Io.Dir.cwd().readFileAlloc(io, args[4], allocator, .limited(1024 * 1024));
             defer allocator.free(script);
-            try hooks_mod.installHook(allocator, ".", hook_type, script);
+            try hooks_mod.installHook(allocator, io, ".", hook_type, script);
         } else if (std.mem.eql(u8, args[2], "remove")) {
             if (args.len < 4) {
                 std.debug.print("Usage: zev hook remove <type>\n", .{});
@@ -799,7 +799,7 @@ pub fn main(init: std.process.Init) !void {
         defer repo.deinit();
 
         if (args.len < 3) {
-            try tag_mod.listTags(allocator, &repo);
+            try tag_mod.listTags(allocator, io, &repo);
         } else if (std.mem.eql(u8, args[2], "-d") or std.mem.eql(u8, args[2], "--delete")) {
             if (args.len < 4) {
                 std.debug.print("Usage: zev tag -d <tag-name>\n", .{});
@@ -830,11 +830,11 @@ pub fn main(init: std.process.Init) !void {
             else
                 try allocator.dupe(u8, "Zev User <user@example.com>");
             defer allocator.free(author);
-            try tag_mod.createAnnotatedTag(allocator, &repo, tag_name, msg, author);
+            try tag_mod.createAnnotatedTag(allocator, io, &repo, tag_name, msg, author);
             std.debug.print("Created annotated tag '{s}'\n", .{tag_name});
         } else {
             const tag_name = args[2];
-            try tag_mod.createTag(allocator, &repo, tag_name);
+            try tag_mod.createTag(allocator, io, &repo, tag_name);
             std.debug.print("Created tag '{s}'\n", .{tag_name});
         }
     } else if (std.mem.eql(u8, command, "stash")) {
@@ -849,7 +849,7 @@ pub fn main(init: std.process.Init) !void {
             const msg = if (args.len >= 4) args[3] else null;
             try stash_mod.stashSave(allocator, &repo, msg);
         } else if (std.mem.eql(u8, args[2], "list")) {
-            try stash_mod.stashList(allocator, &repo);
+            try stash_mod.stashList(allocator, io, &repo);
         } else if (std.mem.eql(u8, args[2], "apply")) {
             const id = if (args.len >= 4) try std.fmt.parseInt(usize, args[3], 10) else 0;
             stash_mod.stashApply(allocator, &repo, id) catch |err| {
@@ -894,13 +894,13 @@ pub fn main(init: std.process.Init) !void {
         defer repo.deinit();
 
         if (std.mem.eql(u8, args[2], "start")) {
-            try bisect_mod.bisectStart(allocator, &repo);
+            try bisect_mod.bisectStart(allocator, io, &repo);
         } else if (std.mem.eql(u8, args[2], "good")) {
             const hash = if (args.len >= 4) args[3] else null;
-            try bisect_mod.bisectGood(allocator, &repo, hash);
+            try bisect_mod.bisectGood(allocator, io, &repo, hash);
         } else if (std.mem.eql(u8, args[2], "bad")) {
             const hash = if (args.len >= 4) args[3] else null;
-            try bisect_mod.bisectBad(allocator, &repo, hash);
+            try bisect_mod.bisectBad(allocator, io, &repo, hash);
         } else if (std.mem.eql(u8, args[2], "reset")) {
             try bisect_mod.bisectReset(allocator, &repo);
         } else {
@@ -1043,7 +1043,7 @@ pub fn main(init: std.process.Init) !void {
                 std.debug.print("Usage: zev dag show <cid>\n", .{});
                 return;
             }
-            try dag_mod.dagShow(allocator, io, &repo, args[3]);
+            try dag_mod.dagShow(allocator, &repo, args[3]);
         } else if (std.mem.eql(u8, sub, "walk")) {
             if (args.len < 4) {
                 std.debug.print("Usage: zev dag walk <cid> [--depth N]\n", .{});
@@ -1289,7 +1289,7 @@ pub fn main(init: std.process.Init) !void {
             }
             try dataset_mod.datasetImpact(allocator, &repo, args[3], shard_idx);
         } else if (std.mem.eql(u8, sub, "list")) {
-            try dataset_mod.datasetList(allocator, &repo);
+            try dataset_mod.datasetList(allocator, io, &repo);
         } else {
             std.debug.print("Unknown dataset subcommand: {s}\n", .{sub});
         }
@@ -1353,13 +1353,13 @@ pub fn main(init: std.process.Init) !void {
                 std.debug.print("Usage: zev context show <file>\n", .{});
                 return;
             }
-            try context_mod.contextShow(allocator, &repo, args[3]);
+            try context_mod.contextShow(allocator, io, &repo, args[3]);
         } else if (std.mem.eql(u8, sub, "blame")) {
-            try context_mod.contextBlame(allocator, &repo);
+            try context_mod.contextBlame(allocator, io, &repo);
         } else if (std.mem.eql(u8, sub, "stats")) {
-            try context_mod.contextStats(allocator, &repo);
+            try context_mod.contextStats(allocator, io, &repo);
         } else if (std.mem.eql(u8, sub, "list")) {
-            try context_mod.contextList(allocator, &repo);
+            try context_mod.contextList(allocator, io, &repo);
         } else if (std.mem.eql(u8, sub, "auto")) {
             if (args.len >= 4) {
                 try context_mod.contextAutoDetect(allocator, &repo, args[3]);
@@ -1409,7 +1409,7 @@ pub fn main(init: std.process.Init) !void {
                     show_prompt = true;
                 }
             }
-            try context_mod.contextQuery(allocator, &repo, model_filter, kind_filter, show_prompt);
+            try context_mod.contextQuery(allocator, io, &repo, model_filter, kind_filter, show_prompt);
         } else {
             std.debug.print("Unknown context subcommand: {s}\n", .{sub});
         }
@@ -1559,7 +1559,7 @@ pub fn main(init: std.process.Init) !void {
                 }
             }
             if (std.mem.eql(u8, sub, "HEAD") or sub.len == 64) {
-                try reproduce_mod.reproduceCommit(allocator, &repo, sub, tolerance, run_cmd, dry_run);
+                try reproduce_mod.reproduceCommit(allocator, io, &repo, sub, tolerance, run_cmd, dry_run);
             } else {
                 try reproduce_mod.reproduceSnapshot(allocator, &repo, sub, tolerance, run_cmd, dry_run);
             }
@@ -1591,7 +1591,7 @@ pub fn main(init: std.process.Init) !void {
                 std.debug.print("Usage: zev drift baseline <snapshot-name-or-commit-hash>\n", .{});
                 return;
             }
-            try drift_mod.driftBaseline(allocator, &repo, args[3]);
+            try drift_mod.driftBaseline(allocator, io, &repo, args[3]);
         } else if (std.mem.eql(u8, sub, "config")) {
             var metric: []const u8 = "";
             var max_delta: f64 = 0.05;
@@ -1625,7 +1625,7 @@ pub fn main(init: std.process.Init) !void {
                 std.debug.print("Usage: zev drift config --metric <name> --delta <value> --direction <hib|lib|any>\n", .{});
                 return;
             }
-            try drift_mod.driftConfig(allocator, &repo, metric, max_delta, max_pct, direction, webhook, watch_interval);
+            try drift_mod.driftConfig(allocator, io, &repo, metric, max_delta, max_pct, direction, webhook, watch_interval);
         } else if (std.mem.eql(u8, sub, "check")) {
             var baseline_override: ?[]const u8 = null;
             var i: usize = 3;
@@ -1718,9 +1718,9 @@ pub fn main(init: std.process.Init) !void {
                 std.debug.print("Usage: zev notarize verify <record-id-prefix>\n", .{});
                 return;
             }
-            try notarize_mod.notarizeVerify(allocator, &repo, args[3]);
+            try notarize_mod.notarizeVerify(allocator, io, &repo, args[3]);
         } else if (std.mem.eql(u8, sub, "list")) {
-            try notarize_mod.notarizeList(allocator, &repo);
+            try notarize_mod.notarizeList(allocator, io, &repo);
         } else if (std.mem.eql(u8, sub, "config")) {
             var chain: []const u8 = "ethereum";
             var rpc_url: ?[]const u8 = null;
@@ -1858,9 +1858,9 @@ pub fn main(init: std.process.Init) !void {
         if (std.mem.eql(u8, sub, "commits")) {
             try compare_mod.compareCommits(allocator, &repo, args[3], args[4]);
         } else if (std.mem.eql(u8, sub, "experiments")) {
-            try compare_mod.compareExperiments(allocator, &repo, args[3], args[4]);
+            try compare_mod.compareExperiments(allocator, io, &repo, args[3], args[4]);
         } else if (std.mem.eql(u8, sub, "snapshots")) {
-            try compare_mod.compareSnapshots(allocator, &repo, args[3], args[4]);
+            try compare_mod.compareSnapshots(allocator, io, &repo, args[3], args[4]);
         } else if (std.mem.eql(u8, sub, "branches")) {
             try compare_mod.compareBranches(allocator, &repo, args[3], args[4]);
         } else {
@@ -2098,7 +2098,7 @@ pub fn main(init: std.process.Init) !void {
             }
             try snapshot_mod.snapshotCreate(allocator, &repo, snap_name, desc, tags, experiment_ref, lineage_refs, permanent);
         } else if (std.mem.eql(u8, sub, "list")) {
-            try snapshot_mod.snapshotList(allocator, &repo);
+            try snapshot_mod.snapshotList(allocator, io, &repo);
         } else if (std.mem.eql(u8, sub, "show")) {
             if (args.len < 4) {
                 std.debug.print("Usage: zev snapshot show <name>\n", .{});
@@ -2176,7 +2176,7 @@ pub fn main(init: std.process.Init) !void {
                 std.debug.print("  Means: <child> was derived from <parent>\n", .{});
                 return;
             }
-            try lineage_mod.lineageLink(allocator, &repo, args[3], args[4]);
+            try lineage_mod.lineageLink(allocator, io, &repo, args[3], args[4]);
         } else if (std.mem.eql(u8, sub, "show")) {
             if (args.len < 4) {
                 std.debug.print("Usage: zev lineage show <id>\n", .{});
@@ -2184,15 +2184,15 @@ pub fn main(init: std.process.Init) !void {
             }
             try lineage_mod.lineageShow(allocator, &repo, args[3]);
         } else if (std.mem.eql(u8, sub, "list")) {
-            try lineage_mod.lineageList(allocator, &repo);
+            try lineage_mod.lineageList(allocator, io, &repo);
         } else if (std.mem.eql(u8, sub, "graph")) {
-            try lineage_mod.lineageGraph(allocator, &repo);
+            try lineage_mod.lineageGraph(allocator, io, &repo);
         } else if (std.mem.eql(u8, sub, "provenance")) {
             if (args.len < 4) {
                 std.debug.print("Usage: zev lineage provenance <cid-prefix>\n", .{});
                 return;
             }
-            try lineage_mod.lineageProvenance(allocator, &repo, args[3]);
+            try lineage_mod.lineageProvenance(allocator, io, &repo, args[3]);
         } else {
             std.debug.print("Unknown lineage subcommand: {s}\n", .{sub});
         }
@@ -2228,7 +2228,7 @@ pub fn main(init: std.process.Init) !void {
             const tags = if (args.len >= 7) args[6] else "";
             try experiment_mod.experimentStart(allocator, io, &repo, name, description, hypothesis, tags);
         } else if (std.mem.eql(u8, sub, "list")) {
-            try experiment_mod.experimentList(allocator, &repo);
+            try experiment_mod.experimentList(allocator, io, &repo);
         } else if (std.mem.eql(u8, sub, "show")) {
             if (args.len < 4) {
                 std.debug.print("Usage: zev experiment show <name>\n", .{});
@@ -2241,14 +2241,14 @@ pub fn main(init: std.process.Init) !void {
                 return;
             }
             const notes = if (args.len >= 5) args[4] else "";
-            try experiment_mod.experimentComplete(allocator, &repo, args[3], notes);
+            try experiment_mod.experimentComplete(allocator, io, &repo, args[3], notes);
         } else if (std.mem.eql(u8, sub, "abandon")) {
             if (args.len < 4) {
                 std.debug.print("Usage: zev experiment abandon <name> [reason]\n", .{});
                 return;
             }
             const reason = if (args.len >= 5) args[4] else "";
-            try experiment_mod.experimentAbandon(allocator, &repo, args[3], reason);
+            try experiment_mod.experimentAbandon(allocator, io, &repo, args[3], reason);
         } else if (std.mem.eql(u8, sub, "compare")) {
             if (args.len < 5) {
                 std.debug.print("Usage: zev experiment compare <name-a> <name-b>\n", .{});

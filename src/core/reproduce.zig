@@ -48,6 +48,7 @@ fn captureDir(allocator: std.mem.Allocator, repo: *Repository) ![]u8 {
 
 fn saveReproduceRecord(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     rec: ReproduceRecord,
 ) !void {
@@ -620,7 +621,7 @@ fn doReproduce(
 
     const repro_status: ReproduceStatus = if (exit_code != 0)
         .error_run
-    else if (repro_metrics.count() == 0)
+    else if (repro_metrics.count(io, ) == 0)
         .no_metrics
     else if (matched == total and total > 0)
         .success
@@ -666,7 +667,7 @@ fn doReproduce(
         .exit_code = exit_code,
         .duration_ms = elapsed_ms,
     };
-    try saveReproduceRecord(allocator, repo, rec);
+    try saveReproduceRecord(allocator, io, repo, rec);
     std.debug.print("   Record saved: {s}\n", .{rec_id_short});
     std.debug.print("   View history: zev reproduce status\n\n", .{});
 }
@@ -692,6 +693,7 @@ pub fn reproduceSnapshot(
 
 pub fn reproduceCommit(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     commit_ref: []const u8,
     tolerance: f64,
@@ -710,7 +712,7 @@ pub fn reproduceCommit(
     var metrics = try loadMetricsForHash(allocator, repo, commit_hash);
     defer freeMetricsMap(allocator, &metrics);
 
-    if (metrics.count() == 0) {
+    if (metrics.count(io, ) == 0) {
         std.debug.print("No metrics recorded for commit {s}.\n", .{commit_hash[0..8]});
         std.debug.print("Set metrics with: zev metrics set <key> <value>\n", .{});
     }

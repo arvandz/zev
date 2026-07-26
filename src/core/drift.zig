@@ -49,7 +49,8 @@ fn driftHistoryDir(allocator: std.mem.Allocator, repo: *Repository) ![]u8 {
     return dir;
 }
 
-fn writeFile(allocator: std.mem.Allocator, path: []const u8, content: []const u8) !void {
+fn writeFile(allocator: std.mem.Allocator,
+    io: std.Io, path: []const u8, content: []const u8) !void {
     _ = allocator;
     const f = try std.Io.Dir.cwd().createFile(path, .{});
     defer f.close(io);
@@ -89,6 +90,7 @@ fn buildConfigContent(
 
 pub fn saveConfig(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     baseline_ref: []const u8,
     thresholds: []const DriftThreshold,
@@ -99,7 +101,7 @@ pub fn saveConfig(
     defer allocator.free(path);
     const content = try buildConfigContent(allocator, baseline_ref, webhook_url, watch_interval, thresholds);
     defer allocator.free(content);
-    try writeFile(allocator, path, content);
+    try writeFile(allocator, io, path, content);
 }
 
 pub fn loadConfig(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) !?DriftConfig {
@@ -303,6 +305,7 @@ fn printDriftResults(results: []const DriftResult, baseline_ref: []const u8, cur
 
 fn saveHistory(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     baseline_ref: []const u8,
     current_hash: []const u8,
@@ -336,14 +339,14 @@ fn saveHistory(
         defer allocator.free(sr);
         try out.appendSlice(allocator, sr);
     }
-    try writeFile(allocator, path, out.items);
+    try writeFile(allocator, io, path, out.items);
 }
 
 fn fireWebhook(allocator: std.mem.Allocator,
     io: std.Io, webhook_url: []const u8, payload: []const u8) !void {
     if (webhook_url.len == 0) return;
     const tmp = "/tmp/zev_drift_webhook.json";
-    try writeFile(allocator, tmp, payload);
+    try writeFile(allocator, io, tmp, payload);
     var child = try std.process.spawn(io, .{
         .argv = &.{ "curl", "-s", "-X", "POST", "-H", "Content-Type: application/json", "--data", "@/tmp/zev_drift_webhook.json", webhook_url },
         .stdout = .ignore,
@@ -352,7 +355,8 @@ fn fireWebhook(allocator: std.mem.Allocator,
     _ = try child.wait(io);
 }
 
-pub fn driftBaseline(allocator: std.mem.Allocator, repo: *Repository, baseline_ref: []const u8) !void {
+pub fn driftBaseline(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository, baseline_ref: []const u8) !void {
     var cfg = (try loadConfig(allocator, repo)) orelse DriftConfig{
         .baseline_ref = try allocator.dupe(u8, ""),
         .webhook_url = try allocator.dupe(u8, ""),
@@ -360,13 +364,14 @@ pub fn driftBaseline(allocator: std.mem.Allocator, repo: *Repository, baseline_r
         .thresholds = .empty,
     };
     defer cfg.deinit(allocator);
-    try saveConfig(allocator, repo, baseline_ref, cfg.thresholds.items, cfg.webhook_url, cfg.watch_interval);
+    try saveConfig(allocator, io, repo, baseline_ref, cfg.thresholds.items, cfg.webhook_url, cfg.watch_interval);
     std.debug.print("📍 Drift baseline set: {s}\n", .{baseline_ref});
     std.debug.print("   Run 'zev drift check' to compare current metrics\n", .{});
 }
 
 pub fn driftConfig(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     metric: []const u8,
     max_delta: f64,
@@ -414,7 +419,7 @@ pub fn driftConfig(
 
     const wh = webhook_url orelse cfg.webhook_url;
     const wi = watch_interval orelse cfg.watch_interval;
-    try saveConfig(allocator, repo, cfg.baseline_ref, new_t.items, wh, wi);
+    try saveConfig(allocator, io, repo, cfg.baseline_ref, new_t.items, wh, wi);
 
     const dir_label: []const u8 = switch (direction) {
         .higher_is_better => "higher is better",
@@ -444,7 +449,7 @@ pub fn driftCheck(allocator: std.mem.Allocator,
         try loadMetricsForHash(allocator, repo, baseline_ref);
     defer freeMetricsMap(allocator, &baseline_metrics);
 
-    if (baseline_metrics.count() == 0) {
+    if (baseline_metrics.count(io, ) == 0) {
         std.debug.print("No metrics found for baseline '{s}'\n", .{baseline_ref});
         return;
     }
@@ -459,7 +464,7 @@ pub fn driftCheck(allocator: std.mem.Allocator,
     var current_metrics = try loadMetricsForHash(allocator, repo, current_hash);
     defer freeMetricsMap(allocator, &current_metrics);
 
-    if (current_metrics.count() == 0) {
+    if (current_metrics.count(io, ) == 0) {
         std.debug.print("No metrics on current HEAD ({s})\n", .{current_hash[0..8]});
         return;
     }
@@ -498,7 +503,7 @@ pub fn driftCheck(allocator: std.mem.Allocator,
     printDriftResults(results.items, baseline_ref, current_hash[0..8], any_drift);
 
     const now = @divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s);
-    try saveHistory(allocator, repo, baseline_ref, current_hash, results.items, any_drift, now);
+    try saveHistory(allocator, io, repo, baseline_ref, current_hash, results.items, any_drift, now);
 
     if (any_drift and cfg.webhook_url.len > 0) {
         const payload = try std.fmt.allocPrint(allocator, "{{\"event\":\"drift\",\"baseline\":\"{s}\",\"current\":\"{s}\",\"timestamp\":{d}}}", .{ baseline_ref, current_hash[0..8], now });

@@ -64,6 +64,7 @@ fn assignDir(allocator: std.mem.Allocator, repo: *Repository, dataset_name: []co
 
 fn saveDatasetRecord(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     ds: DatasetRecord,
 ) !void {
@@ -154,6 +155,7 @@ fn freeDatasetRecord(allocator: std.mem.Allocator, ds: DatasetRecord) void {
 
 fn saveShardRecord(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     shard: ShardRecord,
 ) !void {
@@ -176,6 +178,7 @@ fn saveShardRecord(
 
 fn saveAssignment(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     assignment: AssignmentRecord,
 ) !void {
@@ -278,7 +281,7 @@ pub fn datasetRegister(
         .format = format,
     };
 
-    try saveDatasetRecord(allocator, repo, ds);
+    try saveDatasetRecord(allocator, io, repo, ds);
 
     std.debug.print("📂 Dataset registered: {s}\n\n", .{name});
     std.debug.print("   Source:  {s}\n", .{source_path});
@@ -329,9 +332,9 @@ pub fn datasetSplit(
         std.mem.eql(u8, ds.format, "text");
 
     if (is_line_based and ds.total_rows > 0) {
-        try splitLinesBased(allocator, repo, ds, num_shards, strategy_str, seed, now);
+        try splitLinesBased(allocator, io, repo, ds, num_shards, strategy_str, seed, now);
     } else {
-        try splitBytesBased(allocator, repo, ds, num_shards, strategy_str, now);
+        try splitBytesBased(allocator, io, repo, ds, num_shards, strategy_str, now);
     }
 
     ds.total_shards = num_shards;
@@ -348,7 +351,7 @@ pub fn datasetSplit(
         .description = ds.description,
         .format = ds.format,
     };
-    try saveDatasetRecord(allocator, repo, ds_updated);
+    try saveDatasetRecord(allocator, io, repo, ds_updated);
 
     std.debug.print("\n✅ Split complete!\n\n", .{});
     std.debug.print("   Dataset:  {s}\n", .{dataset_name});
@@ -362,6 +365,7 @@ pub fn datasetSplit(
 
 fn splitLinesBased(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     ds: DatasetRecord,
     num_shards: usize,
@@ -433,7 +437,7 @@ fn splitLinesBased(
             .strategy = strategy_str,
             .created = now,
         };
-        try saveShardRecord(allocator, repo, shard);
+        try saveShardRecord(allocator, io, repo, shard);
 
         std.debug.print("   {d:<8} {d:<12} {d:<12} {d:<12} {s}\n", .{ si, shard_rows, row_start, row_end, shard_cid[0..@min(16, shard_cid.len)] });
     }
@@ -441,6 +445,7 @@ fn splitLinesBased(
 
 fn splitBytesBased(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     ds: DatasetRecord,
     num_shards: usize,
@@ -485,7 +490,7 @@ fn splitBytesBased(
             .strategy = strategy_str,
             .created = now,
         };
-        try saveShardRecord(allocator, repo, shard);
+        try saveShardRecord(allocator, io, repo, shard);
 
         std.debug.print("   {d:<8} {d:<16} {d:<14} {s}\n", .{ si, shard_bytes, byte_start, shard_cid[0..@min(16, shard_cid.len)] });
     }
@@ -525,7 +530,7 @@ pub fn datasetAssign(
         .assigned_at = now,
         .notes = notes,
     };
-    try saveAssignment(allocator, repo, assignment);
+    try saveAssignment(allocator, io, repo, assignment);
 
     std.debug.print("🔗 Shards assigned to commit {s}\n\n", .{commit_hash[0..8]});
     std.debug.print("   Dataset: {s}\n", .{dataset_name});
@@ -684,7 +689,8 @@ pub fn datasetImpact(
     }
 }
 
-pub fn datasetList(allocator: std.mem.Allocator, repo: *Repository) !void {
+pub fn datasetList(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository) !void {
     const dir_path = try datasetDir(allocator, repo);
     defer allocator.free(dir_path);
 

@@ -2,7 +2,8 @@ const std = @import("std");
 const repository = @import("repository.zig");
 const cid = @import("cid.zig");
 
-pub fn createBranch(allocator: std.mem.Allocator, repo: *repository.Repository, branch_name: []const u8) !void {
+pub fn createBranch(allocator: std.mem.Allocator,
+    io: std.Io, repo: *repository.Repository, branch_name: []const u8) !void {
     const head_cid = try repo.getHeadCommit();
 
     const zev_path = try std.fs.path.join(allocator, &[_][]const u8{ repo.path, ".zev" });
@@ -26,7 +27,8 @@ pub fn createBranch(allocator: std.mem.Allocator, repo: *repository.Repository, 
     try branch_file.writeAll(cid_str);
 }
 
-pub fn checkoutBranch(allocator: std.mem.Allocator, repo: *repository.Repository, branch_name: []const u8) !void {
+pub fn checkoutBranch(allocator: std.mem.Allocator,
+    io: std.Io, repo: *repository.Repository, branch_name: []const u8) !void {
     const zev_path = try std.fs.path.join(allocator, &[_][]const u8{ repo.path, ".zev" });
     defer allocator.free(zev_path);
 
@@ -49,7 +51,8 @@ pub fn checkoutBranch(allocator: std.mem.Allocator, repo: *repository.Repository
     try head_file.writeAll(ref_content);
 }
 
-pub fn getCurrentBranch(allocator: std.mem.Allocator, repo: *repository.Repository) ![]const u8 {
+pub fn getCurrentBranch(allocator: std.mem.Allocator,
+    io: std.Io, repo: *repository.Repository) ![]const u8 {
     const zev_path = try std.fs.path.join(allocator, &[_][]const u8{ repo.path, ".zev" });
     defer allocator.free(zev_path);
 
@@ -73,7 +76,8 @@ pub fn getCurrentBranch(allocator: std.mem.Allocator, repo: *repository.Reposito
     return error.DetachedHead;
 }
 
-pub fn listBranches(allocator: std.mem.Allocator, repo: *repository.Repository) !void {
+pub fn listBranches(allocator: std.mem.Allocator,
+    io: std.Io, repo: *repository.Repository) !void {
     const zev_path = try std.fs.path.join(allocator, &[_][]const u8{ repo.path, ".zev" });
     defer allocator.free(zev_path);
 
@@ -83,7 +87,7 @@ pub fn listBranches(allocator: std.mem.Allocator, repo: *repository.Repository) 
     var heads_dir = try std.Io.Dir.cwd().openDir(heads_path, .{ .iterate = true });
     defer heads_dir.close(io);
 
-    const current_branch = getCurrentBranch(allocator, repo) catch "HEAD";
+    const current_branch = getCurrentBranch(allocator, io, repo) catch "HEAD";
     defer allocator.free(current_branch);
 
     var iterator = heads_dir.iterate();
@@ -99,8 +103,9 @@ pub fn listBranches(allocator: std.mem.Allocator, repo: *repository.Repository) 
     }
 }
 
-pub fn deleteBranch(allocator: std.mem.Allocator, repo: *repository.Repository, branch_name: []const u8) !void {
-    const current = try getCurrentBranch(allocator, repo);
+pub fn deleteBranch(allocator: std.mem.Allocator,
+    io: std.Io, repo: *repository.Repository, branch_name: []const u8) !void {
+    const current = try getCurrentBranch(allocator, io, repo);
     defer allocator.free(current);
 
     if (std.mem.eql(u8, current, branch_name)) {

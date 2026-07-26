@@ -176,9 +176,9 @@ pub fn compareCommits(allocator: std.mem.Allocator, io: std.Io, repo: *Repositor
     }
 
     var change_buf: [64]u8 = undefined;
-    const change_a = std.fmt.bufPrint(&change_buf, "{d} file(s)", .{files_a.count()}) catch "?";
+    const change_a = std.fmt.bufPrint(&change_buf, "{d} file(s)", .{files_a.count(io, )}) catch "?";
     var change_buf2: [64]u8 = undefined;
-    const change_b = std.fmt.bufPrint(&change_buf2, "{d} file(s)", .{files_b.count()}) catch "?";
+    const change_b = std.fmt.bufPrint(&change_buf2, "{d} file(s)", .{files_b.count(io, )}) catch "?";
     printRow("Files", change_a, change_b);
 
     if (added > 0 or removed > 0 or modified > 0) {
@@ -212,7 +212,7 @@ pub fn compareCommits(allocator: std.mem.Allocator, io: std.Io, repo: *Repositor
     var metrics_b = try readMetricsForHash(allocator, repo, hash_b);
     defer freeStrMap(allocator, &metrics_b);
 
-    if (metrics_a.count() > 0 or metrics_b.count() > 0) {
+    if (metrics_a.count(io, ) > 0 or metrics_b.count() > 0) {
         std.debug.print("\n   Metrics:\n", .{});
         std.debug.print("   {s:<20} {s:<28} {s}\n", .{ "Key", hash_a[0..8], hash_b[0..8] });
         printSeparator();
@@ -235,7 +235,8 @@ pub fn compareCommits(allocator: std.mem.Allocator, io: std.Io, repo: *Repositor
     std.debug.print("\n", .{});
 }
 
-fn loadExpFields(allocator: std.mem.Allocator, repo: *Repository, name: []const u8) !?std.StringHashMap([]u8) {
+fn loadExpFields(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository, name: []const u8) !?std.StringHashMap([]u8) {
     const path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "experiments", name });
     defer allocator.free(path);
     const content = (try readFile(allocator, path)) orelse return null;
@@ -253,14 +254,15 @@ fn loadExpFields(allocator: std.mem.Allocator, repo: *Repository, name: []const 
     return map;
 }
 
-pub fn compareExperiments(allocator: std.mem.Allocator, repo: *Repository, name_a: []const u8, name_b: []const u8) !void {
-    var exp_a = (try loadExpFields(allocator, repo, name_a)) orelse {
+pub fn compareExperiments(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository, name_a: []const u8, name_b: []const u8) !void {
+    var exp_a = (try loadExpFields(allocator, io, repo, name_a)) orelse {
         std.debug.print("Error: Experiment '{s}' not found\n", .{name_a});
         return;
     };
     defer freeStrMap(allocator, &exp_a);
 
-    var exp_b = (try loadExpFields(allocator, repo, name_b)) orelse {
+    var exp_b = (try loadExpFields(allocator, io, repo, name_b)) orelse {
         std.debug.print("Error: Experiment '{s}' not found\n", .{name_b});
         return;
     };
@@ -306,7 +308,7 @@ pub fn compareExperiments(allocator: std.mem.Allocator, repo: *Repository, name_
         var metrics_b = try readMetricsForHash(allocator, repo, hash_b);
         defer freeStrMap(allocator, &metrics_b);
 
-        if (metrics_a.count() > 0 or metrics_b.count() > 0) {
+        if (metrics_a.count(io, ) > 0 or metrics_b.count() > 0) {
             std.debug.print("\n   Metrics:\n", .{});
             std.debug.print("   {s:<20} {s:<28} {s}\n", .{ "Key", name_a, name_b });
             printSeparator();
@@ -329,7 +331,8 @@ pub fn compareExperiments(allocator: std.mem.Allocator, repo: *Repository, name_
     std.debug.print("\n", .{});
 }
 
-fn findSnapshotById(allocator: std.mem.Allocator, repo: *Repository, name: []const u8) !?std.StringHashMap([]u8) {
+fn findSnapshotById(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository, name: []const u8) !?std.StringHashMap([]u8) {
     const dir_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "snapshots" });
     defer allocator.free(dir_path);
 
@@ -372,14 +375,15 @@ fn findSnapshotById(allocator: std.mem.Allocator, repo: *Repository, name: []con
     return null;
 }
 
-pub fn compareSnapshots(allocator: std.mem.Allocator, repo: *Repository, name_a: []const u8, name_b: []const u8) !void {
-    var snap_a = (try findSnapshotById(allocator, repo, name_a)) orelse {
+pub fn compareSnapshots(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository, name_a: []const u8, name_b: []const u8) !void {
+    var snap_a = (try findSnapshotById(allocator, io, repo, name_a)) orelse {
         std.debug.print("Error: Snapshot '{s}' not found\n", .{name_a});
         return;
     };
     defer freeStrMap(allocator, &snap_a);
 
-    var snap_b = (try findSnapshotById(allocator, repo, name_b)) orelse {
+    var snap_b = (try findSnapshotById(allocator, io, repo, name_b)) orelse {
         std.debug.print("Error: Snapshot '{s}' not found\n", .{name_b});
         return;
     };

@@ -103,11 +103,12 @@ pub const Identity = struct {
         } else |_| {}
 
         const id = Identity.generate();
-        try id.save(allocator, repo_path);
+        try id.save(allocator, io, repo_path);
         return id;
     }
 
-    pub fn save(self: Identity, allocator: std.mem.Allocator, repo_path: []const u8) !void {
+    pub fn save(self: Identity, allocator: std.mem.Allocator,
+    io: std.Io, repo_path: []const u8) !void {
         const id_path = try std.fs.path.join(allocator, &.{ repo_path, ".zev", "identity" });
         defer allocator.free(id_path);
 
@@ -206,7 +207,7 @@ pub fn signCommitNode(
     });
 
     const signed_val = ipld.Value{ .map = try entries.toOwnedSlice(aa) };
-    return try store.putNode(aa, signed_val);
+    return try store.putNode(io, aa, signed_val);
 }
 
 pub fn verifyCID(

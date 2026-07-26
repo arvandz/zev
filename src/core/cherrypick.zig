@@ -148,7 +148,7 @@ pub fn cherryPick(
     defer allocator.free(new_commit_data);
     const new_commit_cid = try repo.store.put(io, new_commit_data);
 
-    try updateHead(allocator, io, repo, new_commit_cid);
+    try updateHead(allocator, io, io, repo, new_commit_cid);
 
     const new_hash = try new_commit_cid.toString(allocator);
     defer allocator.free(new_hash);
@@ -163,7 +163,8 @@ fn getTree(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, tree_cid
     return try tree_mod.Tree.deserialize(allocator, tree_data);
 }
 
-fn updateHead(allocator: std.mem.Allocator, repo: *Repository, new_cid: cid_mod.CID) !void {
+fn updateHead(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository, new_cid: cid_mod.CID) !void {
     const zev_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev" });
     defer allocator.free(zev_path);
 

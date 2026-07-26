@@ -165,6 +165,7 @@ const PEER_STATE_FILE = ".zev/peer_state";
 
 fn savePeerState(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     meta_cid: []const u8,
     node_id: []const u8,
@@ -246,7 +247,8 @@ fn listPeers(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) !void 
     if (count == 0) std.debug.print("  No known peers yet.\n", .{});
 }
 
-fn buildManifest(allocator: std.mem.Allocator, repo: *Repository) ![]u8 {
+fn buildManifest(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository) ![]u8 {
     var result: std.ArrayList(u8) = .empty;
     const dirs = [_][]const u8{ "metrics", "experiments", "lineage", "snapshots" };
 
@@ -320,7 +322,7 @@ pub fn peerAnnounce(allocator: std.mem.Allocator,
     const pub_resp = try ipfsPost(allocator, io, pub_endpoint, &.{ "--data-binary", "@/tmp/zev_pubsub_msg.json" });
     defer allocator.free(pub_resp);
 
-    try savePeerState(allocator, repo, meta_cid, node_id);
+    try savePeerState(allocator, io, repo, meta_cid, node_id);
 
     std.debug.print("✅ Repo announced!\n", .{});
     std.debug.print("   Node ID:  {s}\n", .{node_id});

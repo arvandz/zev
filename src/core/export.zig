@@ -38,6 +38,7 @@ fn computeChecksum(allocator: std.mem.Allocator, data: []const u8) ![]u8 {
 
 fn collectDir(
     allocator: std.mem.Allocator,
+    io: std.Io,
     base_path: []const u8,
     rel_prefix: []const u8,
     files: *std.ArrayList(FileEntry),
@@ -54,7 +55,7 @@ fn collectDir(
             try allocator.dupe(u8, entry.name);
 
         if (entry.kind == .directory) {
-            try collectDir(allocator, abs, rel, files);
+            try collectDir(allocator, io, abs, rel, files);
             allocator.free(abs);
             allocator.free(rel);
         } else if (entry.kind == .file) {
@@ -100,7 +101,7 @@ pub fn exportRepo(
     for (meta_dirs) |d| {
         const dir_path = try std.fs.path.join(allocator, &.{ zev_path, d });
         defer allocator.free(dir_path);
-        try collectDir(allocator, dir_path, d, &files);
+        try collectDir(allocator, io, dir_path, d, &files);
     }
 
     const config_files = [_][]const u8{
@@ -126,9 +127,9 @@ pub fn exportRepo(
 
         if (since_hash) |_| {
             std.debug.print("   ℹ️  --since filter: including all objects (full graph walk)\n", .{});
-            try collectDir(allocator, obj_path, "objects", &files);
+            try collectDir(allocator, io, obj_path, "objects", &files);
         } else {
-            try collectDir(allocator, obj_path, "objects", &files);
+            try collectDir(allocator, io, obj_path, "objects", &files);
         }
     }
 

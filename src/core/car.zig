@@ -166,7 +166,7 @@ pub fn dagExport(
     defer root_cids.deinit(allocator);
 
     if (std.mem.eql(u8, root_spec, "all")) {
-        try collectAllCIDs(allocator, &store, &root_cids);
+        try collectAllCIDs(allocator, io, &store, &root_cids);
     } else if (std.mem.eql(u8, root_spec, "HEAD")) {
         const head = resolveHEAD(allocator, repo) catch {
             std.debug.print("❌ No commits yet.\n", .{});
@@ -206,7 +206,7 @@ pub fn dagExport(
     }
 
     for (root_cids.items) |root_c| {
-        try walkAndWrite(allocator, &store, &writer, &seen, root_c, max_depth, 0);
+        try walkAndWrite(allocator, io, &store, &writer, &seen, root_c, max_depth, 0);
     }
 
     const file_size = blk: {
@@ -238,6 +238,7 @@ pub fn dagExport(
 
 fn walkAndWrite(
     allocator: std.mem.Allocator,
+    io: std.Io,
     store: *ipld.BlockStore,
     writer: *CarWriter,
     seen: *std.StringHashMap(void),
@@ -265,11 +266,12 @@ fn walkAndWrite(
     const value = ipld.decode(allocator, data) catch return;
     defer value.deinit(allocator);
 
-    try followLinks(allocator, store, writer, seen, value, max_depth, depth + 1);
+    try followLinks(allocator, io, store, writer, seen, value, max_depth, depth + 1);
 }
 
 fn followLinks(
     allocator: std.mem.Allocator,
+    io: std.Io,
     store: *ipld.BlockStore,
     writer: *CarWriter,
     seen: *std.StringHashMap(void),
@@ -278,9 +280,9 @@ fn followLinks(
     depth: usize,
 ) anyerror!void {
     switch (value) {
-        .link => |c| try walkAndWrite(allocator, store, writer, seen, c, max_depth, depth),
-        .map => |m| for (m) |e| try followLinks(allocator, store, writer, seen, e.value, max_depth, depth),
-        .list => |l| for (l) |v| try followLinks(allocator, store, writer, seen, v, max_depth, depth),
+        .link => |c| try walkAndWrite(allocator, io, store, writer, seen, c, max_depth, depth),
+        .map => |m| for (m) |e| try followLinks(allocator, io, store, writer, seen, e.value, max_depth, depth),
+        .list => |l| for (l) |v| try followLinks(allocator, io, store, writer, seen, v, max_depth, depth),
         else => {},
     }
 }
@@ -309,7 +311,7 @@ pub fn dagImport(
         if (store.has(block.cid)) {
             skipped += 1;
         } else {
-            store.put(block.cid, block.data) catch continue;
+            store.put(io, block.cid, block.data) catch continue;
             imported += 1;
         }
     }
@@ -356,6 +358,7 @@ pub fn dagImport(
 
 fn collectAllCIDs(
     allocator: std.mem.Allocator,
+    io: std.Io,
     store: *ipld.BlockStore,
     out: *std.ArrayList(ipld.CID),
 ) !void {

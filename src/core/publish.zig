@@ -300,7 +300,7 @@ pub fn publishCommit(
     defer allocator.free(commit.author);
     defer allocator.free(commit.message);
 
-    const branch = try getCurrentBranch(allocator, repo);
+    const branch = try getCurrentBranch(allocator, io, repo);
     defer allocator.free(branch);
 
     const metrics = try readMetrics(allocator, repo, commit_hash);
