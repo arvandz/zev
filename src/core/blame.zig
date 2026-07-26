@@ -158,7 +158,7 @@ fn getFileAtCommit(
     const tree_data = try repo.store.get(io, tree_cid);
     defer allocator.free(tree_data);
 
-    var t = try tree_mod.Tree.deserialize(allocator, io, tree_data);
+    var t = try tree_mod.Tree.deserialize(allocator, tree_data);
     defer t.deinit();
 
     for (t.entries.items) |entry| {

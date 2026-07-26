@@ -93,7 +93,7 @@ fn collectTreeFiles(
 ) !void {
     const data = try repo.store.get(io, tree_cid);
     defer allocator.free(data);
-    var tree = try tree_mod.Tree.deserialize(allocator, io, data);
+    var tree = try tree_mod.Tree.deserialize(allocator, data);
     defer tree.deinit();
 
     for (tree.entries.items) |entry| {

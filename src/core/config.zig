@@ -29,7 +29,7 @@ pub const Config = struct {
     }
 
     pub fn load(allocator: std.mem.Allocator, io: std.Io, repo_path: []const u8) !Config {
-        var config = Config.init(allocator, io, io, io, );
+        var config = Config.init(allocator);
 
         const config_path = try std.fs.path.join(allocator, &[_][]const u8{ repo_path, ".zev", "config" });
         defer allocator.free(config_path);

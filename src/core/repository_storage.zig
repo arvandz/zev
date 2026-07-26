@@ -9,9 +9,9 @@ pub const RepositoryWithStorage = struct {
     repo: Repository,
     storage: StorageManager,
 
-    pub fn init(allocator: std.mem.Allocator, path: []const u8, storage_config: StorageConfig) !RepositoryWithStorage {
-        const repo = try Repository.init(allocator, io, io, io, path);
-        const storage = try StorageManager.init(allocator, io, io, io, storage_config);
+    pub fn init(allocator: std.mem.Allocator, io: std.Io, path: []const u8, storage_config: StorageConfig) !RepositoryWithStorage {
+        const repo = try Repository.init(allocator, io, path, storage_config.ipfs_enabled);
+        const storage = try StorageManager.init(allocator, storage_config);
 
         return RepositoryWithStorage{
             .repo = repo,

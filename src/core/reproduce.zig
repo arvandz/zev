@@ -310,7 +310,7 @@ fn checkoutCommit(
 
     const tree_data = try repo.store.get(io, c.tree_cid);
     defer allocator.free(tree_data);
-    var t = try tree_mod.Tree.deserialize(allocator, io, tree_data);
+    var t = try tree_mod.Tree.deserialize(allocator, tree_data);
     defer t.deinit();
 
     var count: usize = 0;

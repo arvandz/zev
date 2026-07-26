@@ -120,7 +120,7 @@ fn copyTreeObjects(
     const tree_data = repo.store.get(io, tree_cid) catch return;
     defer allocator.free(tree_data);
 
-    var t = tree_mod.Tree.deserialize(allocator, io, tree_data) catch return;
+    var t = tree_mod.Tree.deserialize(allocator, tree_data) catch return;
     defer t.deinit();
 
     for (t.entries.items) |entry| {

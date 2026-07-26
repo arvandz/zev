@@ -278,7 +278,7 @@ pub fn main(init: std.process.Init) !void {
             return;
         }
 
-        var file_tree = tree.Tree.init(allocator, io, io, io, );
+        var file_tree = tree.Tree.init(allocator);
         defer file_tree.deinit();
 
         const commit_cid = try repo.createCommit(io, author, message, &file_tree);
@@ -553,7 +553,7 @@ pub fn main(init: std.process.Init) !void {
         }
 
         const subcommand = args[2];
-        var ipfs_client = ipfs.IPFSClient.init(allocator, io, io, io, "http://127.0.0.1:5001");
+        var ipfs_client = ipfs.IPFSClient.init(allocator, "http://127.0.0.1:5001");
 
         if (std.mem.eql(u8, subcommand, "status")) {
             const version_str = ipfs_client.version(io, ) catch |err| {

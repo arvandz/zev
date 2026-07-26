@@ -7,7 +7,7 @@ pub fn checkoutTree(allocator: std.mem.Allocator, io: std.Io, repo: *Repository,
     const tree_data = try repo.store.get(io, tree_cid);
     defer allocator.free(tree_data);
 
-    var tree = try tree_mod.Tree.deserialize(allocator, io, tree_data);
+    var tree = try tree_mod.Tree.deserialize(allocator, tree_data);
     defer tree.deinit();
 
     if (path.len > 0) {
@@ -69,7 +69,7 @@ pub fn cleanWorkingDirectory(allocator: std.mem.Allocator, io: std.Io, repo: *Re
     const tree_data = try repo.store.get(io, tree_cid);
     defer allocator.free(tree_data);
 
-    var tree = try tree_mod.Tree.deserialize(allocator, io, tree_data);
+    var tree = try tree_mod.Tree.deserialize(allocator, tree_data);
     defer tree.deinit();
 
     for (tree.entries.items) |entry| {
