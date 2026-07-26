@@ -161,7 +161,6 @@ pub const FileDiff = struct {
 
 fn diffPython(
     allocator: std.mem.Allocator,
-    io: std.Io,
     content_a: []const u8,
     content_b: []const u8,
     out: *std.ArrayList(SemanticChange),
@@ -250,7 +249,7 @@ fn diffPython(
         });
     }
 
-    try diffNumericAssignments(allocator, io, content_a, content_b, out);
+    try diffNumericAssignments(allocator, content_a, content_b, out);
 }
 
 fn extractPythonDefs(allocator: std.mem.Allocator, content: []const u8) ![][]u8 {
@@ -286,7 +285,6 @@ fn extractImports(allocator: std.mem.Allocator, content: []const u8) ![][]u8 {
 
 fn diffNumericAssignments(
     allocator: std.mem.Allocator,
-    io: std.Io,
     content_a: []const u8,
     content_b: []const u8,
     out: *std.ArrayList(SemanticChange),
@@ -374,8 +372,10 @@ fn diffConfig(
         map_b.deinit();
     }
 
-    try extractConfigPairs(allocator, io, content_a, &map_a);
-    try extractConfigPairs(allocator, io, content_b, &map_b);
+    try     try extractConfigPairs(allocator, content_a, &map_a);
+allocator, io, content_a, &map_a);
+    try     try extractConfigPairs(allocator, content_b, &map_b);
+allocator, io, content_b, &map_b);
 
     var it_a = map_a.iterator();
     while (it_a.next()) |entry| {
@@ -410,7 +410,6 @@ fn diffConfig(
 
 fn extractConfigPairs(
     allocator: std.mem.Allocator,
-    io: std.Io,
     content: []const u8,
     map: *std.StringHashMap([]u8),
 ) !void {
@@ -554,7 +553,7 @@ pub fn diffTrees(
 
         if (content_a != null and content_b != null) {
             switch (ftype) {
-                .python => try diffPython(allocator, io, content_a.?, content_b.?, &semantic),
+                .python => try diffPython(allocator, content_a.?, content_b.?, &semantic),
                 .json, .yaml, .toml => try diffConfig(allocator, io, content_a.?, content_b.?, &semantic),
                 .text, .markdown => try diffText(allocator, content_a.?, content_b.?, &semantic),
                 .binary => try semantic.append(allocator, .{

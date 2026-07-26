@@ -34,7 +34,6 @@ pub fn dagShow(
 
 pub fn dagWalk(
     allocator: std.mem.Allocator,
-    io: std.Io,
     repo: *Repository,
     cid_str: []const u8,
     max_depth: usize,

@@ -1057,7 +1057,7 @@ pub fn main(init: std.process.Init) !void {
                     depth = std.fmt.parseInt(usize, args[i], 10) catch 3;
                 }
             }
-            try dag_mod.dagWalk(allocator, io, &repo, args[3], depth);
+            try dag_mod.dagWalk(allocator, &repo, args[3], depth);
         } else if (std.mem.eql(u8, sub, "put")) {
             if (args.len < 4) {
                 std.debug.print("Usage: zev dag put <file>\n", .{});

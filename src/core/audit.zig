@@ -594,6 +594,7 @@ fn renderTerminal(events: []const AuditEvent, repo_path: []const u8, filter: ?[]
 }
 
 fn renderMarkdown(
+    io: std.Io,
     allocator: std.mem.Allocator,
     events: []const AuditEvent,
     repo_path: []const u8,
@@ -604,7 +605,7 @@ fn renderMarkdown(
     defer out.deinit(allocator);
 
     const appendStr = struct {
-        fn f( list: *std.ArrayList(u8), alloc: std.mem.Allocator, s: []const u8) !void {
+        fn f(  list: *std.ArrayList(u8), alloc: std.mem.Allocator, s: []const u8) !void {
             try list.appendSlice(alloc, s);
         }
     }.f;
@@ -664,7 +665,7 @@ fn renderMarkdown(
         try appendStr(&out, allocator, s);
     }
 
-    const f = try std.Io.Dir.cwd().createFile(output_path, .{});
+    const f = try std.Io.Dir.cwd().createFile(io, output_path, .{});
     defer f.close(io);
     try f.writeAll(out.items);
 
@@ -700,7 +701,7 @@ fn renderJson(
     if (std.mem.eql(u8, output_path, "-")) {
         std.debug.print("{s}", .{out.items});
     } else {
-        const f = try std.Io.Dir.cwd().createFile(output_path, .{});
+        const f = try std.Io.Dir.cwd().createFile(io, output_path, .{});
         defer f.close(io);
         try f.writeAll(out.items);
         std.debug.print("📄 JSON report: {s} ({d} bytes)\n", .{ output_path, out.items.len });
@@ -784,7 +785,7 @@ pub fn runAudit(
 
     if (std.mem.eql(u8, format, "md")) {
         const out = output_path orelse "zev-audit.md";
-        try renderMarkdown(allocator, events.items, repo.path, filter_label, out);
+        try renderMarkdown(io, allocator, events.items, repo.path, filter_label, out);
         renderTerminal(events.items, repo.path, filter_label);
         printSummary(events.items);
     } else if (std.mem.eql(u8, format, "json")) {
@@ -794,6 +795,6 @@ pub fn runAudit(
         renderTerminal(events.items, repo.path, filter_label);
         printSummary(events.items);
         const out = output_path orelse "zev-audit.md";
-        try renderMarkdown(allocator, events.items, repo.path, filter_label, out);
+        try renderMarkdown(io, allocator, events.items, repo.path, filter_label, out);
     }
 }

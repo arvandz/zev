@@ -86,8 +86,7 @@ pub const IPFSRepo = struct {
             return json.toOwnedSlice(allocator);
         }
 
-        pub fn fromJson(allocator: std.mem.Allocator,
-    io: std.Io, json_str: []const u8) !Metadata {
+        pub fn fromJson(allocator: std.mem.Allocator, json_str: []const u8) !Metadata {
             var metadata = Metadata.init(allocator);
             errdefer metadata.deinit();
 
@@ -318,7 +317,7 @@ pub const IPFSRepo = struct {
     }
 
     pub fn unpack(allocator: std.mem.Allocator, io: std.Io, repo_path: []const u8, json_data: []const u8) !void {
-        var metadata = try Metadata.fromJson(allocator, io, json_data);
+        var metadata = try Metadata.fromJson(allocator, json_data);
         defer metadata.deinit();
 
         const zev_path = try std.fs.path.join(allocator, &.{ repo_path, ".zev" });

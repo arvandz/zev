@@ -478,7 +478,7 @@ fn pullIPFS(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, remote_
 
     std.debug.print("📄 Retrieved repository metadata\n", .{});
 
-    var metadata = try ipfs_repo.IPFSRepo.Metadata.fromJson(allocator, io, metadata_json);
+    var metadata = try ipfs_repo.IPFSRepo.Metadata.fromJson(allocator, metadata_json);
     defer metadata.deinit();
 
     var it = metadata.refs.iterator();
