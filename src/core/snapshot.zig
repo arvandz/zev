@@ -19,28 +19,31 @@ pub const Snapshot = struct {
     permanent: bool,
 };
 
-fn snapshotDir(allocator: std.mem.Allocator, repo: *Repository) ![]u8 {
+fn snapshotDir(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository) ![]u8 {
     const dir = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "snapshots" });
     try std.Io.Dir.cwd().createDirPath(io, dir);
     return dir;
 }
 
-fn snapshotPath(allocator: std.mem.Allocator, repo: *Repository, id: []const u8) ![]u8 {
-    const dir = try snapshotDir(allocator, repo);
+fn snapshotPath(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository, id: []const u8) ![]u8 {
+    const dir = try snapshotDir(allocator, io, repo);
     defer allocator.free(dir);
     return try std.fs.path.join(allocator, &.{ dir, id });
 }
 
-fn computeSnapshotId(allocator: std.mem.Allocator, name: []const u8, commit_hash: []const u8, created_at: i64) ![]u8 {
+fn computeSnapshotId(allocator: std.mem.Allocator,
+    io: std.Io, name: []const u8, commit_hash: []const u8, created_at: i64) ![]u8 {
     const fingerprint = try std.fmt.allocPrint(allocator, "snapshot:{s}:{s}:{d}", .{ name, commit_hash, created_at });
     defer allocator.free(fingerprint);
-    const content_cid = cid_mod.CID.fromBytes(fingerprint);
+    const content_cid = cid_mod.CID.fromBytes(io, fingerprint);
     return try content_cid.toString(allocator);
 }
 
 fn saveSnapshot(allocator: std.mem.Allocator,
     io: std.Io, repo: *Repository, snap: Snapshot) !void {
-    const path = try snapshotPath(allocator, repo, snap.id);
+    const path = try snapshotPath(allocator, io, repo, snap.id);
     defer allocator.free(path);
 
     const file = try std.Io.Dir.cwd().createFile(path, .{});
@@ -59,7 +62,7 @@ fn saveSnapshot(allocator: std.mem.Allocator,
 }
 
 fn loadSnapshot(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, id: []const u8) !?Snapshot {
-    const path = try snapshotPath(allocator, repo, id);
+    const path = try snapshotPath(allocator, io, repo, id);
     defer allocator.free(path);
 
     const content = std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(64 * 1024)) catch |err| {
@@ -160,7 +163,7 @@ fn resolveSnapshotId(allocator: std.mem.Allocator, io: std.Io, repo: *Repository
         return try allocator.dupe(u8, name_or_id);
     }
 
-    const dir_path = try snapshotDir(allocator, repo);
+    const dir_path = try snapshotDir(allocator, io, repo);
     defer allocator.free(dir_path);
 
     var dir = std.Io.Dir.cwd().openDir(dir_path, .{ .iterate = true }) catch return null;
@@ -246,7 +249,7 @@ pub fn snapshotCreate(
     defer allocator.free(branch);
 
     const now = @divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s);
-    const snap_id = try computeSnapshotId(allocator, name, commit_hash, now);
+    const snap_id = try computeSnapshotId(allocator, io, name, commit_hash, now);
     defer allocator.free(snap_id);
 
     const existing_id = try resolveSnapshotId(allocator, repo, name);
@@ -311,7 +314,7 @@ pub fn snapshotCreate(
 
 pub fn snapshotList(allocator: std.mem.Allocator,
     io: std.Io, repo: *Repository) !void {
-    const dir_path = try snapshotDir(allocator, repo);
+    const dir_path = try snapshotDir(allocator, io, repo);
     defer allocator.free(dir_path);
 
     var dir = std.Io.Dir.cwd().openDir(dir_path, .{ .iterate = true }) catch {
@@ -432,7 +435,8 @@ pub fn snapshotRestore(allocator: std.mem.Allocator, repo: *Repository, name_or_
         std.debug.print("   Metrics were: {s}\n", .{snap.metrics_snapshot});
 }
 
-pub fn snapshotDiff(allocator: std.mem.Allocator, repo: *Repository, name_a: []const u8, name_b: []const u8) !void {
+pub fn snapshotDiff(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository, name_a: []const u8, name_b: []const u8) !void {
     const id_a = (try resolveSnapshotId(allocator, repo, name_a)) orelse {
         std.debug.print("Error: Snapshot '{s}' not found\n", .{name_a});
         return;
@@ -457,9 +461,9 @@ pub fn snapshotDiff(allocator: std.mem.Allocator, repo: *Repository, name_a: []c
     if (snap_a.metrics_snapshot.len > 0 or snap_b.metrics_snapshot.len > 0) {
         std.debug.print("\n   Metric changes:\n", .{});
 
-        var map_a = std.StringHashMap([]const u8).init(allocator);
+        var map_a = std.StringHashMap([]const u8).init(allocator, io, io, io, );
         defer map_a.deinit();
-        var map_b = std.StringHashMap([]const u8).init(allocator);
+        var map_b = std.StringHashMap([]const u8).init(allocator, io, io, io, );
         defer map_b.deinit();
 
         var it_a = std.mem.splitSequence(u8, snap_a.metrics_snapshot, ";");
@@ -475,7 +479,7 @@ pub fn snapshotDiff(allocator: std.mem.Allocator, repo: *Repository, name_a: []c
             try map_b.put(kv[0..eq], kv[eq + 1 ..]);
         }
 
-        var all_keys = std.StringHashMap(bool).init(allocator);
+        var all_keys = std.StringHashMap(bool).init(allocator, io, io, io, );
         defer all_keys.deinit();
         var ka = map_a.iterator();
         while (ka.next()) |e| try all_keys.put(e.key_ptr.*, true);

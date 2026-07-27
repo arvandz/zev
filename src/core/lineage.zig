@@ -50,21 +50,23 @@ pub const LineageNode = struct {
     version: []const u8,
 };
 
-fn lineageDir(allocator: std.mem.Allocator, repo: *Repository) ![]u8 {
+fn lineageDir(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository) ![]u8 {
     const dir = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "lineage" });
     try std.Io.Dir.cwd().createDirPath(io, dir);
     return dir;
 }
 
-fn nodePath(allocator: std.mem.Allocator, repo: *Repository, id: []const u8) ![]u8 {
-    const dir = try lineageDir(allocator, repo);
+fn nodePath(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository, id: []const u8) ![]u8 {
+    const dir = try lineageDir(allocator, io, repo);
     defer allocator.free(dir);
     return try std.fs.path.join(allocator, &.{ dir, id });
 }
 
 fn saveNode(allocator: std.mem.Allocator,
     io: std.Io, repo: *Repository, node: LineageNode) !void {
-    const path = try nodePath(allocator, repo, node.id);
+    const path = try nodePath(allocator, io, repo, node.id);
     defer allocator.free(path);
 
     const file = try std.Io.Dir.cwd().createFile(path, .{});
@@ -76,7 +78,7 @@ fn saveNode(allocator: std.mem.Allocator,
 }
 
 fn loadNode(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, id: []const u8) !?LineageNode {
-    const path = try nodePath(allocator, repo, id);
+    const path = try nodePath(allocator, io, repo, id);
     defer allocator.free(path);
 
     const content = std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(64 * 1024)) catch |err| {
@@ -194,7 +196,7 @@ pub fn lineageAdd(
         };
         defer allocator.free(file_data);
 
-        const content_cid = cid_mod.CID.fromBytes(file_data);
+        const content_cid = cid_mod.CID.fromBytes(io, file_data);
         allocator.free(file_cid);
         file_cid = try content_cid.toString(allocator);
 
@@ -333,7 +335,7 @@ fn printAncestors(
 
 pub fn lineageList(allocator: std.mem.Allocator,
     io: std.Io, repo: *Repository) !void {
-    const dir_path = try lineageDir(allocator, repo);
+    const dir_path = try lineageDir(allocator, io, repo);
     defer allocator.free(dir_path);
 
     var dir = std.Io.Dir.cwd().openDir(dir_path, .{ .iterate = true }) catch {
@@ -386,7 +388,7 @@ pub fn lineageList(allocator: std.mem.Allocator,
 
 pub fn lineageGraph(allocator: std.mem.Allocator,
     io: std.Io, repo: *Repository) !void {
-    const dir_path = try lineageDir(allocator, repo);
+    const dir_path = try lineageDir(allocator, io, repo);
     defer allocator.free(dir_path);
 
     var dir = std.Io.Dir.cwd().openDir(dir_path, .{ .iterate = true }) catch {
@@ -437,7 +439,7 @@ fn printDescendants(
     if (node.description.len > 0)
         std.debug.print("  {s}    {s}\n", .{ indent, node.description });
 
-    const dir_path = try lineageDir(allocator, repo);
+    const dir_path = try lineageDir(allocator, io, repo);
     defer allocator.free(dir_path);
 
     var dir = std.Io.Dir.cwd().openDir(dir_path, .{ .iterate = true }) catch return;
@@ -464,7 +466,7 @@ fn printDescendants(
 
 pub fn lineageProvenance(allocator: std.mem.Allocator,
     io: std.Io, repo: *Repository, cid_prefix: []const u8) !void {
-    const dir_path = try lineageDir(allocator, repo);
+    const dir_path = try lineageDir(allocator, io, repo);
     defer allocator.free(dir_path);
 
     var dir = std.Io.Dir.cwd().openDir(dir_path, .{ .iterate = true }) catch {

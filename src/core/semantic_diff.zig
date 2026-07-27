@@ -118,7 +118,7 @@ fn collectMetricsForCommit(
     store: *ipld.BlockStore,
     commit_cid: ipld.CID,
 ) !MetricMap {
-    var map = MetricMap.init(allocator);
+    var map = MetricMap.init(allocator, io, io, io, );
 
     const commit_short = try commit_cid.toShort(allocator);
     defer allocator.free(commit_short);
@@ -306,7 +306,7 @@ pub fn computeSemanticDiff(
         metrics_b.deinit();
     }
 
-    var all_keys = std.StringHashMap(void).init(allocator);
+    var all_keys = std.StringHashMap(void).init(allocator, io, io, io, );
     defer {
         var kit = all_keys.keyIterator();
         while (kit.next()) |k| allocator.free(k.*);
@@ -580,7 +580,7 @@ pub fn cmdSemanticDiff(
     metric_filter: ?[]const u8,
     format: []const u8,
 ) !void {
-    var store = try ipld.BlockStore.init(allocator, repo.path);
+    var store = try ipld.BlockStore.init(allocator, io, io, io, repo.path);
     defer store.deinit();
 
     const cid_a = resolveRef(allocator, &store, repo, ref_a) catch {

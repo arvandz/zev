@@ -34,13 +34,15 @@ pub const ReproduceRecord = struct {
     duration_ms: u64,
 };
 
-fn reproduceDir(allocator: std.mem.Allocator, repo: *Repository) ![]u8 {
+fn reproduceDir(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository) ![]u8 {
     const dir = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "reproduce" });
     try std.Io.Dir.cwd().createDirPath(io, dir);
     return dir;
 }
 
-fn captureDir(allocator: std.mem.Allocator, repo: *Repository) ![]u8 {
+fn captureDir(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository) ![]u8 {
     const dir = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "capture" });
     try std.Io.Dir.cwd().createDirPath(io, dir);
     return dir;
@@ -52,7 +54,7 @@ fn saveReproduceRecord(
     repo: *Repository,
     rec: ReproduceRecord,
 ) !void {
-    const dir = try reproduceDir(allocator, repo);
+    const dir = try reproduceDir(allocator, io, repo);
     defer allocator.free(dir);
     const path = try std.fs.path.join(allocator, &.{ dir, rec.id });
     defer allocator.free(path);
@@ -101,7 +103,7 @@ pub fn captureRun(
     const commit_hash = try head.toString(allocator);
     defer allocator.free(commit_hash);
 
-    const dir = try captureDir(allocator, repo);
+    const dir = try captureDir(allocator, io, repo);
     defer allocator.free(dir);
 
     const cmd_path = try std.fs.path.join(allocator, &.{ dir, commit_hash });
@@ -143,7 +145,7 @@ pub fn captureRun(
 
 fn captureAutoEnv(allocator: std.mem.Allocator,
     io: std.Io, capture_dir: []const u8) !void {
-    var pip_child = std.process.Child.init(&.{ "pip", "freeze" }, allocator);
+    var pip_child = std.process.Child.init(io, &.{ "pip", "freeze" }, allocator);
     pip_child.stdout_behavior = .Pipe;
     pip_child.stderr_behavior = .Ignore;
     if (pip_child.spawn()) |_| {
@@ -163,7 +165,7 @@ fn captureAutoEnv(allocator: std.mem.Allocator,
         }
     } else |_| {}
 
-    var conda_child = std.process.Child.init(&.{ "conda", "env", "export" }, allocator);
+    var conda_child = std.process.Child.init(io, &.{ "conda", "env", "export" }, allocator);
     conda_child.stdout_behavior = .Pipe;
     conda_child.stderr_behavior = .Ignore;
     if (conda_child.spawn()) |_| {
@@ -187,7 +189,7 @@ fn captureAutoEnv(allocator: std.mem.Allocator,
 }
 
 fn loadRunCommand(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, commit_hash: []const u8) !?[]u8 {
-    const dir = try captureDir(allocator, repo);
+    const dir = try captureDir(allocator, io, repo);
     defer allocator.free(dir);
 
     const cmd_path = try std.fs.path.join(allocator, &.{ dir, commit_hash });
@@ -209,7 +211,7 @@ fn loadRunCommand(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, c
 }
 
 fn loadMetricsForHash(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, hash: []const u8) !std.StringHashMap(f64) {
-    var map = std.StringHashMap(f64).init(allocator);
+    var map = std.StringHashMap(f64).init(allocator, io, io, io, );
     const path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "metrics", hash });
     defer allocator.free(path);
     const content = std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(64 * 1024)) catch return map;
@@ -264,7 +266,7 @@ fn loadMetricsFromSnapshot(allocator: std.mem.Allocator, io: std.Io, repo: *Repo
             allocator.free(commit_hash);
             continue;
         }
-        var map = std.StringHashMap(f64).init(allocator);
+        var map = std.StringHashMap(f64).init(allocator, io, io, io, );
         var mi = std.mem.splitSequence(u8, metrics_raw, ";");
         while (mi.next()) |kv| {
             const eq = std.mem.indexOf(u8, kv, "=") orelse continue;
@@ -311,7 +313,7 @@ fn checkoutCommit(
 
     const tree_data = try repo.store.get(io, c.tree_cid);
     defer allocator.free(tree_data);
-    var t = try tree_mod.Tree.deserialize(allocator, tree_data);
+    var t = try tree_mod.Tree.deserialize(allocator, io, tree_data);
     defer t.deinit();
 
     var count: usize = 0;
@@ -332,9 +334,10 @@ fn checkoutCommit(
 
 fn parseMetricsFromOutput(
     allocator: std.mem.Allocator,
+    io: std.Io,
     output: []const u8,
 ) !std.StringHashMap(f64) {
-    var map = std.StringHashMap(f64).init(allocator);
+    var map = std.StringHashMap(f64).init(allocator, io, io, io, );
 
     var line_iter = std.mem.splitSequence(u8, output, "\n");
     while (line_iter.next()) |line| {
@@ -419,7 +422,7 @@ fn doReproduce(
 
     const id_raw = try std.fmt.allocPrint(allocator, "repro:{s}:{d}", .{ commit_hash, now });
     defer allocator.free(id_raw);
-    const id_cid = cid_mod.CID.fromBytes(id_raw);
+    const id_cid = cid_mod.CID.fromBytes(io, id_raw);
     const rec_id = try id_cid.toString(allocator);
     defer allocator.free(rec_id);
     const rec_id_short = rec_id[0..16];
@@ -499,7 +502,7 @@ fn doReproduce(
         }
     }
 
-    var child = std.process.Child.init(argv.items, allocator);
+    var child = std.process.Child.init(io, argv.items, allocator);
     {
         const cap_dir_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "capture" });
         defer allocator.free(cap_dir_path);
@@ -548,7 +551,7 @@ fn doReproduce(
     std.debug.print("   Completed in {d}ms, exit code: {d}\n\n", .{ elapsed_ms, exit_code });
 
     const output = output_buf[0..output_len];
-    var repro_metrics = try parseMetricsFromOutput(allocator, output);
+    var repro_metrics = try parseMetricsFromOutput(allocator, io, output);
     defer freeMetricsMap(allocator, &repro_metrics);
 
     const metrics_out_path = try std.fs.path.join(allocator, &.{ work_dir, "metrics.txt" });
@@ -721,7 +724,7 @@ pub fn reproduceCommit(
 }
 
 pub fn reproduceStatus(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, limit: usize) !void {
-    const dir = try reproduceDir(allocator, repo);
+    const dir = try reproduceDir(allocator, io, repo);
     defer allocator.free(dir);
 
     var d = std.Io.Dir.cwd().openDir(dir, .{ .iterate = true }) catch {

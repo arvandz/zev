@@ -607,7 +607,8 @@ pub const BlockStore = struct {
     base_path: []const u8,
     allocator: std.mem.Allocator,
 
-    pub fn init(allocator: std.mem.Allocator, repo_path: []const u8) !BlockStore {
+    pub fn init(allocator: std.mem.Allocator,
+    io: std.Io, repo_path: []const u8) !BlockStore {
         const base = try std.fs.path.join(allocator, &.{ repo_path, ".zev", "ipld" });
         try std.Io.Dir.cwd().createDirPath(io, base);
         return .{ .base_path = base, .allocator = allocator };
@@ -617,7 +618,7 @@ pub const BlockStore = struct {
         self.allocator.free(self.base_path);
     }
 
-    fn blockPath(self: BlockStore, c: CID) ![]u8 {
+    fn blockPath(io: std.Io, self: BlockStore, c: CID) ![]u8 {
         const short = try c.toShort(self.allocator);
         defer self.allocator.free(short);
         const prefix = short[0..@min(2, short.len)];
@@ -628,7 +629,7 @@ pub const BlockStore = struct {
     }
 
     pub fn put(self: BlockStore, io: std.Io, c: CID, data: []const u8) !void {
-        const path = try self.blockPath(c);
+        const path = try self.blockPath(io, c);
         defer self.allocator.free(path);
         std.Io.Dir.cwd().access(path, .{}) catch {
             const f = try std.Io.Dir.cwd().createFile(path, .{});
@@ -639,13 +640,13 @@ pub const BlockStore = struct {
     }
 
     pub fn get(self: BlockStore, io: std.Io, c: CID) ![]u8 {
-        const path = try self.blockPath(c);
+        const path = try self.blockPath(io, c);
         defer self.allocator.free(path);
         return std.Io.Dir.cwd().readFileAlloc(io, path, self.allocator, .limited(64 * 1024 * 1024)) catch error.BlockNotFound;
     }
 
-    pub fn has(self: BlockStore, c: CID) bool {
-        const path = self.blockPath(c) catch return false;
+    pub fn has(io: std.Io, self: BlockStore, c: CID) bool {
+        const path = self.blockPath(io, c) catch return false;
         defer self.allocator.free(path);
         std.Io.Dir.cwd().access(path, .{}) catch return false;
         return true;

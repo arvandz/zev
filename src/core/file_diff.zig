@@ -161,6 +161,7 @@ pub const FileDiff = struct {
 
 fn diffPython(
     allocator: std.mem.Allocator,
+    io: std.Io,
     content_a: []const u8,
     content_b: []const u8,
     out: *std.ArrayList(SemanticChange),
@@ -249,7 +250,7 @@ fn diffPython(
         });
     }
 
-    try diffNumericAssignments(allocator, content_a, content_b, out);
+    try diffNumericAssignments(allocator, io, content_a, content_b, out);
 }
 
 fn extractPythonDefs(allocator: std.mem.Allocator, content: []const u8) ![][]u8 {
@@ -285,17 +286,18 @@ fn extractImports(allocator: std.mem.Allocator, content: []const u8) ![][]u8 {
 
 fn diffNumericAssignments(
     allocator: std.mem.Allocator,
+    io: std.Io,
     content_a: []const u8,
     content_b: []const u8,
     out: *std.ArrayList(SemanticChange),
 ) !void {
-    var map_a = std.StringHashMap(f64).init(allocator);
+    var map_a = std.StringHashMap(f64).init(allocator, io, io, io, );
     defer {
         var it = map_a.keyIterator();
         while (it.next()) |k| allocator.free(k.*);
         map_a.deinit();
     }
-    var map_b = std.StringHashMap(f64).init(allocator);
+    var map_b = std.StringHashMap(f64).init(allocator, io, io, io, );
     defer {
         var it = map_b.keyIterator();
         while (it.next()) |k| allocator.free(k.*);
@@ -353,7 +355,7 @@ fn diffConfig(
     content_b: []const u8,
     out: *std.ArrayList(SemanticChange),
 ) !void {
-    var map_a = std.StringHashMap([]u8).init(allocator);
+    var map_a = std.StringHashMap([]u8).init(allocator, io, io, io, );
     defer {
         var it = map_a.iterator();
         while (it.next()) |e| {
@@ -362,7 +364,7 @@ fn diffConfig(
         }
         map_a.deinit();
     }
-    var map_b = std.StringHashMap([]u8).init(allocator);
+    var map_b = std.StringHashMap([]u8).init(allocator, io, io, io, );
     defer {
         var it = map_b.iterator();
         while (it.next()) |e| {
@@ -551,7 +553,7 @@ pub fn diffTrees(
 
         if (content_a != null and content_b != null) {
             switch (ftype) {
-                .python => try diffPython(allocator, content_a.?, content_b.?, &semantic),
+                .python => try diffPython(allocator, io, content_a.?, content_b.?, &semantic),
                 .json, .yaml, .toml => try diffConfig(allocator, io, content_a.?, content_b.?, &semantic),
                 .text, .markdown => try diffText(allocator, content_a.?, content_b.?, &semantic),
                 .binary => try semantic.append(allocator, .{

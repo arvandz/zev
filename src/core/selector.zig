@@ -516,7 +516,7 @@ pub fn dagQuery(
     query_str: []const u8,
     output_format: []const u8,
 ) !void {
-    var store = try ipld.BlockStore.init(allocator, repo.path);
+    var store = try ipld.BlockStore.init(allocator, io, io, io, repo.path);
     defer store.deinit();
 
     std.debug.print("🔍 Query: {s}\n\n", .{query_str});
@@ -534,7 +534,7 @@ pub fn dagQuery(
     };
     defer pq.deinit();
 
-    var engine = SelectorEngine.init(allocator, &store, pq.type_filter);
+    var engine = SelectorEngine.init(allocator, io, io, io, &store, pq.type_filter);
     defer engine.deinit();
 
     if (pq.root_cid.version == 0) {

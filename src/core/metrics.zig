@@ -2,7 +2,8 @@ const std = @import("std");
 const Repository = @import("repository.zig").Repository;
 const cid_mod = @import("cid.zig");
 
-fn metricsPath(allocator: std.mem.Allocator, repo: *Repository, commit_hash: []const u8) ![]u8 {
+fn metricsPath(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository, commit_hash: []const u8) ![]u8 {
     const metrics_dir = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "metrics" });
     defer allocator.free(metrics_dir);
     try std.Io.Dir.cwd().createDirPath(io, metrics_dir);
@@ -14,7 +15,7 @@ pub fn setMetric(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, ke
     const hash_str = try head.toString(allocator);
     defer allocator.free(hash_str);
 
-    const path = try metricsPath(allocator, repo, hash_str);
+    const path = try metricsPath(allocator, io, repo, hash_str);
     defer allocator.free(path);
 
     var lines: std.ArrayList(u8) = .empty;
@@ -75,7 +76,7 @@ pub fn showMetrics(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, 
     };
     defer allocator.free(hash_str);
 
-    const path = try metricsPath(allocator, repo, hash_str);
+    const path = try metricsPath(allocator, io, repo, hash_str);
     defer allocator.free(path);
 
     const content = std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(64 * 1024)) catch |err| {
@@ -124,7 +125,7 @@ pub fn listMetrics(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) 
         const hash_str = try current.toString(allocator);
         defer allocator.free(hash_str);
 
-        const path = try metricsPath(allocator, repo, hash_str);
+        const path = try metricsPath(allocator, io, repo, hash_str);
         defer allocator.free(path);
 
         const content = std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(64 * 1024)) catch null;
@@ -162,9 +163,9 @@ pub fn listMetrics(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) 
 }
 
 pub fn compareMetrics(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, hash_a: []const u8, hash_b: []const u8) !void {
-    const path_a = try metricsPath(allocator, repo, hash_a);
+    const path_a = try metricsPath(allocator, io, repo, hash_a);
     defer allocator.free(path_a);
-    const path_b = try metricsPath(allocator, repo, hash_b);
+    const path_b = try metricsPath(allocator, io, repo, hash_b);
     defer allocator.free(path_b);
 
     const content_a = std.Io.Dir.cwd().readFileAlloc(io, path_a, allocator, .limited(64 * 1024)) catch |err| {
@@ -185,9 +186,9 @@ pub fn compareMetrics(allocator: std.mem.Allocator, io: std.Io, repo: *Repositor
     };
     defer allocator.free(content_b);
 
-    var map_a = std.StringHashMap([]const u8).init(allocator);
+    var map_a = std.StringHashMap([]const u8).init(allocator, io, io, io, );
     defer map_a.deinit();
-    var map_b = std.StringHashMap([]const u8).init(allocator);
+    var map_b = std.StringHashMap([]const u8).init(allocator, io, io, io, );
     defer map_b.deinit();
 
     var iter_a = std.mem.splitSequence(u8, content_a, "\n");

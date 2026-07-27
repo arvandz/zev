@@ -22,7 +22,8 @@ pub const ContextRecord = struct {
     notes: []const u8,
 };
 
-fn contextDir(allocator: std.mem.Allocator, repo: *Repository) ![]u8 {
+fn contextDir(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository) ![]u8 {
     const dir = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "context" });
     try std.Io.Dir.cwd().createDirPath(io, dir);
     return dir;
@@ -50,7 +51,7 @@ fn saveRecord(
     repo: *Repository,
     rec: ContextRecord,
 ) !void {
-    const dir = try contextDir(allocator, repo);
+    const dir = try contextDir(allocator, io, repo);
     defer allocator.free(dir);
     const path = try std.fs.path.join(allocator, &.{ dir, rec.record_id });
     defer allocator.free(path);
@@ -184,12 +185,13 @@ fn computeFileCid(allocator: std.mem.Allocator, io: std.Io, file_path: []const u
     const content = std.Io.Dir.cwd().readFileAlloc(io, file_path, allocator, .limited(64 * 1024 * 1024)) catch
         return try allocator.dupe(u8, "unknown");
     defer allocator.free(content);
-    const c = cid_mod.CID.fromBytes(content);
+    const c = cid_mod.CID.fromBytes(io, content);
     return try c.toString(allocator);
 }
 
-fn computePromptHash(allocator: std.mem.Allocator, prompt: []const u8) ![]u8 {
-    const c = cid_mod.CID.fromBytes(prompt);
+fn computePromptHash(allocator: std.mem.Allocator,
+    io: std.Io, prompt: []const u8) ![]u8 {
+    const c = cid_mod.CID.fromBytes(io, prompt);
     return try c.toString(allocator);
 }
 
@@ -199,10 +201,11 @@ fn getHeadHash(allocator: std.mem.Allocator, repo: *Repository) ![]u8 {
     return try head.toString(allocator);
 }
 
-fn makeRecordId(allocator: std.mem.Allocator, file_path: []const u8, ts: i64) ![]u8 {
+fn makeRecordId(allocator: std.mem.Allocator,
+    io: std.Io, file_path: []const u8, ts: i64) ![]u8 {
     const raw = try std.fmt.allocPrint(allocator, "ctx:{s}:{d}", .{ file_path, ts });
     defer allocator.free(raw);
-    const c = cid_mod.CID.fromBytes(raw);
+    const c = cid_mod.CID.fromBytes(io, raw);
     return try c.toString(allocator);
 }
 
@@ -231,7 +234,7 @@ fn iterateRecords(
     callback: fn (allocator: std.mem.Allocator, rec: ContextRecord, ctx: *anyopaque) anyerror!bool,
     ctx: *anyopaque,
 ) !void {
-    const dir_path = try contextDir(allocator, repo);
+    const dir_path = try contextDir(allocator, io, repo);
     defer allocator.free(dir_path);
 
     var dir = std.Io.Dir.cwd().openDir(dir_path, .{ .iterate = true }) catch return;
@@ -272,7 +275,7 @@ pub fn contextAdd(
 
     const prompt_text = prompt orelse "";
     const prompt_hash = if (prompt_text.len > 0)
-        try computePromptHash(allocator, prompt_text)
+        try computePromptHash(allocator, io, prompt_text)
     else
         try allocator.dupe(u8, "none");
     defer allocator.free(prompt_hash);
@@ -280,7 +283,7 @@ pub fn contextAdd(
     const commit_hash = try getHeadHash(allocator, repo);
     defer allocator.free(commit_hash);
 
-    const record_id = try makeRecordId(allocator, file_path, now);
+    const record_id = try makeRecordId(allocator, io, file_path, now);
     defer allocator.free(record_id);
 
     const author_kind = parseKind(kind_str);
@@ -320,7 +323,7 @@ pub fn contextShow(
     repo: *Repository,
     file_path: []const u8,
 ) !void {
-    const dir_path = try contextDir(allocator, repo);
+    const dir_path = try contextDir(allocator, io, repo);
     defer allocator.free(dir_path);
 
     var dir = std.Io.Dir.cwd().openDir(dir_path, .{ .iterate = true }) catch {
@@ -398,10 +401,10 @@ pub fn contextBlame(
     io: std.Io,
     repo: *Repository,
 ) !void {
-    const dir_path = try contextDir(allocator, repo);
+    const dir_path = try contextDir(allocator, io, repo);
     defer allocator.free(dir_path);
 
-    var latest = std.StringHashMap(ContextRecord).init(allocator);
+    var latest = std.StringHashMap(ContextRecord).init(allocator, io, io, io, );
     defer {
         var it = latest.iterator();
         while (it.next()) |e| {
@@ -474,10 +477,10 @@ pub fn contextStats(
     io: std.Io,
     repo: *Repository,
 ) !void {
-    const dir_path = try contextDir(allocator, repo);
+    const dir_path = try contextDir(allocator, io, repo);
     defer allocator.free(dir_path);
 
-    var model_counts = std.StringHashMap(usize).init(allocator);
+    var model_counts = std.StringHashMap(usize).init(allocator, io, io, io, );
     defer {
         var it = model_counts.iterator();
         while (it.next()) |e| allocator.free(e.key_ptr.*);
@@ -487,7 +490,7 @@ pub fn contextStats(
     var kind_counts: [4]usize = @splat(0);
     var total: usize = 0;
 
-    var file_models = std.StringHashMap([]u8).init(allocator);
+    var file_models = std.StringHashMap([]u8).init(allocator, io, io, io, );
     defer {
         var it = file_models.iterator();
         while (it.next()) |e| {
@@ -496,13 +499,13 @@ pub fn contextStats(
         }
         file_models.deinit();
     }
-    var file_kinds = std.StringHashMap(AuthorKind).init(allocator);
+    var file_kinds = std.StringHashMap(AuthorKind).init(allocator, io, io, io, );
     defer {
         var it = file_kinds.iterator();
         while (it.next()) |e| allocator.free(e.key_ptr.*);
         file_kinds.deinit();
     }
-    var file_ts = std.StringHashMap(i64).init(allocator);
+    var file_ts = std.StringHashMap(i64).init(allocator, io, io, io, );
     defer {
         var it = file_ts.iterator();
         while (it.next()) |e| allocator.free(e.key_ptr.*);
@@ -589,7 +592,7 @@ pub fn contextQuery(
     kind_filter: ?[]const u8,
     show_prompt: bool,
 ) !void {
-    const dir_path = try contextDir(allocator, repo);
+    const dir_path = try contextDir(allocator, io, repo);
     defer allocator.free(dir_path);
 
     var dir = std.Io.Dir.cwd().openDir(dir_path, .{ .iterate = true }) catch {
@@ -598,7 +601,7 @@ pub fn contextQuery(
     };
     defer dir.close(io);
 
-    var latest = std.StringHashMap(ContextRecord).init(allocator);
+    var latest = std.StringHashMap(ContextRecord).init(allocator, io, io, io, );
     defer {
         var it = latest.iterator();
         while (it.next()) |e| {
@@ -662,7 +665,7 @@ pub fn contextQuery(
 
 pub fn contextList(allocator: std.mem.Allocator,
     io: std.Io, repo: *Repository) !void {
-    const dir_path = try contextDir(allocator, repo);
+    const dir_path = try contextDir(allocator, io, repo);
     defer allocator.free(dir_path);
 
     var dir = std.Io.Dir.cwd().openDir(dir_path, .{ .iterate = true }) catch {

@@ -43,7 +43,8 @@ fn driftConfigPath(allocator: std.mem.Allocator, repo: *Repository) ![]u8 {
     return try std.fs.path.join(allocator, &.{ repo.path, ".zev", "drift_config" });
 }
 
-fn driftHistoryDir(allocator: std.mem.Allocator, repo: *Repository) ![]u8 {
+fn driftHistoryDir(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository) ![]u8 {
     const dir = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "drift_history" });
     try std.Io.Dir.cwd().createDirPath(io, dir);
     return dir;
@@ -156,7 +157,7 @@ pub fn loadConfig(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) !
 }
 
 fn loadMetricsForHash(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, hash: []const u8) !std.StringHashMap(f64) {
-    var map = std.StringHashMap(f64).init(allocator);
+    var map = std.StringHashMap(f64).init(allocator, io, io, io, );
     const path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "metrics", hash });
     defer allocator.free(path);
     const content = std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(64 * 1024)) catch return map;
@@ -210,7 +211,7 @@ fn loadMetricsFromSnapshot(allocator: std.mem.Allocator, io: std.Io, repo: *Repo
             }
         }
         if (!std.mem.eql(u8, snap_name, name)) continue;
-        var map = std.StringHashMap(f64).init(allocator);
+        var map = std.StringHashMap(f64).init(allocator, io, io, io, );
         var mi = std.mem.splitSequence(u8, metrics_raw, ";");
         while (mi.next()) |kv| {
             const eq = std.mem.indexOf(u8, kv, "=") orelse continue;
@@ -313,7 +314,7 @@ fn saveHistory(
     any_drift: bool,
     timestamp: i64,
 ) !void {
-    const dir = try driftHistoryDir(allocator, repo);
+    const dir = try driftHistoryDir(allocator, io, repo);
     defer allocator.free(dir);
     const fname = try std.fmt.allocPrint(allocator, "{d}", .{timestamp});
     defer allocator.free(fname);
@@ -514,7 +515,7 @@ pub fn driftCheck(allocator: std.mem.Allocator,
 }
 
 pub fn driftHistory(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, limit: usize) !void {
-    const dir = try driftHistoryDir(allocator, repo);
+    const dir = try driftHistoryDir(allocator, io, repo);
     defer allocator.free(dir);
     var d = std.Io.Dir.cwd().openDir(dir, .{ .iterate = true }) catch {
         std.debug.print("No drift history yet. Run: zev drift check\n", .{});

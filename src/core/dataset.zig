@@ -44,19 +44,22 @@ pub const AssignmentRecord = struct {
     notes: []const u8,
 };
 
-fn datasetDir(allocator: std.mem.Allocator, repo: *Repository) ![]u8 {
+fn datasetDir(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository) ![]u8 {
     const dir = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "datasets" });
     try std.Io.Dir.cwd().createDirPath(io, dir);
     return dir;
 }
 
-fn shardsDir(allocator: std.mem.Allocator, repo: *Repository, dataset_name: []const u8) ![]u8 {
+fn shardsDir(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository, dataset_name: []const u8) ![]u8 {
     const dir = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "datasets", dataset_name, "shards" });
     try std.Io.Dir.cwd().createDirPath(io, dir);
     return dir;
 }
 
-fn assignDir(allocator: std.mem.Allocator, repo: *Repository, dataset_name: []const u8) ![]u8 {
+fn assignDir(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository, dataset_name: []const u8) ![]u8 {
     const dir = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "datasets", dataset_name, "assignments" });
     try std.Io.Dir.cwd().createDirPath(io, dir);
     return dir;
@@ -68,7 +71,7 @@ fn saveDatasetRecord(
     repo: *Repository,
     ds: DatasetRecord,
 ) !void {
-    const dir = try datasetDir(allocator, repo);
+    const dir = try datasetDir(allocator, io, repo);
     defer allocator.free(dir);
     const ds_dir = try std.fs.path.join(allocator, &.{ dir, ds.name });
     try std.Io.Dir.cwd().createDirPath(io, ds_dir);
@@ -159,7 +162,7 @@ fn saveShardRecord(
     repo: *Repository,
     shard: ShardRecord,
 ) !void {
-    const dir = try shardsDir(allocator, repo, shard.dataset_name);
+    const dir = try shardsDir(allocator, io, repo, shard.dataset_name);
     defer allocator.free(dir);
     const fname = try std.fmt.allocPrint(allocator, "shard_{d:0>4}", .{shard.shard_index});
     defer allocator.free(fname);
@@ -182,7 +185,7 @@ fn saveAssignment(
     repo: *Repository,
     assignment: AssignmentRecord,
 ) !void {
-    const dir = try assignDir(allocator, repo, assignment.dataset_name);
+    const dir = try assignDir(allocator, io, repo, assignment.dataset_name);
     defer allocator.free(dir);
     const path = try std.fs.path.join(allocator, &.{ dir, assignment.commit_hash[0..@min(16, assignment.commit_hash.len)] });
     defer allocator.free(path);
@@ -257,7 +260,7 @@ pub fn datasetRegister(
         break :blk try allocator.dupe(u8, fake);
     };
     defer allocator.free(src_content);
-    const src_cid_obj = cid_mod.CID.fromBytes(src_content);
+    const src_cid_obj = cid_mod.CID.fromBytes(io, src_content);
     const src_cid = try src_cid_obj.toString(allocator);
     defer allocator.free(src_cid);
 
@@ -306,7 +309,7 @@ pub fn datasetSplit(
 ) !void {
     const now = @divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s);
 
-    const dir = try datasetDir(allocator, repo);
+    const dir = try datasetDir(allocator, io, repo);
     defer allocator.free(dir);
     const meta_path = try std.fs.path.join(allocator, &.{ dir, dataset_name, "dataset.meta" });
     defer allocator.free(meta_path);
@@ -411,7 +414,7 @@ fn splitLinesBased(
 
         const shard_raw = try std.fmt.allocPrint(allocator, "shard:{s}:{d}:{d}:{d}:{d}", .{ ds.source_cid, si, row_start, row_end, seed });
         defer allocator.free(shard_raw);
-        const shard_cid_obj = cid_mod.CID.fromBytes(shard_raw);
+        const shard_cid_obj = cid_mod.CID.fromBytes(io, shard_raw);
         const shard_cid = try shard_cid_obj.toString(allocator);
         defer allocator.free(shard_cid);
 
@@ -469,7 +472,7 @@ fn splitBytesBased(
 
         const shard_raw = try std.fmt.allocPrint(allocator, "shard:{s}:{d}:{d}:{d}", .{ ds.source_cid, si, byte_start, byte_end });
         defer allocator.free(shard_raw);
-        const shard_cid_obj = cid_mod.CID.fromBytes(shard_raw);
+        const shard_cid_obj = cid_mod.CID.fromBytes(io, shard_raw);
         const shard_cid = try shard_cid_obj.toString(allocator);
         defer allocator.free(shard_cid);
 
@@ -550,7 +553,7 @@ pub fn datasetLineage(
     repo: *Repository,
     dataset_name: []const u8,
 ) !void {
-    const assign_dir_path = try assignDir(allocator, repo, dataset_name);
+    const assign_dir_path = try assignDir(allocator, io, repo, dataset_name);
     defer allocator.free(assign_dir_path);
 
     std.debug.print("🔗 Dataset Lineage: {s}\n\n", .{dataset_name});
@@ -628,7 +631,7 @@ pub fn datasetImpact(
     dataset_name: []const u8,
     shard_index: usize,
 ) !void {
-    const assign_dir_path = try assignDir(allocator, repo, dataset_name);
+    const assign_dir_path = try assignDir(allocator, io, repo, dataset_name);
     defer allocator.free(assign_dir_path);
 
     const target_shard = try std.fmt.allocPrint(allocator, "{s}:shard_{d}", .{ dataset_name, shard_index });
@@ -691,7 +694,7 @@ pub fn datasetImpact(
 
 pub fn datasetList(allocator: std.mem.Allocator,
     io: std.Io, repo: *Repository) !void {
-    const dir_path = try datasetDir(allocator, repo);
+    const dir_path = try datasetDir(allocator, io, repo);
     defer allocator.free(dir_path);
 
     var dir = std.Io.Dir.cwd().openDir(dir_path, .{ .iterate = true }) catch {

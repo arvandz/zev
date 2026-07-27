@@ -10,12 +10,13 @@ pub const CarWriter = struct {
     block_count: usize,
     byte_count: u64,
 
-    pub fn init(allocator: std.mem.Allocator, file: std.fs.File) CarWriter {
+    pub fn init(allocator: std.mem.Allocator,
+    io: std.Io, file: std.fs.File) CarWriter {
         return .{
             .allocator = allocator,
             .file = file,
             .roots = std.ArrayList(ipld.CID){},
-            .written = std.StringHashMap(void).init(allocator),
+            .written = std.StringHashMap(void).init(allocator, io, io, io, ),
             .block_count = 0,
             .byte_count = 0,
         };
@@ -159,7 +160,7 @@ pub fn dagExport(
     max_depth: usize,
     to_ipfs: bool,
 ) !void {
-    var store = try ipld.BlockStore.init(allocator, repo.path);
+    var store = try ipld.BlockStore.init(allocator, io, io, io, repo.path);
     defer store.deinit();
 
     var root_cids: std.ArrayList(ipld.CID) = .empty;
@@ -192,13 +193,13 @@ pub fn dagExport(
     };
     defer f.close(io);
 
-    var writer = CarWriter.init(allocator, f);
+    var writer = CarWriter.init(allocator, io, io, io, f);
     defer writer.deinit();
 
     for (root_cids.items) |c| try writer.addRoot(c);
     try writer.writeHeader();
 
-    var seen = std.StringHashMap(void).init(allocator);
+    var seen = std.StringHashMap(void).init(allocator, io, io, io, );
     defer {
         var it = seen.keyIterator();
         while (it.next()) |k| allocator.free(k.*);
@@ -293,7 +294,7 @@ pub fn dagImport(
     repo: *Repository,
     car_path: []const u8,
 ) !void {
-    var store = try ipld.BlockStore.init(allocator, repo.path);
+    var store = try ipld.BlockStore.init(allocator, io, io, io, repo.path);
     defer store.deinit();
 
     std.debug.print("📥 Importing CAR: {s}\n\n", .{car_path});
@@ -308,7 +309,7 @@ pub fn dagImport(
     var skipped: usize = 0;
 
     for (car.blocks) |block| {
-        if (store.has(block.cid)) {
+        if (store.has(io, block.cid)) {
             skipped += 1;
         } else {
             store.put(io, block.cid, block.data) catch continue;

@@ -4,10 +4,11 @@ const ipld = @import("ipld.zig");
 
 pub fn dagShow(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     cid_str: []const u8,
 ) !void {
-    var store = try ipld.BlockStore.init(allocator, repo.path);
+    var store = try ipld.BlockStore.init(allocator, io, io, io, repo.path);
     defer store.deinit();
 
     const c = parseCID(cid_str) catch {
@@ -34,11 +35,12 @@ pub fn dagShow(
 
 pub fn dagWalk(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo: *Repository,
     cid_str: []const u8,
     max_depth: usize,
 ) !void {
-    var store = try ipld.BlockStore.init(allocator, repo.path);
+    var store = try ipld.BlockStore.init(allocator, io, io, io, repo.path);
     defer store.deinit();
 
     const c = parseCID(cid_str) catch {
@@ -108,7 +110,7 @@ pub fn dagPut(
     repo: *Repository,
     file_path: []const u8,
 ) !void {
-    var store = try ipld.BlockStore.init(allocator, repo.path);
+    var store = try ipld.BlockStore.init(allocator, io, io, io, repo.path);
     defer store.deinit();
 
     const data = std.Io.Dir.cwd().readFileAlloc(io, file_path, allocator, .limited(64 * 1024 * 1024)) catch |err| {
@@ -142,13 +144,13 @@ pub fn dagPut(
 }
 
 pub fn dagStat(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) !void {
-    var store = try ipld.BlockStore.init(allocator, repo.path);
+    var store = try ipld.BlockStore.init(allocator, io, io, io, repo.path);
     defer store.deinit();
 
     const block_count = store.count(io, );
 
     var total_bytes: u64 = 0;
-    var by_type = std.StringHashMap(usize).init(allocator);
+    var by_type = std.StringHashMap(usize).init(allocator, io, io, io, );
     defer {
         var it = by_type.iterator();
         while (it.next()) |e| allocator.free(e.key_ptr.*);
@@ -238,7 +240,7 @@ pub fn graftAdd(
         return;
     };
 
-    var store = try ipld.BlockStore.init(allocator, repo.path);
+    var store = try ipld.BlockStore.init(allocator, io, io, io, repo.path);
     defer store.deinit();
 
     const config_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "config" });
@@ -246,7 +248,7 @@ pub fn graftAdd(
     const author = try loadConfigField(allocator, config_path, "user.name");
     defer allocator.free(author);
 
-    if (fetch_from_ipfs and !store.has(c)) {
+    if (fetch_from_ipfs and !store.has(io, c)) {
         std.debug.print("   Fetching from IPFS...\n", .{});
         const short = try c.toShort(allocator);
         defer allocator.free(short);
@@ -261,7 +263,7 @@ pub fn graftAdd(
         .grafted_by = author,
     };
 
-    var arena = std.heap.ArenaAllocator.init(allocator);
+    var arena = std.heap.ArenaAllocator.init(allocator, io, io, io, );
     defer arena.deinit();
     const aa = arena.allocator();
     const graft_val = try graft.toValue(aa);
@@ -283,7 +285,7 @@ pub fn graftAdd(
         std.debug.print("   Desc:    {s}\n", .{description});
     std.debug.print("\n", .{});
 
-    if (!store.has(c)) {
+    if (!store.has(io, c)) {
         std.debug.print("   ℹ️  Block not in local store (CID recorded as link only)\n", .{});
         std.debug.print("   The data lives wherever the CID points — IPFS, Filecoin, etc.\n", .{});
         std.debug.print("   To fetch: zev graft {s} --as {s} --fetch\n\n", .{ cid_str, alias });

@@ -14,7 +14,8 @@ pub const Experiment = struct {
     tags: []const u8,
 };
 
-fn experimentsDir(allocator: std.mem.Allocator, repo: *Repository) ![]u8 {
+fn experimentsDir(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository) ![]u8 {
     const dir = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "experiments" });
     try std.Io.Dir.cwd().createDirPath(io, dir);
     return dir;
@@ -28,8 +29,9 @@ fn sanitizeName(allocator: std.mem.Allocator, name: []const u8) ![]u8 {
     return buf;
 }
 
-fn experimentPath(allocator: std.mem.Allocator, repo: *Repository, name: []const u8) ![]u8 {
-    const dir = try experimentsDir(allocator, repo);
+fn experimentPath(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository, name: []const u8) ![]u8 {
+    const dir = try experimentsDir(allocator, io, repo);
     defer allocator.free(dir);
     const safe = try sanitizeName(allocator, name);
     defer allocator.free(safe);
@@ -38,7 +40,7 @@ fn experimentPath(allocator: std.mem.Allocator, repo: *Repository, name: []const
 
 fn saveExperiment(allocator: std.mem.Allocator,
     io: std.Io, repo: *Repository, exp: Experiment) !void {
-    const path = try experimentPath(allocator, repo, exp.name);
+    const path = try experimentPath(allocator, io, repo, exp.name);
     defer allocator.free(path);
 
     const file = try std.Io.Dir.cwd().createFile(path, .{});
@@ -50,7 +52,7 @@ fn saveExperiment(allocator: std.mem.Allocator,
 }
 
 fn loadExperiment(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, name: []const u8) !?Experiment {
-    const path = try experimentPath(allocator, repo, name);
+    const path = try experimentPath(allocator, io, repo, name);
     defer allocator.free(path);
 
     const content = std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(64 * 1024)) catch |err| {
@@ -204,7 +206,7 @@ pub fn experimentComplete(allocator: std.mem.Allocator,
     try saveExperiment(allocator, io, repo, updated);
 
     if (notes.len > 0) {
-        const results_path = try experimentPath(allocator, repo, try std.fmt.allocPrint(allocator, "{s}.results", .{name}));
+        const results_path = try experimentPath(allocator, io, repo, try std.fmt.allocPrint(allocator, "{s}.results", .{name}));
         defer allocator.free(results_path);
         const f = try std.Io.Dir.cwd().createFile(results_path, .{});
         defer f.close(io);
@@ -263,7 +265,7 @@ pub fn experimentShow(allocator: std.mem.Allocator, io: std.Io, repo: *Repositor
         std.debug.print("   Tags:        {s}\n", .{exp.tags});
     std.debug.print("   Created:     {d}\n", .{exp.created_at});
 
-    const results_path = try experimentPath(allocator, repo, try std.fmt.allocPrint(allocator, "{s}.results", .{name}));
+    const results_path = try experimentPath(allocator, io, repo, try std.fmt.allocPrint(allocator, "{s}.results", .{name}));
     defer allocator.free(results_path);
     const notes = std.Io.Dir.cwd().readFileAlloc(io, results_path, allocator, .limited(64 * 1024)) catch null;
     defer if (notes) |n| allocator.free(n);
@@ -275,7 +277,7 @@ pub fn experimentShow(allocator: std.mem.Allocator, io: std.Io, repo: *Repositor
 
 pub fn experimentList(allocator: std.mem.Allocator,
     io: std.Io, repo: *Repository) !void {
-    const dir_path = try experimentsDir(allocator, repo);
+    const dir_path = try experimentsDir(allocator, io, repo);
     defer allocator.free(dir_path);
 
     var dir = std.Io.Dir.cwd().openDir(dir_path, .{ .iterate = true }) catch {

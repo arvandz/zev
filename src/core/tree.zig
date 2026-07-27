@@ -91,7 +91,8 @@ pub const Tree = struct {
         return buffer.toOwnedSlice(self.allocator);
     }
 
-    pub fn deserialize(allocator: std.mem.Allocator, data: []const u8) !Tree {
+    pub fn deserialize(allocator: std.mem.Allocator,
+    io: std.Io, data: []const u8) !Tree {
         var tree_obj = Tree.init(allocator);
         errdefer tree_obj.deinit();
 
@@ -103,7 +104,7 @@ pub const Tree = struct {
         while (lines.next()) |line| {
             if (line.len == 0) continue;
 
-            const entry = FileEntry.deserialize(allocator, line) catch |err| {
+            const entry = FileEntry.deserialize(allocator, io, line) catch |err| {
                 std.debug.print("Failed to deserialize line: '{s}'\n", .{line});
                 return err;
             };
@@ -120,7 +121,7 @@ test "tree serialization" {
     var tree_obj = Tree.init(allocator);
     defer tree_obj.deinit();
 
-    const test_cid = cid.CID.fromBytes("test content");
+    const test_cid = cid.CID.fromBytes(io, "test content");
     try tree_obj.addEntry("file.txt", test_cid, 100, 0o644);
 
     const serialized = try tree_obj.serialize();

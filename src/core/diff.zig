@@ -84,12 +84,12 @@ pub fn diffCommits(allocator: std.mem.Allocator, io: std.Io, repo: *repository.R
 
     const tree1_data = try repo.store.get(io, commit1_obj.tree_cid);
     defer allocator.free(tree1_data);
-    var tree1_obj = try tree.Tree.deserialize(allocator, tree1_data);
+    var tree1_obj = try tree.Tree.deserialize(allocator, io, tree1_data);
     defer tree1_obj.deinit();
 
     const tree2_data = try repo.store.get(io, commit2_obj.tree_cid);
     defer allocator.free(tree2_data);
-    var tree2_obj = try tree.Tree.deserialize(allocator, tree2_data);
+    var tree2_obj = try tree.Tree.deserialize(allocator, io, tree2_data);
     defer tree2_obj.deinit();
 
     const cid1_str = try commit1_cid.toString(allocator);
@@ -99,7 +99,7 @@ pub fn diffCommits(allocator: std.mem.Allocator, io: std.Io, repo: *repository.R
 
     std.debug.print("diff --zev commit {s}..{s}\n", .{ cid1_str, cid2_str });
 
-    var tree1_map = std.StringHashMap(tree.FileEntry).init(allocator);
+    var tree1_map = std.StringHashMap(tree.FileEntry).init(allocator, io, io, io, );
     defer tree1_map.deinit();
 
     for (tree1_obj.entries.items) |entry| {
@@ -164,14 +164,14 @@ pub fn diffUnstaged(allocator: std.mem.Allocator, io: std.Io, repo: *repository.
 
     const tree_data = try repo.store.get(io, commit_obj.tree_cid);
     defer allocator.free(tree_data);
-    var tree_obj = try tree.Tree.deserialize(allocator, tree_data);
+    var tree_obj = try tree.Tree.deserialize(allocator, io, tree_data);
     defer tree_obj.deinit();
 
     for (tree_obj.entries.items) |entry| {
         const working_content = std.Io.Dir.cwd().readFileAlloc(io, entry.name, allocator, .limited(10 * 1024 * 1024)) catch continue;
         defer allocator.free(working_content);
 
-        const working_cid = cid.CID.fromBytes(working_content);
+        const working_cid = cid.CID.fromBytes(io, working_content);
 
         if (!working_cid.equals(entry.cid)) {
             std.debug.print("\nModified: {s}\n", .{entry.name});
@@ -212,10 +212,10 @@ pub fn diffStaged(allocator: std.mem.Allocator, io: std.Io, repo: *repository.Re
 
     const tree_data = try repo.store.get(io, commit_obj.tree_cid);
     defer allocator.free(tree_data);
-    var tree_obj = try tree.Tree.deserialize(allocator, tree_data);
+    var tree_obj = try tree.Tree.deserialize(allocator, io, tree_data);
     defer tree_obj.deinit();
 
-    var head_map = std.StringHashMap(tree.FileEntry).init(allocator);
+    var head_map = std.StringHashMap(tree.FileEntry).init(allocator, io, io, io, );
     defer head_map.deinit();
 
     for (tree_obj.entries.items) |entry| {

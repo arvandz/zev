@@ -243,7 +243,7 @@ fn httpPost(allocator: std.mem.Allocator,
     }
     try argv.append(allocator, endpoint);
 
-    var child = std.process.Child.init(argv.items, allocator);
+    var child = std.process.Child.init(io, argv.items, allocator);
     child.stdout_behavior = .Pipe;
     child.stderr_behavior = .Pipe;
     try child.spawn();

@@ -18,8 +18,8 @@ pub const IPFSRepo = struct {
             return .{
                 .version = "1.0",
                 .head_ref = "refs/heads/main",
-                .refs = std.StringHashMap([]const u8).init(allocator),
-                .objects = std.StringHashMap([]const u8).init(allocator),
+                .refs = std.StringHashMap([]const u8).init(allocator, io, io, io, ),
+                .objects = std.StringHashMap([]const u8).init(allocator, io, io, io, ),
                 .allocator = allocator,
             };
         }
@@ -86,8 +86,9 @@ pub const IPFSRepo = struct {
             return json.toOwnedSlice(allocator);
         }
 
-        pub fn fromJson(allocator: std.mem.Allocator, json_str: []const u8) !Metadata {
-            var metadata = Metadata.init(allocator);
+        pub fn fromJson(allocator: std.mem.Allocator,
+    io: std.Io, json_str: []const u8) !Metadata {
+            var metadata = Metadata.init(allocator, io, io, io, );
             errdefer metadata.deinit();
 
             if (std.mem.indexOf(u8, json_str, "\"head_ref\":\"")) |start| {
@@ -141,7 +142,7 @@ pub const IPFSRepo = struct {
     };
 
     pub fn packWithObjects(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) ![]const u8 {
-        var metadata = Metadata.init(allocator);
+        var metadata = Metadata.init(allocator, io, io, io, );
         defer metadata.deinit();
 
         const head_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "HEAD" });
@@ -193,9 +194,9 @@ pub const IPFSRepo = struct {
         }
 
         std.debug.print("📦 Uploading objects to IPFS...\n", .{});
-        var ipfs_client = IPFSClient.init(allocator, "http://127.0.0.1:5001");
+        var ipfs_client = IPFSClient.init(allocator, io, io, io, "http://127.0.0.1:5001");
 
-        var visited = std.AutoHashMap([32]u8, void).init(allocator);
+        var visited = std.AutoHashMap([32]u8, void).init(allocator, io, io, io, );
         defer visited.deinit();
 
         var refs_iter = metadata.refs.iterator();
@@ -250,7 +251,7 @@ pub const IPFSRepo = struct {
             return;
         } else |_| {}
 
-        if (tree_mod.Tree.deserialize(allocator, obj_data)) |tree_obj| {
+        if (tree_mod.Tree.deserialize(allocator, io, obj_data)) |tree_obj| {
             var tree = tree_obj;
             defer tree.deinit();
 
@@ -262,7 +263,7 @@ pub const IPFSRepo = struct {
     }
 
     pub fn pack(allocator: std.mem.Allocator, io: std.Io, repo_path: []const u8) ![]const u8 {
-        var metadata = Metadata.init(allocator);
+        var metadata = Metadata.init(allocator, io, io, io, );
         defer metadata.deinit();
 
         const head_path = try std.fs.path.join(allocator, &.{ repo_path, ".zev", "HEAD" });
@@ -317,7 +318,7 @@ pub const IPFSRepo = struct {
     }
 
     pub fn unpack(allocator: std.mem.Allocator, io: std.Io, repo_path: []const u8, json_data: []const u8) !void {
-        var metadata = try Metadata.fromJson(allocator, json_data);
+        var metadata = try Metadata.fromJson(allocator, io, json_data);
         defer metadata.deinit();
 
         const zev_path = try std.fs.path.join(allocator, &.{ repo_path, ".zev" });
@@ -363,7 +364,7 @@ pub const IPFSRepo = struct {
         if (metadata.objects.count() > 0) {
             std.debug.print("📥 Downloading {} objects from IPFS...\n", .{metadata.objects.count()});
 
-            var ipfs_client = IPFSClient.init(allocator, "http://127.0.0.1:5001");
+            var ipfs_client = IPFSClient.init(allocator, io, io, io, "http://127.0.0.1:5001");
             const objects_path = try std.fs.path.join(allocator, &.{ repo_path, ".zev", "objects" });
             defer allocator.free(objects_path);
 

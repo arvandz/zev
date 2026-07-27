@@ -21,7 +21,8 @@ pub const NotarizationRecord = struct {
     verified: bool,
 };
 
-fn notarizeDir(allocator: std.mem.Allocator, repo: *Repository) ![]u8 {
+fn notarizeDir(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository) ![]u8 {
     const dir = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "notarizations" });
     try std.Io.Dir.cwd().createDirPath(io, dir);
     return dir;
@@ -29,7 +30,7 @@ fn notarizeDir(allocator: std.mem.Allocator, repo: *Repository) ![]u8 {
 
 fn saveRecord(allocator: std.mem.Allocator,
     io: std.Io, repo: *Repository, rec: NotarizationRecord) !void {
-    const dir = try notarizeDir(allocator, repo);
+    const dir = try notarizeDir(allocator, io, repo);
     defer allocator.free(dir);
     const path = try std.fs.path.join(allocator, &.{ dir, rec.id });
     defer allocator.free(path);
@@ -44,7 +45,7 @@ fn saveRecord(allocator: std.mem.Allocator,
 }
 
 fn loadRecord(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, id: []const u8) !?NotarizationRecord {
-    const dir = try notarizeDir(allocator, repo);
+    const dir = try notarizeDir(allocator, io, repo);
     defer allocator.free(dir);
     const path = try std.fs.path.join(allocator, &.{ dir, id });
     defer allocator.free(path);
@@ -148,10 +149,11 @@ fn getAuthor(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) ![]u8 
     return try allocator.dupe(u8, "unknown");
 }
 
-fn computeRecordId(allocator: std.mem.Allocator, subject_cid: []const u8, timestamp: i64) ![]u8 {
+fn computeRecordId(allocator: std.mem.Allocator,
+    io: std.Io, subject_cid: []const u8, timestamp: i64) ![]u8 {
     const raw = try std.fmt.allocPrint(allocator, "notarize:{s}:{d}", .{ subject_cid, timestamp });
     defer allocator.free(raw);
-    const c = cid_mod.CID.fromBytes(raw);
+    const c = cid_mod.CID.fromBytes(io, raw);
     return try c.toString(allocator);
 }
 
@@ -367,7 +369,7 @@ fn notarizeLocal(
     const combined = try std.fmt.allocPrint(allocator, "{s}:{d}", .{ payload, timestamp });
     defer allocator.free(combined);
 
-    const fingerprint_cid = cid_mod.CID.fromBytes(combined);
+    const fingerprint_cid = cid_mod.CID.fromBytes(io, combined);
     const fingerprint = try fingerprint_cid.toString(allocator);
 
     const proof_path = "/tmp/zev_notarization_proof.json";
@@ -458,7 +460,7 @@ pub fn notarizeSnapshot(
     const payload = try buildPayload(allocator, "snapshot", snap_name, snap.cid, snap.metrics, author, now);
     defer allocator.free(payload);
 
-    const rec_id = try computeRecordId(allocator, snap.cid, now);
+    const rec_id = try computeRecordId(allocator, io, snap.cid, now);
     defer allocator.free(rec_id);
 
     std.debug.print("⛓️  Notarizing snapshot '{s}'\n\n", .{snap_name});
@@ -582,7 +584,7 @@ pub fn notarizeCommit(
     const payload = try buildPayload(allocator, "commit", commit_hash, commit_hash, metrics_str, author, now);
     defer allocator.free(payload);
 
-    const rec_id = try computeRecordId(allocator, commit_hash, now);
+    const rec_id = try computeRecordId(allocator, io, commit_hash, now);
     defer allocator.free(rec_id);
 
     std.debug.print("⛓️  Notarizing commit {s}\n\n", .{commit_hash[0..8]});
@@ -621,7 +623,7 @@ pub fn notarizeCommit(
 
 pub fn notarizeVerify(allocator: std.mem.Allocator,
     io: std.Io, repo: *Repository, rec_id_prefix: []const u8) !void {
-    const dir = try notarizeDir(allocator, repo);
+    const dir = try notarizeDir(allocator, io, repo);
     defer allocator.free(dir);
 
     var found_rec: ?NotarizationRecord = null;
@@ -659,7 +661,7 @@ pub fn notarizeVerify(allocator: std.mem.Allocator,
     if (rec.metrics.len > 0)
         std.debug.print("   Metrics:     {s}\n", .{rec.metrics});
 
-    const recomputed = try computeRecordId(allocator, rec.subject_cid, rec.timestamp);
+    const recomputed = try computeRecordId(allocator, io, rec.subject_cid, rec.timestamp);
     defer allocator.free(recomputed);
 
     const id_matches = std.mem.eql(u8, recomputed, rec.id);
@@ -675,7 +677,7 @@ pub fn notarizeVerify(allocator: std.mem.Allocator,
 
 pub fn notarizeList(allocator: std.mem.Allocator,
     io: std.Io, repo: *Repository) !void {
-    const dir = try notarizeDir(allocator, repo);
+    const dir = try notarizeDir(allocator, io, repo);
     defer allocator.free(dir);
 
     var d = std.Io.Dir.cwd().openDir(dir, .{ .iterate = true }) catch {

@@ -11,8 +11,9 @@ fn readFile(allocator: std.mem.Allocator, io: std.Io, path: []const u8) !?[]u8 {
     };
 }
 
-fn readMetricsForHash(allocator: std.mem.Allocator, repo: *Repository, hash: []const u8) !std.StringHashMap([]u8) {
-    var map = std.StringHashMap([]u8).init(allocator);
+fn readMetricsForHash(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository, hash: []const u8) !std.StringHashMap([]u8) {
+    var map = std.StringHashMap([]u8).init(allocator, io, io, io, );
     const path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "metrics", hash });
     defer allocator.free(path);
     const content = (try readFile(allocator, path)) orelse return map;
@@ -93,7 +94,7 @@ fn collectTreeFiles(
 ) !void {
     const data = try repo.store.get(io, tree_cid);
     defer allocator.free(data);
-    var tree = try tree_mod.Tree.deserialize(allocator, data);
+    var tree = try tree_mod.Tree.deserialize(allocator, io, data);
     defer tree.deinit();
 
     for (tree.entries.items) |entry| {
@@ -150,9 +151,9 @@ pub fn compareCommits(allocator: std.mem.Allocator, io: std.Io, repo: *Repositor
     printRow("Message", msg_a[0..@min(26, msg_a.len)], msg_b[0..@min(26, msg_b.len)]);
     printRow("Author", ca.author[0..@min(26, ca.author.len)], cb.author[0..@min(26, cb.author.len)]);
 
-    var files_a = std.StringHashMap(cid_mod.CID).init(allocator);
+    var files_a = std.StringHashMap(cid_mod.CID).init(allocator, io, io, io, );
     defer freeTreeMap(allocator, &files_a);
-    var files_b = std.StringHashMap(cid_mod.CID).init(allocator);
+    var files_b = std.StringHashMap(cid_mod.CID).init(allocator, io, io, io, );
     defer freeTreeMap(allocator, &files_b);
 
     try collectTreeFiles(allocator, repo, ca.tree_cid, "", &files_a);
@@ -207,9 +208,9 @@ pub fn compareCommits(allocator: std.mem.Allocator, io: std.Io, repo: *Repositor
         std.debug.print("   (identical file trees)\n", .{});
     }
 
-    var metrics_a = try readMetricsForHash(allocator, repo, hash_a);
+    var metrics_a = try readMetricsForHash(allocator, io, repo, hash_a);
     defer freeStrMap(allocator, &metrics_a);
-    var metrics_b = try readMetricsForHash(allocator, repo, hash_b);
+    var metrics_b = try readMetricsForHash(allocator, io, repo, hash_b);
     defer freeStrMap(allocator, &metrics_b);
 
     if (metrics_a.count(io, ) > 0 or metrics_b.count() > 0) {
@@ -217,7 +218,7 @@ pub fn compareCommits(allocator: std.mem.Allocator, io: std.Io, repo: *Repositor
         std.debug.print("   {s:<20} {s:<28} {s}\n", .{ "Key", hash_a[0..8], hash_b[0..8] });
         printSeparator();
 
-        var all_keys = std.StringHashMap(bool).init(allocator);
+        var all_keys = std.StringHashMap(bool).init(allocator, io, io, io, );
         defer all_keys.deinit();
         var ka = metrics_a.iterator();
         while (ka.next()) |e| try all_keys.put(e.key_ptr.*, true);
@@ -235,13 +236,14 @@ pub fn compareCommits(allocator: std.mem.Allocator, io: std.Io, repo: *Repositor
     std.debug.print("\n", .{});
 }
 
-fn loadExpFields(allocator: std.mem.Allocator, repo: *Repository, name: []const u8) !?std.StringHashMap([]u8) {
+fn loadExpFields(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository, name: []const u8) !?std.StringHashMap([]u8) {
     const path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "experiments", name });
     defer allocator.free(path);
     const content = (try readFile(allocator, path)) orelse return null;
     defer allocator.free(content);
 
-    var map = std.StringHashMap([]u8).init(allocator);
+    var map = std.StringHashMap([]u8).init(allocator, io, io, io, );
     var iter = std.mem.splitSequence(u8, content, "\n");
     while (iter.next()) |line| {
         if (line.len == 0) continue;
@@ -255,13 +257,13 @@ fn loadExpFields(allocator: std.mem.Allocator, repo: *Repository, name: []const 
 
 pub fn compareExperiments(allocator: std.mem.Allocator,
     io: std.Io, repo: *Repository, name_a: []const u8, name_b: []const u8) !void {
-    var exp_a = (try loadExpFields(allocator, repo, name_a)) orelse {
+    var exp_a = (try loadExpFields(allocator, io, repo, name_a)) orelse {
         std.debug.print("Error: Experiment '{s}' not found\n", .{name_a});
         return;
     };
     defer freeStrMap(allocator, &exp_a);
 
-    var exp_b = (try loadExpFields(allocator, repo, name_b)) orelse {
+    var exp_b = (try loadExpFields(allocator, io, repo, name_b)) orelse {
         std.debug.print("Error: Experiment '{s}' not found\n", .{name_b});
         return;
     };
@@ -302,9 +304,9 @@ pub fn compareExperiments(allocator: std.mem.Allocator,
         const hash_a = std.mem.trim(u8, hash_a_raw, " \n\r\t");
         const hash_b = std.mem.trim(u8, hash_b_raw, " \n\r\t");
 
-        var metrics_a = try readMetricsForHash(allocator, repo, hash_a);
+        var metrics_a = try readMetricsForHash(allocator, io, repo, hash_a);
         defer freeStrMap(allocator, &metrics_a);
-        var metrics_b = try readMetricsForHash(allocator, repo, hash_b);
+        var metrics_b = try readMetricsForHash(allocator, io, repo, hash_b);
         defer freeStrMap(allocator, &metrics_b);
 
         if (metrics_a.count(io, ) > 0 or metrics_b.count() > 0) {
@@ -312,7 +314,7 @@ pub fn compareExperiments(allocator: std.mem.Allocator,
             std.debug.print("   {s:<20} {s:<28} {s}\n", .{ "Key", name_a, name_b });
             printSeparator();
 
-            var all_keys = std.StringHashMap(bool).init(allocator);
+            var all_keys = std.StringHashMap(bool).init(allocator, io, io, io, );
             defer all_keys.deinit();
             var ka = metrics_a.iterator();
             while (ka.next()) |e| try all_keys.put(e.key_ptr.*, true);
@@ -360,7 +362,7 @@ fn findSnapshotById(allocator: std.mem.Allocator,
         }
         if (!found_name) continue;
 
-        var map = std.StringHashMap([]u8).init(allocator);
+        var map = std.StringHashMap([]u8).init(allocator, io, io, io, );
         var iter2 = std.mem.splitSequence(u8, content, "\n");
         while (iter2.next()) |line| {
             if (line.len == 0) continue;
@@ -416,9 +418,9 @@ pub fn compareSnapshots(allocator: std.mem.Allocator,
         std.debug.print("   {s:<20} {s:<28} {s}\n", .{ "Key", name_a, name_b });
         printSeparator();
 
-        var map_a = std.StringHashMap([]const u8).init(allocator);
+        var map_a = std.StringHashMap([]const u8).init(allocator, io, io, io, );
         defer map_a.deinit();
-        var map_b = std.StringHashMap([]const u8).init(allocator);
+        var map_b = std.StringHashMap([]const u8).init(allocator, io, io, io, );
         defer map_b.deinit();
 
         var it_a = std.mem.splitSequence(u8, metrics_raw_a, ";");
@@ -432,7 +434,7 @@ pub fn compareSnapshots(allocator: std.mem.Allocator,
             try map_b.put(kv[0..eq], kv[eq + 1 ..]);
         }
 
-        var all_keys = std.StringHashMap(bool).init(allocator);
+        var all_keys = std.StringHashMap(bool).init(allocator, io, io, io, );
         defer all_keys.deinit();
         var ka = map_a.iterator();
         while (ka.next()) |e| try all_keys.put(e.key_ptr.*, true);
@@ -478,9 +480,9 @@ pub fn compareBranches(allocator: std.mem.Allocator, io: std.Io, repo: *Reposito
     printSeparator();
     std.debug.print("   {s:<20} {s:<28} {s}\n", .{ "HEAD commit", hash_a[0..@min(8, hash_a.len)], hash_b[0..@min(8, hash_b.len)] });
 
-    var ancestors_a = std.StringHashMap(usize).init(allocator);
+    var ancestors_a = std.StringHashMap(usize).init(allocator, io, io, io, );
     defer ancestors_a.deinit();
-    var ancestors_b = std.StringHashMap(usize).init(allocator);
+    var ancestors_b = std.StringHashMap(usize).init(allocator, io, io, io, );
     defer ancestors_b.deinit();
 
     {

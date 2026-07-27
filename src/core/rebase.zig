@@ -13,6 +13,7 @@ pub const RebaseResult = enum {
 
 fn collectCommits(
     allocator: std.mem.Allocator,
+    io: std.Io,
     store: *blob_mod.BlobStore,
     start: cid_mod.CID,
     base: cid_mod.CID,
@@ -43,11 +44,12 @@ fn collectCommits(
 
 fn findCommonAncestor(
     allocator: std.mem.Allocator,
+    io: std.Io,
     store: *blob_mod.BlobStore,
     a: cid_mod.CID,
     b: cid_mod.CID,
 ) !?cid_mod.CID {
-    var a_ancestors = std.AutoHashMap([32]u8, void).init(allocator);
+    var a_ancestors = std.AutoHashMap([32]u8, void).init(allocator, io, io, io, );
     defer a_ancestors.deinit();
 
     var current = a;
@@ -120,7 +122,7 @@ fn copyTreeObjects(
     const tree_data = repo.store.get(io, tree_cid) catch return;
     defer allocator.free(tree_data);
 
-    var t = tree_mod.Tree.deserialize(allocator, tree_data) catch return;
+    var t = tree_mod.Tree.deserialize(allocator, io, tree_data) catch return;
     defer t.deinit();
 
     for (t.entries.items) |entry| {
@@ -167,7 +169,7 @@ pub fn rebase(
         return .nothing_to_rebase;
     }
 
-    const ancestor = try findCommonAncestor(allocator, &repo.store, current_head, onto_head);
+    const ancestor = try findCommonAncestor(allocator, io, &repo.store, current_head, onto_head);
     if (ancestor == null) {
         std.debug.print("Error: No common ancestor found\n", .{});
         return .nothing_to_rebase;
@@ -175,7 +177,7 @@ pub fn rebase(
 
     std.debug.print("🔀 Rebasing onto {s}...\n", .{onto_branch});
 
-    var commits_to_replay = try collectCommits(allocator, &repo.store, current_head, ancestor.?);
+    var commits_to_replay = try collectCommits(allocator, io, &repo.store, current_head, ancestor.?);
     defer commits_to_replay.deinit(allocator);
 
     if (commits_to_replay.items.len == 0) {

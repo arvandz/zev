@@ -291,7 +291,7 @@ fn pullFile(allocator: std.mem.Allocator,
 fn cloneFileShallow(allocator: std.mem.Allocator, io: std.Io, url: []const u8, dest_path: []const u8, depth: usize) !void {
     const source_path = if (std.mem.startsWith(u8, url, "file://")) url[7..] else url;
     if (!Repository.exists(allocator, io, source_path)) return error.RemoteNotFound;
-    var dest_repo = try Repository.init(allocator, io, dest_path, false);
+    var dest_repo = try Repository.init(allocator, io, io, io, io, dest_path, false);
     defer dest_repo.deinit();
     try addRemote(allocator, io, &dest_repo, "origin", url);
     var source_repo = try Repository.open(allocator, io, source_path);
@@ -341,7 +341,7 @@ fn cloneFile(allocator: std.mem.Allocator, io: std.Io, url: []const u8, dest_pat
         return error.RemoteNotFound;
     }
 
-    var dest_repo = try Repository.init(allocator, io, dest_path, false);
+    var dest_repo = try Repository.init(allocator, io, io, io, io, dest_path, false);
     defer dest_repo.deinit();
 
     try addRemote(allocator, io, &dest_repo, "origin", url);
@@ -448,7 +448,7 @@ fn pushIPFS(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, remote_
 
     std.debug.print("📄 Packed repository metadata and objects ({} bytes)\n", .{metadata_json.len});
 
-    var ipfs_client = IPFSClient.init(allocator, "http://127.0.0.1:5001");
+    var ipfs_client = IPFSClient.init(allocator, io, io, io, "http://127.0.0.1:5001");
     const metadata_cid = try ipfs_client.add(io, metadata_json);
     defer allocator.free(metadata_cid);
 
@@ -472,13 +472,13 @@ fn pullIPFS(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, remote_
 
     const ipfs_repo = @import("ipfs_repo.zig");
 
-    var ipfs_client = IPFSClient.init(allocator, "http://127.0.0.1:5001");
+    var ipfs_client = IPFSClient.init(allocator, io, io, io, "http://127.0.0.1:5001");
     const metadata_json = try ipfs_client.cat(io, ipfs_cid);
     defer allocator.free(metadata_json);
 
     std.debug.print("📄 Retrieved repository metadata\n", .{});
 
-    var metadata = try ipfs_repo.IPFSRepo.Metadata.fromJson(allocator, metadata_json);
+    var metadata = try ipfs_repo.IPFSRepo.Metadata.fromJson(allocator, io, metadata_json);
     defer metadata.deinit();
 
     var it = metadata.refs.iterator();
@@ -519,7 +519,7 @@ fn cloneIPFS(allocator: std.mem.Allocator, io: std.Io, url: []const u8, dest_pat
 
     try std.Io.Dir.cwd().createDirPath(io, dest_path);
 
-    var ipfs_client = IPFSClient.init(allocator, "http://127.0.0.1:5001");
+    var ipfs_client = IPFSClient.init(allocator, io, io, io, "http://127.0.0.1:5001");
     const metadata_json = try ipfs_client.cat(io, ipfs_cid);
     defer allocator.free(metadata_json);
 
@@ -527,7 +527,7 @@ fn cloneIPFS(allocator: std.mem.Allocator, io: std.Io, url: []const u8, dest_pat
 
     try ipfs_repo.IPFSRepo.unpack(allocator, io, dest_path, metadata_json);
 
-    var repo = try Repository.init(allocator, io, dest_path, false);
+    var repo = try Repository.init(allocator, io, io, io, io, dest_path, false);
     defer repo.deinit();
 
     const checkout_mod = @import("checkout.zig");
@@ -547,7 +547,7 @@ fn cloneIPFS(allocator: std.mem.Allocator, io: std.Io, url: []const u8, dest_pat
 }
 
 fn copyCommitHistory(allocator: std.mem.Allocator, io: std.Io, from_repo: *Repository, to_repo: *Repository, head: cid.CID) !void {
-    var visited = std.AutoHashMap([32]u8, void).init(allocator);
+    var visited = std.AutoHashMap([32]u8, void).init(allocator, io, io, io, );
     defer visited.deinit();
 
     var to_process: std.ArrayList(cid.CID) = .empty;
