@@ -46,19 +46,19 @@ pub const AssignmentRecord = struct {
 
 fn datasetDir(allocator: std.mem.Allocator, repo: *Repository) ![]u8 {
     const dir = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "datasets" });
-    try std.Io.Dir.cwd().makePath(dir);
+    try std.Io.Dir.cwd().createDirPath(io, dir);
     return dir;
 }
 
 fn shardsDir(allocator: std.mem.Allocator, repo: *Repository, dataset_name: []const u8) ![]u8 {
     const dir = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "datasets", dataset_name, "shards" });
-    try std.Io.Dir.cwd().makePath(dir);
+    try std.Io.Dir.cwd().createDirPath(io, dir);
     return dir;
 }
 
 fn assignDir(allocator: std.mem.Allocator, repo: *Repository, dataset_name: []const u8) ![]u8 {
     const dir = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "datasets", dataset_name, "assignments" });
-    try std.Io.Dir.cwd().makePath(dir);
+    try std.Io.Dir.cwd().createDirPath(io, dir);
     return dir;
 }
 
@@ -71,7 +71,7 @@ fn saveDatasetRecord(
     const dir = try datasetDir(allocator, repo);
     defer allocator.free(dir);
     const ds_dir = try std.fs.path.join(allocator, &.{ dir, ds.name });
-    try std.Io.Dir.cwd().makePath(ds_dir);
+    try std.Io.Dir.cwd().createDirPath(io, ds_dir);
     defer allocator.free(ds_dir);
     const path = try std.fs.path.join(allocator, &.{ ds_dir, "dataset.meta" });
     defer allocator.free(path);

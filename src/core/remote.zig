@@ -489,7 +489,7 @@ fn pullIPFS(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, remote_
             defer allocator.free(ref_path);
 
             if (std.fs.path.dirname(ref_path)) |parent_dir| {
-                try std.Io.Dir.cwd().makePath(parent_dir);
+                try std.Io.Dir.cwd().createDirPath(io, parent_dir);
             }
 
             const ref_file = try std.Io.Dir.cwd().createFile(io, ref_path, .{});

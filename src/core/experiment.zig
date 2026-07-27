@@ -16,7 +16,7 @@ pub const Experiment = struct {
 
 fn experimentsDir(allocator: std.mem.Allocator, repo: *Repository) ![]u8 {
     const dir = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "experiments" });
-    try std.Io.Dir.cwd().makePath(dir);
+    try std.Io.Dir.cwd().createDirPath(io, dir);
     return dir;
 }
 
@@ -142,7 +142,7 @@ pub fn experimentStart(
 
     const exp_refs_dir = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "refs", "heads", "exp" });
     defer allocator.free(exp_refs_dir);
-    try std.Io.Dir.cwd().makePath(exp_refs_dir);
+    try std.Io.Dir.cwd().createDirPath(io, exp_refs_dir);
 
     const branch_name = try std.fmt.allocPrint(allocator, "exp/{s}", .{name});
     defer allocator.free(branch_name);

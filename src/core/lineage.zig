@@ -52,7 +52,7 @@ pub const LineageNode = struct {
 
 fn lineageDir(allocator: std.mem.Allocator, repo: *Repository) ![]u8 {
     const dir = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "lineage" });
-    try std.Io.Dir.cwd().makePath(dir);
+    try std.Io.Dir.cwd().createDirPath(io, dir);
     return dir;
 }
 

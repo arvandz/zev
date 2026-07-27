@@ -291,7 +291,7 @@ pub fn importArchive(
         for (subdirs) |sub| {
             const p = try std.fs.path.join(allocator, &.{ zev_target, sub });
             defer allocator.free(p);
-            try std.Io.Dir.cwd().makePath(p);
+            try std.Io.Dir.cwd().createDirPath(io, p);
         }
     }
 
@@ -363,7 +363,7 @@ pub fn importArchive(
         defer allocator.free(out_path);
 
         const parent = std.fs.path.dirname(out_path) orelse out_path;
-        std.Io.Dir.cwd().makePath(parent) catch {};
+        std.Io.Dir.cwd().createDirPath(io, parent) catch {};
 
         const existing = readFileSafe(allocator, out_path) catch null;
         if (existing) |ex| {

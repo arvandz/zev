@@ -489,7 +489,7 @@ fn saveGraftAlias(
 ) !void {
     const graft_dir = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "grafts" });
     defer allocator.free(graft_dir);
-    try std.Io.Dir.cwd().makePath(graft_dir);
+    try std.Io.Dir.cwd().createDirPath(io, graft_dir);
 
     const fname = try sanitizeAlias(allocator, alias);
     defer allocator.free(fname);
@@ -529,11 +529,11 @@ fn fetchFromIPFS(
     const url = try std.fmt.allocPrint(allocator, "http://127.0.0.1:5001/api/v0/block/get?arg={s}", .{cid_short});
     defer allocator.free(url);
 
-    var child = std.process.Child.init(&.{ "curl", "-s", "-X", "POST", url }, allocator);
-    child.stdout_behavior = .Pipe;
-    child.stderr_behavior = .Ignore;
-
-    child.spawn() catch {
+    var child = std.process.spawn(io, .{
+        .argv = &.{ "curl", "-s", "-X", "POST", url },
+        .stdout = .pipe,
+        .stderr = .ignore,
+    }) catch {
         std.debug.print("   ⚠️  curl not available — cannot fetch from IPFS\n", .{});
         return;
     };

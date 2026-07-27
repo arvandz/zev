@@ -45,7 +45,7 @@ fn driftConfigPath(allocator: std.mem.Allocator, repo: *Repository) ![]u8 {
 
 fn driftHistoryDir(allocator: std.mem.Allocator, repo: *Repository) ![]u8 {
     const dir = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "drift_history" });
-    try std.Io.Dir.cwd().makePath(dir);
+    try std.Io.Dir.cwd().createDirPath(io, dir);
     return dir;
 }
 

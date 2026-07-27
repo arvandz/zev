@@ -609,7 +609,7 @@ pub const BlockStore = struct {
 
     pub fn init(allocator: std.mem.Allocator, repo_path: []const u8) !BlockStore {
         const base = try std.fs.path.join(allocator, &.{ repo_path, ".zev", "ipld" });
-        try std.Io.Dir.cwd().makePath(base);
+        try std.Io.Dir.cwd().createDirPath(io, base);
         return .{ .base_path = base, .allocator = allocator };
     }
 
@@ -622,7 +622,7 @@ pub const BlockStore = struct {
         defer self.allocator.free(short);
         const prefix = short[0..@min(2, short.len)];
         const sub_dir = try std.fs.path.join(self.allocator, &.{ self.base_path, prefix });
-        try std.Io.Dir.cwd().makePath(sub_dir);
+        try std.Io.Dir.cwd().createDirPath(io, sub_dir);
         defer self.allocator.free(sub_dir);
         return std.fs.path.join(self.allocator, &.{ sub_dir, short });
     }

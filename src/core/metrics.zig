@@ -5,7 +5,7 @@ const cid_mod = @import("cid.zig");
 fn metricsPath(allocator: std.mem.Allocator, repo: *Repository, commit_hash: []const u8) ![]u8 {
     const metrics_dir = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "metrics" });
     defer allocator.free(metrics_dir);
-    try std.Io.Dir.cwd().makePath(metrics_dir);
+    try std.Io.Dir.cwd().createDirPath(io, metrics_dir);
     return try std.fs.path.join(allocator, &.{ repo.path, ".zev", "metrics", commit_hash });
 }
 

@@ -488,7 +488,7 @@ fn saveCommitCIDMapping(
 ) !void {
     const dir = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "ipld_commits" });
     defer allocator.free(dir);
-    try std.Io.Dir.cwd().makePath(dir);
+    try std.Io.Dir.cwd().createDirPath(io, dir);
 
     const short_hash = commit_hash[0..@min(16, commit_hash.len)];
     const path = try std.fs.path.join(allocator, &.{ dir, short_hash });

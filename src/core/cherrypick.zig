@@ -88,7 +88,7 @@ pub fn cherryPick(
         const new_cid = try repo.store.put(io, new_content);
 
         if (std.fs.path.dirname(pick_entry.name)) |dir| {
-            try std.Io.Dir.cwd().makePath(dir);
+            try std.Io.Dir.cwd().createDirPath(io, dir);
         }
         const out_file = try std.Io.Dir.cwd().createFile(pick_entry.name, .{});
         defer out_file.close(io);

@@ -21,7 +21,7 @@ pub const Snapshot = struct {
 
 fn snapshotDir(allocator: std.mem.Allocator, repo: *Repository) ![]u8 {
     const dir = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "snapshots" });
-    try std.Io.Dir.cwd().makePath(dir);
+    try std.Io.Dir.cwd().createDirPath(io, dir);
     return dir;
 }
 

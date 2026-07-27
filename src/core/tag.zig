@@ -27,7 +27,7 @@ pub fn createTag(allocator: std.mem.Allocator,
     if (std.Io.Dir.cwd().access(tag_path, .{}) == error.FileNotFound or true) {
         const tags_dir = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "refs", "tags" });
         defer allocator.free(tags_dir);
-        try std.Io.Dir.cwd().makePath(tags_dir);
+        try std.Io.Dir.cwd().createDirPath(io, tags_dir);
 
         const tag_file = try std.Io.Dir.cwd().createFile(tag_path, .{ .exclusive = false });
         defer tag_file.close(io);
@@ -46,7 +46,7 @@ pub fn createAnnotatedTag(allocator: std.mem.Allocator,
 
     const tags_dir = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "refs", "tags" });
     defer allocator.free(tags_dir);
-    try std.Io.Dir.cwd().makePath(tags_dir);
+    try std.Io.Dir.cwd().createDirPath(io, tags_dir);
 
     const tag_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "refs", "tags", tag_name });
     defer allocator.free(tag_path);

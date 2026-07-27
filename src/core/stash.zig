@@ -24,7 +24,7 @@ pub fn stashSave(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, me
 
     const stash_dir = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "stash" });
     defer allocator.free(stash_dir);
-    try std.Io.Dir.cwd().makePath(stash_dir);
+    try std.Io.Dir.cwd().createDirPath(io, stash_dir);
 
     const stash_id = try getNextStashId(allocator, io, stash_dir);
 

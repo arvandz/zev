@@ -400,6 +400,7 @@ fn resolveHEAD(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) !ipl
 
 fn importToIPFS(allocator: std.mem.Allocator,
     io: std.Io, car_path: []const u8) !void {
+    _ = allocator;
     const argv = [_][]const u8{ "ipfs", "dag", "import", car_path };
     var child = std.process.spawn(io, .{
         .argv = &argv,

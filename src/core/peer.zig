@@ -391,7 +391,7 @@ pub fn peerSync(allocator: std.mem.Allocator,
             else
                 try std.fs.path.join(allocator, &.{ repo.path, ".zev", dir_name });
             defer allocator.free(local_dir);
-            try std.Io.Dir.cwd().makePath(local_dir);
+            try std.Io.Dir.cwd().createDirPath(io, local_dir);
 
             const local_path = try std.fs.path.join(allocator, &.{ local_dir, file_name });
             defer allocator.free(local_path);
@@ -494,7 +494,7 @@ pub fn forkRepo(allocator: std.mem.Allocator,
 
     const zev_dir = try std.fs.path.join(allocator, &.{ target_dir, ".zev" });
     defer allocator.free(zev_dir);
-    try std.Io.Dir.cwd().makePath(zev_dir);
+    try std.Io.Dir.cwd().createDirPath(io, zev_dir);
 
     const subdirs = [_][]const u8{
         "objects", "refs/heads", "metrics", "experiments",
@@ -503,7 +503,7 @@ pub fn forkRepo(allocator: std.mem.Allocator,
     for (subdirs) |sub| {
         const p = try std.fs.path.join(allocator, &.{ zev_dir, sub });
         defer allocator.free(p);
-        try std.Io.Dir.cwd().makePath(p);
+        try std.Io.Dir.cwd().createDirPath(io, p);
     }
 
     const head_path = try std.fs.path.join(allocator, &.{ zev_dir, "HEAD" });

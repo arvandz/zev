@@ -79,7 +79,7 @@ pub fn installHook(allocator: std.mem.Allocator,
     io: std.Io, repo_path: []const u8, hook_type: HookType, script_content: []const u8) !void {
     const hooks_dir = try std.fs.path.join(allocator, &.{ repo_path, ".zev", "hooks" });
     defer allocator.free(hooks_dir);
-    try std.Io.Dir.cwd().makePath(hooks_dir);
+    try std.Io.Dir.cwd().createDirPath(io, hooks_dir);
 
     const hook_path = try std.fs.path.join(allocator, &.{ hooks_dir, hook_type.toString() });
     defer allocator.free(hook_path);
@@ -137,7 +137,7 @@ pub fn initHooks(allocator: std.mem.Allocator,
     io: std.Io, repo_path: []const u8) !void {
     const hooks_dir = try std.fs.path.join(allocator, &.{ repo_path, ".zev", "hooks" });
     defer allocator.free(hooks_dir);
-    try std.Io.Dir.cwd().makePath(hooks_dir);
+    try std.Io.Dir.cwd().createDirPath(io, hooks_dir);
 
     const sample_path = try std.fs.path.join(allocator, &.{ hooks_dir, "pre-commit.sample" });
     defer allocator.free(sample_path);

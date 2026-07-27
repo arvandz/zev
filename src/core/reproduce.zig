@@ -36,13 +36,13 @@ pub const ReproduceRecord = struct {
 
 fn reproduceDir(allocator: std.mem.Allocator, repo: *Repository) ![]u8 {
     const dir = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "reproduce" });
-    try std.Io.Dir.cwd().makePath(dir);
+    try std.Io.Dir.cwd().createDirPath(io, dir);
     return dir;
 }
 
 fn captureDir(allocator: std.mem.Allocator, repo: *Repository) ![]u8 {
     const dir = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "capture" });
-    try std.Io.Dir.cwd().makePath(dir);
+    try std.Io.Dir.cwd().createDirPath(io, dir);
     return dir;
 }
 
@@ -430,7 +430,7 @@ fn doReproduce(
 
     const work_dir = try std.fmt.allocPrint(allocator, "/tmp/zev-repro-{s}", .{commit_hash[0..8]});
     defer allocator.free(work_dir);
-    try std.Io.Dir.cwd().makePath(work_dir);
+    try std.Io.Dir.cwd().createDirPath(io, work_dir);
     defer std.fs.deleteTreeAbsolute(work_dir) catch {};
 
     std.debug.print("   📁 Workspace: {s}\n", .{work_dir});
