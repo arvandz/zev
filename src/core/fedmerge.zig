@@ -342,9 +342,9 @@ pub fn mergeFromCar(
     std.debug.print("   HEAD A (ours):   {s}\n", .{short_a});
     std.debug.print("   HEAD B (theirs): {s}\n\n", .{short_b});
 
-    var metrics_a = MetricMap.init(allocator, io, io, io, );
+    var metrics_a = MetricMap.init(allocator);
     defer metrics_a.deinit();
-    var metrics_b = MetricMap.init(allocator, io, io, io, );
+    var metrics_b = MetricMap.init(allocator);
     defer metrics_b.deinit();
 
     try collectMetrics(allocator, io, &store, head_a, &metrics_a);

@@ -372,10 +372,8 @@ fn diffConfig(
         map_b.deinit();
     }
 
-    try     try extractConfigPairs(allocator, content_a, &map_a);
-allocator, io, content_a, &map_a);
-    try     try extractConfigPairs(allocator, content_b, &map_b);
-allocator, io, content_b, &map_b);
+    try extractConfigPairs(allocator, content_a, &map_a);
+    try extractConfigPairs(allocator, content_b, &map_b);
 
     var it_a = map_a.iterator();
     while (it_a.next()) |entry| {

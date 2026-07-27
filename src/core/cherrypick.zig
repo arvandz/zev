@@ -148,7 +148,7 @@ pub fn cherryPick(
     defer allocator.free(new_commit_data);
     const new_commit_cid = try repo.store.put(io, new_commit_data);
 
-    try updateHead(allocator, io, io, repo, new_commit_cid);
+    try updateHead(allocator, io, repo, new_commit_cid);
 
     const new_hash = try new_commit_cid.toString(allocator);
     defer allocator.free(new_hash);

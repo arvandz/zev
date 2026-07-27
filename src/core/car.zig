@@ -401,10 +401,11 @@ fn resolveHEAD(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) !ipl
 fn importToIPFS(allocator: std.mem.Allocator,
     io: std.Io, car_path: []const u8) !void {
     const argv = [_][]const u8{ "ipfs", "dag", "import", car_path };
-    var child = std.process.Child.init(&argv, allocator);
-    child.stdout_behavior = .Inherit;
-    child.stderr_behavior = .Inherit;
-    child.spawn() catch {
+    var child = std.process.spawn(io, .{
+        .argv = &argv,
+        .stdout = .inherit,
+        .stderr = .inherit,
+    }) catch {
         std.debug.print("⚠️  ipfs not found. Install go-ipfs and run:\n", .{});
         std.debug.print("   ipfs dag import {s}\n\n", .{car_path});
         return;

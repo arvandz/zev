@@ -359,7 +359,7 @@ pub fn computeSemanticDiff(
         defer allocator.free(short_ta);
         const short_tb = try tree_b.?.toShort(allocator);
         defer allocator.free(short_tb);
-        file_diffs = file_diff.diffTrees(allocator, io, io, repo_path, short_ta, short_tb) catch &.{};
+        file_diffs = file_diff.diffTrees(allocator, io, repo_path, short_ta, short_tb) catch &.{};
     }
 
     const ds_a = if (node_a == .map) node_a.getLink("dataset") else null;

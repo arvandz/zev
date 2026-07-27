@@ -221,7 +221,10 @@ pub const Repository = struct {
             const commit_hash = try commit_cid.toString(self.allocator);
             defer self.allocator.free(commit_hash);
 
-            try ref_file.writeAll(commit_hash);
+            var ref_buffer: [512]u8 = undefined;
+            var ref_writer = ref_file.writer(io, &ref_buffer);
+            try ref_writer.interface.writeAll(commit_hash);
+            try ref_writer.flush();
         }
     }
 
