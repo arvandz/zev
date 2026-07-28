@@ -3,8 +3,8 @@ const std = @import("std");
 pub const CID = struct {
     hash: [32]u8,
 
-    pub fn fromBytes(io: std.Io,  data: []const u8) CID {
-        var hasher = std.crypto.hash.sha2.Sha256.init(io, .{});
+    pub fn fromBytes(data: []const u8) CID {
+        var hasher = std.crypto.hash.sha2.Sha256.init(.{});
         hasher.update(data);
         var hash: [32]u8 = undefined;
         hasher.final(&hash);
