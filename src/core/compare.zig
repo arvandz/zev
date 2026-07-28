@@ -207,11 +207,9 @@ pub fn compareCommits(allocator: std.mem.Allocator, io: std.Io, repo: *Repositor
         std.debug.print("   (identical file trees)\n", .{});
     }
 
-    var metrics_a = try     var metrics_a = try readMetricsForHash(allocator, repo, hash_a);
-allocator, io, repo, hash_a);
+    var metrics_a = try readMetricsForHash(allocator, repo, hash_a);
     defer freeStrMap(allocator, &metrics_a);
-    var metrics_b = try     var metrics_b = try readMetricsForHash(allocator, repo, hash_b);
-allocator, io, repo, hash_b);
+    var metrics_b = try readMetricsForHash(allocator, repo, hash_b);
     defer freeStrMap(allocator, &metrics_b);
 
     if (metrics_a.count(io, ) > 0 or metrics_b.count() > 0) {
@@ -305,11 +303,9 @@ pub fn compareExperiments(allocator: std.mem.Allocator,
         const hash_a = std.mem.trim(u8, hash_a_raw, " \n\r\t");
         const hash_b = std.mem.trim(u8, hash_b_raw, " \n\r\t");
 
-        var metrics_a = try         var metrics_a = try readMetricsForHash(allocator, repo, hash_a);
-allocator, io, repo, hash_a);
+        var metrics_a = try readMetricsForHash(allocator, repo, hash_a);
         defer freeStrMap(allocator, &metrics_a);
-        var metrics_b = try         var metrics_b = try readMetricsForHash(allocator, repo, hash_b);
-allocator, io, repo, hash_b);
+        var metrics_b = try readMetricsForHash(allocator, repo, hash_b);
         defer freeStrMap(allocator, &metrics_b);
 
         if (metrics_a.count(io, ) > 0 or metrics_b.count() > 0) {

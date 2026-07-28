@@ -50,7 +50,7 @@ pub const Repository = struct {
                 .ipfs_url = repo_config.ipfs_url,
                 .auto_pin = repo_config.ipfs_auto_pin,
             };
-            storage_manager = try storage_mod.StorageManager.init(allocator, io, io, io, storage_config);
+            storage_manager = try storage_mod.StorageManager.init(allocator, io, storage_config);
         }
 
         const store_path = try allocator.dupe(u8, objects_path);
@@ -81,7 +81,7 @@ pub const Repository = struct {
                 .ipfs_url = repo_config.ipfs_url,
                 .auto_pin = repo_config.ipfs_auto_pin,
             };
-            storage_manager = try storage_mod.StorageManager.init(allocator, io, io, io, storage_config);
+            storage_manager = try storage_mod.StorageManager.init(allocator, io, storage_config);
         }
 
         var repo = Repository{

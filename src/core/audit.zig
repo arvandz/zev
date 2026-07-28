@@ -767,7 +767,7 @@ pub fn runAudit(
         events.deinit(allocator);
     }
 
-    try collectCommits(allocator, io, io, repo, &events);
+    try collectCommits(allocator, io, repo, &events);
     try collectSnapshots(allocator, repo, &events, filter_snapshot);
     try collectNotarizations(allocator, repo, &events, filter_snapshot);
     try collectDriftHistory(allocator, repo, &events);

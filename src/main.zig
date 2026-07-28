@@ -696,8 +696,7 @@ pub fn main(init: std.process.Init) !void {
 
         const max_count = if (args.len >= 3) try std.fmt.parseInt(usize, args[2], 10) else 10;
 
-        try log.        try log.printLog(allocator, &repo.store, head_cid, max_count);
-allocator, io, &repo.store, head_cid, max_count);
+        try log.printLog(allocator, &repo.store, head_cid, max_count);
     } else if (std.mem.eql(u8, command, "status")) {
         if (!repository.Repository.exists(allocator, io, ".")) {
             std.debug.print("Not a zev repository.\n", .{});
@@ -2117,8 +2116,7 @@ allocator, io, &repo.store, head_cid, max_count);
                 std.debug.print("Usage: zev snapshot diff <name-a> <name-b>\n", .{});
                 return;
             }
-            try snapshot_mod.            try snapshot_mod.snapshotDiff(allocator, &repo, args[3], args[4]);
-allocator, io, &repo, args[3], args[4]);
+            try snapshot_mod.snapshotDiff(allocator, &repo, args[3], args[4]);
         } else {
             std.debug.print("Unknown snapshot subcommand: {s}\n", .{sub});
         }

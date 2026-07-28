@@ -192,7 +192,7 @@ pub fn dagExport(
     };
     defer f.close(io);
 
-    var writer = CarWriter.init(allocator, io, io, io, f);
+    var writer = CarWriter.init(allocator, f);
     defer writer.deinit();
 
     for (root_cids.items) |c| try writer.addRoot(c);

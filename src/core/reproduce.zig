@@ -550,8 +550,7 @@ fn doReproduce(
     std.debug.print("   Completed in {d}ms, exit code: {d}\n\n", .{ elapsed_ms, exit_code });
 
     const output = output_buf[0..output_len];
-    var repro_metrics = try     var repro_metrics = try parseMetricsFromOutput(allocator, output);
-allocator, io, output);
+    var repro_metrics = try parseMetricsFromOutput(allocator, output);
     defer freeMetricsMap(allocator, &repro_metrics);
 
     const metrics_out_path = try std.fs.path.join(allocator, &.{ work_dir, "metrics.txt" });

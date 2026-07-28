@@ -250,8 +250,7 @@ fn diffPython(
         });
     }
 
-    try     try diffNumericAssignments(allocator, content_a, content_b, out);
-allocator, io, content_a, content_b, out);
+    try diffNumericAssignments(allocator, content_a, content_b, out);
 }
 
 fn extractPythonDefs(allocator: std.mem.Allocator, content: []const u8) ![][]u8 {
