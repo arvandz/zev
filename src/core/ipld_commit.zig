@@ -497,9 +497,12 @@ fn saveCommitCIDMapping(
     const cid_str = try cid.toShort(allocator);
     defer allocator.free(cid_str);
 
-    const f = try std.Io.Dir.cwd().createFile(path, .{});
+    const f = try std.Io.Dir.cwd().createFile(io, path, .{});
+    var f_buffer: [512]u8 = undefined;
+    var f_writer = f.writer(io, &f_buffer);
     defer f.close(io);
-    try f.writeAll(cid_str);
+    try f_writer.interface.writeAll(cid_str);
+    try f_writer.flush();
 }
 
 fn loadCommitCIDMapping(
@@ -533,9 +536,12 @@ fn saveIPLDHead(
     const cid_str = try cid.toShort(allocator);
     defer allocator.free(cid_str);
 
-    const f = try std.Io.Dir.cwd().createFile(path, .{});
+    const f = try std.Io.Dir.cwd().createFile(io, path, .{});
+    var f_buffer: [512]u8 = undefined;
+    var f_writer = f.writer(io, &f_buffer);
     defer f.close(io);
-    try f.writeAll(cid_str);
+    try f_writer.interface.writeAll(cid_str);
+    try f_writer.flush();
 }
 
 fn loadIPLDHead(
