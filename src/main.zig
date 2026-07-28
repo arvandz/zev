@@ -196,7 +196,7 @@ pub fn main(init: std.process.Init) !void {
             return;
         }
         const data = args[2];
-        const content_id = cid.CID.fromBytes(io, data);
+        const content_id = cid.CID.fromBytes(data);
         const hash_str = try content_id.toString(allocator);
         defer allocator.free(hash_str);
         std.debug.print("CID: {s}\n", .{hash_str});
