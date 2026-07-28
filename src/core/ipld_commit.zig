@@ -200,7 +200,7 @@ pub fn textCommitToIPLD(
     };
 
     const cv = try cn.toValue(aa);
-    return try store.putNode(io, aa, cv);
+    return try store.putNode(aa, io, cv);
 }
 
 pub fn migrateCommitsToIPLD(
