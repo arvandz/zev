@@ -552,7 +552,6 @@ pub fn diffTrees(
             switch (ftype) {
                 .python => try diffPython(allocator, content_a.?, content_b.?, &semantic),
                 .json, .yaml, .toml => try                 .json, .yaml, .toml => try diffConfig(allocator, content_a.?, content_b.?, &semantic),
-allocator, io, content_a.?, content_b.?, &semantic),
                 .text, .markdown => try diffText(allocator, content_a.?, content_b.?, &semantic),
                 .binary => try semantic.append(allocator, .{
                     .kind = .binary_changed,
