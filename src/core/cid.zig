@@ -52,7 +52,7 @@ test "CID equality" {
     const data3 = "goodbye world";
 
     const cid1 = CID.fromBytes(data1);
-    const cid2 = CID.fromBytes(io, data2);
+    const cid2 = CID.fromBytes(data2);
     const cid3 = CID.fromBytes(io, data3);
 
     try std.testing.expect(cid1.equals(cid2));

@@ -167,8 +167,7 @@ pub fn rebase(
         return .nothing_to_rebase;
     }
 
-    const ancestor = try     const ancestor = try findCommonAncestor(allocator, &repo.store, current_head, onto_head);
-allocator, io, &repo.store, current_head, onto_head);
+    const ancestor = try findCommonAncestor(allocator, &repo.store, current_head, onto_head);
     if (ancestor == null) {
         std.debug.print("Error: No common ancestor found\n", .{});
         return .nothing_to_rebase;
