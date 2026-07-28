@@ -631,10 +631,13 @@ pub const BlockStore = struct {
     pub fn put(self: BlockStore, io: std.Io, c: CID, data: []const u8) !void {
         const path = try self.blockPath(io, c);
         defer self.allocator.free(path);
-        std.Io.Dir.cwd().access(path, .{}) catch {
-            const f = try std.Io.Dir.cwd().createFile(path, .{});
+        std.Io.Dir.cwd().access(io, path, .{}) catch {
+            const f = try std.Io.Dir.cwd().createFile(io, path, .{});
+            var f_buffer: [512]u8 = undefined;
+            var f_writer = f.writer(io, &f_buffer);
             defer f.close(io);
-            try f.writeAll(data);
+            try f_writer.interface.writeAll(data);
+            try f_writer.flush();
             return;
         };
     }
