@@ -177,7 +177,7 @@ pub fn textCommitToIPLD(
             .timestamp = tc.timestamp,
         };
         const mv = try mn.toValue(aa);
-        const mcid = try store.putNode(io, aa, mv);
+        const mcid = try store.putNode(aa, io, mv);
         break :blk mcid;
     } else null;
 
@@ -356,7 +356,7 @@ pub fn onMetricsSet(
         .timestamp = @divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s),
     };
     const mv = try mn.toValue(aa);
-    const metrics_cid = try store.putNode(io, aa, mv);
+    const metrics_cid = try store.putNode(aa, io, mv);
     _ = metrics_cid;
 }
 
