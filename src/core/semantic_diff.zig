@@ -131,7 +131,7 @@ fn collectMetricsForCommit(
         const repo_path = if (std.mem.endsWith(u8, bp, suffix)) bp[0 .. bp.len - suffix.len] else bp;
         const cd_path = try std.fs.path.join(allocator, &.{ repo_path, ".zev", "ipld_commits" });
         defer allocator.free(cd_path);
-        if (std.Io.Dir.cwd().openDir(cd_path, .{ .iterate = true })) |*dir| {
+        if (std.Io.Dir.cwd().openDir(io, cd_path, .{ .iterate = true })) |*dir| {
             var cdir = dir.*;
             defer cdir.close(io);
             var cit = cdir.iterate();
@@ -151,7 +151,7 @@ fn collectMetricsForCommit(
         } else |_| {}
     }
 
-    var root_dir = std.Io.Dir.cwd().openDir(store.base_path, .{ .iterate = true }) catch return map;
+    var root_dir = std.Io.Dir.cwd().openDir(io, store.base_path, .{ .iterate = true }) catch return map;
     defer root_dir.close(io);
 
     var rit = root_dir.iterate();
@@ -159,7 +159,7 @@ fn collectMetricsForCommit(
         if (shard.kind != .directory) continue;
         const sp = try std.fs.path.join(allocator, &.{ store.base_path, shard.name });
         defer allocator.free(sp);
-        var sd = std.Io.Dir.cwd().openDir(sp, .{ .iterate = true }) catch continue;
+        var sd = std.Io.Dir.cwd().openDir(io, sp, .{ .iterate = true }) catch continue;
         defer sd.close(io);
         var si = sd.iterate();
         while (try si.next()) |block| {

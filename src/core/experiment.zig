@@ -280,7 +280,7 @@ pub fn experimentList(allocator: std.mem.Allocator,
     const dir_path = try experimentsDir(allocator, io, repo);
     defer allocator.free(dir_path);
 
-    var dir = std.Io.Dir.cwd().openDir(dir_path, .{ .iterate = true }) catch {
+    var dir = std.Io.Dir.cwd().openDir(io, dir_path, .{ .iterate = true }) catch {
         std.debug.print("No experiments yet.\n", .{});
         std.debug.print("Start one with: zev experiment start <name> [description]\n", .{});
         return;

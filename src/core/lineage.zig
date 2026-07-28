@@ -338,7 +338,7 @@ pub fn lineageList(allocator: std.mem.Allocator,
     const dir_path = try lineageDir(allocator, io, repo);
     defer allocator.free(dir_path);
 
-    var dir = std.Io.Dir.cwd().openDir(dir_path, .{ .iterate = true }) catch {
+    var dir = std.Io.Dir.cwd().openDir(io, dir_path, .{ .iterate = true }) catch {
         std.debug.print("No lineage nodes yet.\n", .{});
         std.debug.print("Add one with: zev lineage add <id> <type> <description>\n", .{});
         return;
@@ -391,7 +391,7 @@ pub fn lineageGraph(allocator: std.mem.Allocator,
     const dir_path = try lineageDir(allocator, io, repo);
     defer allocator.free(dir_path);
 
-    var dir = std.Io.Dir.cwd().openDir(dir_path, .{ .iterate = true }) catch {
+    var dir = std.Io.Dir.cwd().openDir(io, dir_path, .{ .iterate = true }) catch {
         std.debug.print("No lineage nodes yet.\n", .{});
         return;
     };
@@ -442,7 +442,7 @@ fn printDescendants(
     const dir_path = try lineageDir(allocator, io, repo);
     defer allocator.free(dir_path);
 
-    var dir = std.Io.Dir.cwd().openDir(dir_path, .{ .iterate = true }) catch return;
+    var dir = std.Io.Dir.cwd().openDir(io, dir_path, .{ .iterate = true }) catch return;
     defer dir.close(io);
 
     var child_iter = dir.iterate();
@@ -469,7 +469,7 @@ pub fn lineageProvenance(allocator: std.mem.Allocator,
     const dir_path = try lineageDir(allocator, io, repo);
     defer allocator.free(dir_path);
 
-    var dir = std.Io.Dir.cwd().openDir(dir_path, .{ .iterate = true }) catch {
+    var dir = std.Io.Dir.cwd().openDir(io, dir_path, .{ .iterate = true }) catch {
         std.debug.print("No lineage nodes yet.\n", .{});
         return;
     };

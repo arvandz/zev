@@ -237,7 +237,7 @@ fn iterateRecords(
     const dir_path = try contextDir(allocator, io, repo);
     defer allocator.free(dir_path);
 
-    var dir = std.Io.Dir.cwd().openDir(dir_path, .{ .iterate = true }) catch return;
+    var dir = std.Io.Dir.cwd().openDir(io, dir_path, .{ .iterate = true }) catch return;
     defer dir.close(io);
 
     var it = dir.iterate();
@@ -326,7 +326,7 @@ pub fn contextShow(
     const dir_path = try contextDir(allocator, io, repo);
     defer allocator.free(dir_path);
 
-    var dir = std.Io.Dir.cwd().openDir(dir_path, .{ .iterate = true }) catch {
+    var dir = std.Io.Dir.cwd().openDir(io, dir_path, .{ .iterate = true }) catch {
         std.debug.print("No context records yet.\n", .{});
         return;
     };
@@ -414,7 +414,7 @@ pub fn contextBlame(
         latest.deinit();
     }
 
-    var dir = std.Io.Dir.cwd().openDir(dir_path, .{ .iterate = true }) catch {
+    var dir = std.Io.Dir.cwd().openDir(io, dir_path, .{ .iterate = true }) catch {
         std.debug.print("No context records yet.\n", .{});
         std.debug.print("Add context: zev context add <file> --model <model>\n", .{});
         return;
@@ -512,7 +512,7 @@ pub fn contextStats(
         file_ts.deinit();
     }
 
-    var dir = std.Io.Dir.cwd().openDir(dir_path, .{ .iterate = true }) catch {
+    var dir = std.Io.Dir.cwd().openDir(io, dir_path, .{ .iterate = true }) catch {
         std.debug.print("No context records yet.\n", .{});
         return;
     };
@@ -595,7 +595,7 @@ pub fn contextQuery(
     const dir_path = try contextDir(allocator, io, repo);
     defer allocator.free(dir_path);
 
-    var dir = std.Io.Dir.cwd().openDir(dir_path, .{ .iterate = true }) catch {
+    var dir = std.Io.Dir.cwd().openDir(io, dir_path, .{ .iterate = true }) catch {
         std.debug.print("No context records.\n", .{});
         return;
     };
@@ -668,7 +668,7 @@ pub fn contextList(allocator: std.mem.Allocator,
     const dir_path = try contextDir(allocator, io, repo);
     defer allocator.free(dir_path);
 
-    var dir = std.Io.Dir.cwd().openDir(dir_path, .{ .iterate = true }) catch {
+    var dir = std.Io.Dir.cwd().openDir(io, dir_path, .{ .iterate = true }) catch {
         std.debug.print("No context records yet.\n", .{});
         std.debug.print("Add context: zev context add <file> --model <model>\n", .{});
         return;

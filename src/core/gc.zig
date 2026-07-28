@@ -49,7 +49,7 @@ fn collectAllReachable(
     const heads_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "refs", "heads" });
     defer allocator.free(heads_path);
 
-    var dir = std.Io.Dir.cwd().openDir(heads_path, .{ .iterate = true }) catch return;
+    var dir = std.Io.Dir.cwd().openDir(io, heads_path, .{ .iterate = true }) catch return;
     defer dir.close(io);
 
     var it = dir.iterate();
@@ -83,7 +83,7 @@ fn collectAllReachable(
     const tags_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "refs", "tags" });
     defer allocator.free(tags_path);
 
-    var tags_dir = std.Io.Dir.cwd().openDir(tags_path, .{ .iterate = true }) catch return;
+    var tags_dir = std.Io.Dir.cwd().openDir(io, tags_path, .{ .iterate = true }) catch return;
     defer tags_dir.close(io);
 
     var tags_it = tags_dir.iterate();
@@ -145,7 +145,7 @@ pub fn runGC(allocator: std.mem.Allocator,
     const objects_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "objects" });
     defer allocator.free(objects_path);
 
-    var objects_dir = std.Io.Dir.cwd().openDir(objects_path, .{ .iterate = true }) catch {
+    var objects_dir = std.Io.Dir.cwd().openDir(io, objects_path, .{ .iterate = true }) catch {
         return result;
     };
     defer objects_dir.close(io);

@@ -174,7 +174,7 @@ pub fn dagStat(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) !voi
         if (shard_entry.kind != .directory) continue;
         const shard_path = try std.fs.path.join(allocator, &.{ ipld_path, shard_entry.name });
         defer allocator.free(shard_path);
-        var shard_dir = std.Io.Dir.cwd().openDir(shard_path, .{ .iterate = true }) catch continue;
+        var shard_dir = std.Io.Dir.cwd().openDir(io, shard_path, .{ .iterate = true }) catch continue;
         defer shard_dir.close(io);
         var shard_it = shard_dir.iterate();
         while (try shard_it.next()) |block_entry| {
@@ -301,7 +301,7 @@ pub fn graftList(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) !v
     const graft_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "grafts" });
     defer allocator.free(graft_path);
 
-    var dir = std.Io.Dir.cwd().openDir(graft_path, .{ .iterate = true }) catch {
+    var dir = std.Io.Dir.cwd().openDir(io, graft_path, .{ .iterate = true }) catch {
         std.debug.print("No grafts yet.\n\n", .{});
         std.debug.print("Graft a foreign CID:\n", .{});
         std.debug.print("  zev graft <cid> --as dataset/imagenet-v2\n\n", .{});

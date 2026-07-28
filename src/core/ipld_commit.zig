@@ -385,7 +385,7 @@ pub fn ipldLog(
     const head_cid = loadIPLDHead(allocator, repo) catch blk: {
         var best: ?ipld.CID = null;
         var best_ts: i64 = 0;
-        var root_dir = std.Io.Dir.cwd().openDir(store.base_path, .{ .iterate = true }) catch {
+        var root_dir = std.Io.Dir.cwd().openDir(io, store.base_path, .{ .iterate = true }) catch {
             std.debug.print("No IPLD history yet. Run: zev ipld migrate\n\n", .{});
             return;
         };
@@ -395,7 +395,7 @@ pub fn ipldLog(
             if (shard.kind != .directory) continue;
             const sp = try std.fs.path.join(allocator, &.{ store.base_path, shard.name });
             defer allocator.free(sp);
-            var sd = std.Io.Dir.cwd().openDir(sp, .{ .iterate = true }) catch continue;
+            var sd = std.Io.Dir.cwd().openDir(io, sp, .{ .iterate = true }) catch continue;
             defer sd.close(io);
             var si = sd.iterate();
             while (try si.next()) |block| {

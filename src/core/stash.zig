@@ -75,7 +75,7 @@ pub fn stashList(allocator: std.mem.Allocator,
     const stash_dir = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "stash" });
     defer allocator.free(stash_dir);
 
-    var dir = std.Io.Dir.cwd().openDir(stash_dir, .{ .iterate = true }) catch |err| {
+    var dir = std.Io.Dir.cwd().openDir(io, stash_dir, .{ .iterate = true }) catch |err| {
         if (err == error.FileNotFound) {
             std.debug.print("No stashes found\n", .{});
             return;
@@ -201,7 +201,7 @@ pub fn stashDrop(allocator: std.mem.Allocator, repo: *Repository, stash_id: usiz
 
 fn getNextStashId(allocator: std.mem.Allocator,
     io: std.Io, stash_dir: []const u8) !usize {
-    var dir = std.Io.Dir.cwd().openDir(stash_dir, .{ .iterate = true }) catch return 0;
+    var dir = std.Io.Dir.cwd().openDir(io, stash_dir, .{ .iterate = true }) catch return 0;
     defer dir.close(io);
 
     var max_id: usize = 0;

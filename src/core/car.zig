@@ -362,14 +362,14 @@ fn collectAllCIDs(
     store: *ipld.BlockStore,
     out: *std.ArrayList(ipld.CID),
 ) !void {
-    var root_dir = std.Io.Dir.cwd().openDir(store.base_path, .{ .iterate = true }) catch return;
+    var root_dir = std.Io.Dir.cwd().openDir(io, store.base_path, .{ .iterate = true }) catch return;
     defer root_dir.close(io);
     var it = root_dir.iterate();
     while (try it.next()) |shard| {
         if (shard.kind != .directory) continue;
         const sp = try std.fs.path.join(allocator, &.{ store.base_path, shard.name });
         defer allocator.free(sp);
-        var sd = std.Io.Dir.cwd().openDir(sp, .{ .iterate = true }) catch continue;
+        var sd = std.Io.Dir.cwd().openDir(io, sp, .{ .iterate = true }) catch continue;
         defer sd.close(io);
         var si = sd.iterate();
         while (try si.next()) |block| {

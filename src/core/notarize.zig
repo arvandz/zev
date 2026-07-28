@@ -627,7 +627,7 @@ pub fn notarizeVerify(allocator: std.mem.Allocator,
     defer allocator.free(dir);
 
     var found_rec: ?NotarizationRecord = null;
-    var d = std.Io.Dir.cwd().openDir(dir, .{ .iterate = true }) catch {
+    var d = std.Io.Dir.cwd().openDir(io, dir, .{ .iterate = true }) catch {
         std.debug.print("No notarizations yet.\n", .{});
         return;
     };
@@ -680,7 +680,7 @@ pub fn notarizeList(allocator: std.mem.Allocator,
     const dir = try notarizeDir(allocator, io, repo);
     defer allocator.free(dir);
 
-    var d = std.Io.Dir.cwd().openDir(dir, .{ .iterate = true }) catch {
+    var d = std.Io.Dir.cwd().openDir(io, dir, .{ .iterate = true }) catch {
         std.debug.print("No notarizations yet.\n", .{});
         std.debug.print("Create one: zev notarize snapshot <name>\n", .{});
         return;

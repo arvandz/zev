@@ -65,7 +65,7 @@ pub fn listTags(allocator: std.mem.Allocator,
     const tags_dir = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "refs", "tags" });
     defer allocator.free(tags_dir);
 
-    var dir = std.Io.Dir.cwd().openDir(tags_dir, .{ .iterate = true }) catch |err| {
+    var dir = std.Io.Dir.cwd().openDir(io, tags_dir, .{ .iterate = true }) catch |err| {
         if (err == error.FileNotFound) {
             std.debug.print("No tags found\n", .{});
             return;

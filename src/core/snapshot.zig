@@ -166,7 +166,7 @@ fn resolveSnapshotId(allocator: std.mem.Allocator, io: std.Io, repo: *Repository
     const dir_path = try snapshotDir(allocator, io, repo);
     defer allocator.free(dir_path);
 
-    var dir = std.Io.Dir.cwd().openDir(dir_path, .{ .iterate = true }) catch return null;
+    var dir = std.Io.Dir.cwd().openDir(io, dir_path, .{ .iterate = true }) catch return null;
     defer dir.close(io);
 
     var it = dir.iterate();
@@ -317,7 +317,7 @@ pub fn snapshotList(allocator: std.mem.Allocator,
     const dir_path = try snapshotDir(allocator, io, repo);
     defer allocator.free(dir_path);
 
-    var dir = std.Io.Dir.cwd().openDir(dir_path, .{ .iterate = true }) catch {
+    var dir = std.Io.Dir.cwd().openDir(io, dir_path, .{ .iterate = true }) catch {
         std.debug.print("No snapshots yet.\n", .{});
         std.debug.print("Create one: zev snapshot create <name> [description]\n", .{});
         return;

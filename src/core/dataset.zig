@@ -697,7 +697,7 @@ pub fn datasetList(allocator: std.mem.Allocator,
     const dir_path = try datasetDir(allocator, io, repo);
     defer allocator.free(dir_path);
 
-    var dir = std.Io.Dir.cwd().openDir(dir_path, .{ .iterate = true }) catch {
+    var dir = std.Io.Dir.cwd().openDir(io, dir_path, .{ .iterate = true }) catch {
         std.debug.print("No datasets registered yet.\n", .{});
         std.debug.print("Register: zev dataset register <path> --name <name>\n", .{});
         return;

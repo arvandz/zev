@@ -646,7 +646,7 @@ fn scanAllBlocks(
         if (shard_entry.kind != .directory) continue;
         const shard_path = try std.fs.path.join(allocator, &.{ ipld_path, shard_entry.name });
         defer allocator.free(shard_path);
-        var shard_dir = std.Io.Dir.cwd().openDir(shard_path, .{ .iterate = true }) catch continue;
+        var shard_dir = std.Io.Dir.cwd().openDir(io, shard_path, .{ .iterate = true }) catch continue;
         defer shard_dir.close(io);
         var shard_it = shard_dir.iterate();
         while (try shard_it.next()) |block_entry| {

@@ -97,7 +97,7 @@ pub fn listHooks(allocator: std.mem.Allocator,
     const hooks_dir = try std.fs.path.join(allocator, &.{ repo_path, ".zev", "hooks" });
     defer allocator.free(hooks_dir);
 
-    var dir = std.Io.Dir.cwd().openDir(hooks_dir, .{ .iterate = true }) catch |err| {
+    var dir = std.Io.Dir.cwd().openDir(io, hooks_dir, .{ .iterate = true }) catch |err| {
         if (err == error.FileNotFound) {
             std.debug.print("No hooks installed\n", .{});
             return;

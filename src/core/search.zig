@@ -127,7 +127,7 @@ pub fn searchExperiments(allocator: std.mem.Allocator, io: std.Io, repo: *Reposi
     const exp_dir_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "experiments" });
     defer allocator.free(exp_dir_path);
 
-    var dir = std.Io.Dir.cwd().openDir(exp_dir_path, .{ .iterate = true }) catch {
+    var dir = std.Io.Dir.cwd().openDir(io, exp_dir_path, .{ .iterate = true }) catch {
         std.debug.print("No experiments yet.\n", .{});
         return;
     };
@@ -298,7 +298,7 @@ pub fn searchLineage(allocator: std.mem.Allocator, io: std.Io, repo: *Repository
     const dir_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "lineage" });
     defer allocator.free(dir_path);
 
-    var dir = std.Io.Dir.cwd().openDir(dir_path, .{ .iterate = true }) catch {
+    var dir = std.Io.Dir.cwd().openDir(io, dir_path, .{ .iterate = true }) catch {
         std.debug.print("No lineage nodes yet.\n", .{});
         return;
     };
@@ -385,7 +385,7 @@ pub fn searchSnapshots(allocator: std.mem.Allocator, io: std.Io, repo: *Reposito
     const dir_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "snapshots" });
     defer allocator.free(dir_path);
 
-    var dir = std.Io.Dir.cwd().openDir(dir_path, .{ .iterate = true }) catch {
+    var dir = std.Io.Dir.cwd().openDir(io, dir_path, .{ .iterate = true }) catch {
         std.debug.print("No snapshots yet.\n", .{});
         return;
     };

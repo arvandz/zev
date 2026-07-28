@@ -44,7 +44,7 @@ fn collectDir(
     rel_prefix: []const u8,
     files: *std.ArrayList(FileEntry),
 ) !void {
-    var dir = std.Io.Dir.cwd().openDir(base_path, .{ .iterate = true }) catch return;
+    var dir = std.Io.Dir.cwd().openDir(io, base_path, .{ .iterate = true }) catch return;
     defer dir.close(io);
 
     var it = dir.iterate();
@@ -144,7 +144,7 @@ pub fn exportRepo(
 
         const snap_dir = try std.fs.path.join(allocator, &.{ zev_path, "snapshots" });
         defer allocator.free(snap_dir);
-        var sd = std.Io.Dir.cwd().openDir(snap_dir, .{ .iterate = true }) catch {
+        var sd = std.Io.Dir.cwd().openDir(io, snap_dir, .{ .iterate = true }) catch {
             std.debug.print("   No snapshots found\n", .{});
             return;
         };

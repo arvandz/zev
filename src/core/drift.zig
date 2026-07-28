@@ -187,7 +187,7 @@ fn freeMetricsMap(allocator: std.mem.Allocator, map: *std.StringHashMap(f64)) vo
 fn loadMetricsFromSnapshot(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, name: []const u8) !?std.StringHashMap(f64) {
     const dir_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "snapshots" });
     defer allocator.free(dir_path);
-    var dir = std.Io.Dir.cwd().openDir(dir_path, .{ .iterate = true }) catch return null;
+    var dir = std.Io.Dir.cwd().openDir(io, dir_path, .{ .iterate = true }) catch return null;
     defer dir.close(io);
     var it = dir.iterate();
     while (try it.next()) |entry| {
@@ -517,7 +517,7 @@ pub fn driftCheck(allocator: std.mem.Allocator,
 pub fn driftHistory(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, limit: usize) !void {
     const dir = try driftHistoryDir(allocator, io, repo);
     defer allocator.free(dir);
-    var d = std.Io.Dir.cwd().openDir(dir, .{ .iterate = true }) catch {
+    var d = std.Io.Dir.cwd().openDir(io, dir, .{ .iterate = true }) catch {
         std.debug.print("No drift history yet. Run: zev drift check\n", .{});
         return;
     };

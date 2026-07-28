@@ -106,7 +106,7 @@ pub fn listRemotes(allocator: std.mem.Allocator,
     const remotes_dir_path = try std.fs.path.join(allocator, &[_][]const u8{ zev_path, "remotes" });
     defer allocator.free(remotes_dir_path);
 
-    var remotes_dir = std.Io.Dir.cwd().openDir(remotes_dir_path, .{ .iterate = true }) catch |err| {
+    var remotes_dir = std.Io.Dir.cwd().openDir(io, remotes_dir_path, .{ .iterate = true }) catch |err| {
         if (err == error.FileNotFound) {
             std.debug.print("No remotes configured\n", .{});
             return;

@@ -685,14 +685,14 @@ pub const BlockStore = struct {
 
     pub fn count(io: std.Io, self: BlockStore) usize {
         var total: usize = 0;
-        var dir = std.Io.Dir.cwd().openDir(self.base_path, .{ .iterate = true }) catch return 0;
+        var dir = std.Io.Dir.cwd().openDir(io, self.base_path, .{ .iterate = true }) catch return 0;
         defer dir.close(io);
         var it = dir.iterate();
         while (it.next() catch null) |entry| {
             if (entry.kind == .directory) {
                 const sub_path = std.fs.path.join(self.allocator, &.{ self.base_path, entry.name }) catch continue;
                 defer self.allocator.free(sub_path);
-                var sub = std.Io.Dir.cwd().openDir(sub_path, .{ .iterate = true }) catch continue;
+                var sub = std.Io.Dir.cwd().openDir(io, sub_path, .{ .iterate = true }) catch continue;
                 defer sub.close(io);
                 var sub_it = sub.iterate();
                 while (sub_it.next() catch null) |e| {

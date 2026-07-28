@@ -235,7 +235,7 @@ fn loadMetricsForHash(allocator: std.mem.Allocator, io: std.Io, repo: *Repositor
 fn loadMetricsFromSnapshot(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, name: []const u8) !?struct { metrics: std.StringHashMap(f64), commit: []u8 } {
     const dir_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "snapshots" });
     defer allocator.free(dir_path);
-    var dir = std.Io.Dir.cwd().openDir(dir_path, .{ .iterate = true }) catch return null;
+    var dir = std.Io.Dir.cwd().openDir(io, dir_path, .{ .iterate = true }) catch return null;
     defer dir.close(io);
     var it = dir.iterate();
     while (try it.next()) |entry| {
@@ -453,7 +453,7 @@ fn doReproduce(
         std.debug.print("   zev reproduce {s} --cmd \"python train.py\"\n", .{subject_id});
 
         std.debug.print("\n   Files checked out to {s}:\n", .{work_dir});
-        var wd = std.Io.Dir.cwd().openDir(work_dir, .{ .iterate = true }) catch return;
+        var wd = std.Io.Dir.cwd().openDir(io, work_dir, .{ .iterate = true }) catch return;
         defer wd.close(io);
         var wdit = wd.iterate();
         while (try wdit.next()) |e| {
@@ -505,7 +505,7 @@ fn doReproduce(
     {
         const cap_dir_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "capture" });
         defer allocator.free(cap_dir_path);
-        var repo_dir = std.Io.Dir.cwd().openDir(repo.path, .{ .iterate = true }) catch unreachable;
+        var repo_dir = std.Io.Dir.cwd().openDir(io, repo.path, .{ .iterate = true }) catch unreachable;
         defer repo_dir.close(io);
         var rdit = repo_dir.iterate();
         while (try rdit.next()) |entry| {
@@ -726,7 +726,7 @@ pub fn reproduceStatus(allocator: std.mem.Allocator, io: std.Io, repo: *Reposito
     const dir = try reproduceDir(allocator, io, repo);
     defer allocator.free(dir);
 
-    var d = std.Io.Dir.cwd().openDir(dir, .{ .iterate = true }) catch {
+    var d = std.Io.Dir.cwd().openDir(io, dir, .{ .iterate = true }) catch {
         std.debug.print("No reproduction records yet.\n", .{});
         std.debug.print("Run: zev reproduce <snapshot-name>\n", .{});
         return;

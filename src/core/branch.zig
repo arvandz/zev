@@ -84,7 +84,7 @@ pub fn listBranches(allocator: std.mem.Allocator,
     const heads_path = try std.fs.path.join(allocator, &[_][]const u8{ zev_path, "refs", "heads" });
     defer allocator.free(heads_path);
 
-    var heads_dir = try std.Io.Dir.cwd().openDir(heads_path, .{ .iterate = true });
+    var heads_dir = try std.Io.Dir.cwd().openDir(io, heads_path, .{ .iterate = true });
     defer heads_dir.close(io);
 
     const current_branch = getCurrentBranch(allocator, io, repo) catch "HEAD";

@@ -81,7 +81,7 @@ fn findObject(
     const exact = try std.fs.path.join(allocator, &.{ objects_dir, hash_prefix });
     if (std.Io.Dir.cwd().access(exact, .{})) |_| return exact else |_| allocator.free(exact);
 
-    var dir = try std.Io.Dir.cwd().openDir(objects_dir, .{ .iterate = true });
+    var dir = try std.Io.Dir.cwd().openDir(io, objects_dir, .{ .iterate = true });
     defer dir.close(io);
     var it = dir.iterate();
     while (try it.next()) |entry| {

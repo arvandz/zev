@@ -255,7 +255,7 @@ fn buildManifest(allocator: std.mem.Allocator,
     for (dirs) |d| {
         const dir_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", d });
         defer allocator.free(dir_path);
-        var dir = std.Io.Dir.cwd().openDir(dir_path, .{ .iterate = true }) catch continue;
+        var dir = std.Io.Dir.cwd().openDir(io, dir_path, .{ .iterate = true }) catch continue;
         defer dir.close(io);
         var it = dir.iterate();
         while (try it.next()) |entry| {
@@ -268,7 +268,7 @@ fn buildManifest(allocator: std.mem.Allocator,
 
     const heads_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "refs", "heads" });
     defer allocator.free(heads_path);
-    var heads_dir = std.Io.Dir.cwd().openDir(heads_path, .{ .iterate = true }) catch {
+    var heads_dir = std.Io.Dir.cwd().openDir(io, heads_path, .{ .iterate = true }) catch {
         return result.toOwnedSlice(allocator);
     };
     defer heads_dir.close(io);

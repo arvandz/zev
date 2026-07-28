@@ -461,7 +461,7 @@ pub fn publishSnapshot(
     const snap_dir_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "snapshots" });
     defer allocator.free(snap_dir_path);
 
-    var snap_dir = std.Io.Dir.cwd().openDir(snap_dir_path, .{ .iterate = true }) catch {
+    var snap_dir = std.Io.Dir.cwd().openDir(io, snap_dir_path, .{ .iterate = true }) catch {
         std.debug.print("Error: No snapshots found\n", .{});
         return;
     };
