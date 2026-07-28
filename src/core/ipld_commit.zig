@@ -294,11 +294,11 @@ pub fn onNewCommit(
     var store = try ipld.BlockStore.init(allocator, io, repo.path);
     defer store.deinit();
 
-    const tc = readTextCommit(allocator, repo, commit_hash) catch return;
+    const tc = readTextCommit(allocator, io, repo, commit_hash) catch return;
     defer tc.deinit(allocator);
 
     const parent_ipld_cid: ?ipld.CID = if (tc.parent) |ph|
-        loadCommitCIDMapping(allocator, repo, ph) catch null
+        loadCommitCIDMapping(allocator, io, repo, ph) catch null
     else
         null;
 
