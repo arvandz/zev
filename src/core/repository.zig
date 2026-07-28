@@ -60,7 +60,7 @@ pub const Repository = struct {
             .allocator = allocator,
             .path = try allocator.dupe(u8, path),
             .store = try blob.BlobStore.init(allocator, io, store_path),
-            .index = index.Index.init(allocator, io, io, io, index_path),
+            .index = index.Index.init(allocator, index_path),
             .config = repo_config,
             .storage = storage_manager,
         };
@@ -88,7 +88,7 @@ pub const Repository = struct {
             .allocator = allocator,
             .path = try allocator.dupe(u8, path),
             .store = try blob.BlobStore.init(allocator, io, io, io, io, objects_path),
-            .index = index.Index.init(allocator, io, io, io, index_path),
+            .index = index.Index.init(allocator, index_path),
             .config = repo_config,
             .storage = storage_manager,
         };
