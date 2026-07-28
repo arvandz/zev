@@ -30,7 +30,7 @@ pub const CID = struct {
 
 test "CID generation" {
     const data = "hello world";
-    const cid = CID.fromBytes(io, data);
+    const cid = CID.fromBytes(data);
 
     try std.testing.expect(cid.hash.len == 32);
 }
@@ -38,7 +38,7 @@ test "CID generation" {
 test "CID to string" {
     const allocator = std.testing.allocator;
     const data = "hello world";
-    const cid = CID.fromBytes(io, data);
+    const cid = CID.fromBytes(data);
 
     const str = try cid.toString(allocator);
     defer allocator.free(str);
@@ -51,7 +51,7 @@ test "CID equality" {
     const data2 = "hello world";
     const data3 = "goodbye world";
 
-    const cid1 = CID.fromBytes(io, data1);
+    const cid1 = CID.fromBytes(data1);
     const cid2 = CID.fromBytes(io, data2);
     const cid3 = CID.fromBytes(io, data3);
 

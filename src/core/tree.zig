@@ -120,7 +120,7 @@ test "tree serialization" {
     var tree_obj = Tree.init(allocator);
     defer tree_obj.deinit();
 
-    const test_cid = cid.CID.fromBytes(io, "test content");
+    const test_cid = cid.CID.fromBytes("test content");
     try tree_obj.addEntry("file.txt", test_cid, 100, 0o644);
 
     const serialized = try tree_obj.serialize();

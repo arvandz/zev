@@ -235,8 +235,7 @@ pub fn compareCommits(allocator: std.mem.Allocator, io: std.Io, repo: *Repositor
     std.debug.print("\n", .{});
 }
 
-fn loadExpFields(allocator: std.mem.Allocator,
-    io: std.Io, repo: *Repository, name: []const u8) !?std.StringHashMap([]u8) {
+fn loadExpFields(allocator: std.mem.Allocator, repo: *Repository, name: []const u8) !?std.StringHashMap([]u8) {
     const path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "experiments", name });
     defer allocator.free(path);
     const content = (try readFile(allocator, path)) orelse return null;
@@ -256,13 +255,15 @@ fn loadExpFields(allocator: std.mem.Allocator,
 
 pub fn compareExperiments(allocator: std.mem.Allocator,
     io: std.Io, repo: *Repository, name_a: []const u8, name_b: []const u8) !void {
-    var exp_a = (try loadExpFields(allocator, io, repo, name_a)) orelse {
+    var exp_a = (try     var exp_a = (try loadExpFields(allocator, repo, name_a)) orelse {
+allocator, io, repo, name_a)) orelse {
         std.debug.print("Error: Experiment '{s}' not found\n", .{name_a});
         return;
     };
     defer freeStrMap(allocator, &exp_a);
 
-    var exp_b = (try loadExpFields(allocator, io, repo, name_b)) orelse {
+    var exp_b = (try     var exp_b = (try loadExpFields(allocator, repo, name_b)) orelse {
+allocator, io, repo, name_b)) orelse {
         std.debug.print("Error: Experiment '{s}' not found\n", .{name_b});
         return;
     };
