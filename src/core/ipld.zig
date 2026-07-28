@@ -618,7 +618,7 @@ pub const BlockStore = struct {
         self.allocator.free(self.base_path);
     }
 
-    fn blockPath(io: std.Io, self: BlockStore, c: CID) ![]u8 {
+    fn blockPath(self: BlockStore, io: std.Io, c: CID) ![]u8 {
         const short = try c.toShort(self.allocator);
         defer self.allocator.free(short);
         const prefix = short[0..@min(2, short.len)];
