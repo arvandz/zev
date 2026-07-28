@@ -182,7 +182,7 @@ pub fn signCommitNode(
     defer existing.deinit(allocator);
     if (existing != .map) return error.NotAMap;
 
-    var arena = std.heap.ArenaAllocator.init(allocator, io, io, io, );
+    var arena = std.heap.ArenaAllocator.init(allocator);
     defer arena.deinit();
     const aa = arena.allocator();
 
@@ -224,7 +224,7 @@ pub fn verifyCID(
     const sig_b64 = node.getString("sig") orelse return VerifyResult{ .unsigned = .{} };
     const pk_b64 = node.getString("sig_pk") orelse return VerifyResult{ .unsigned = .{} };
 
-    var arena = std.heap.ArenaAllocator.init(allocator, io, io, io, );
+    var arena = std.heap.ArenaAllocator.init(allocator);
     defer arena.deinit();
     const aa = arena.allocator();
 
@@ -265,7 +265,7 @@ pub fn cmdSign(
     repo: *Repository,
     cid_str: []const u8,
 ) !void {
-    var store = try ipld.BlockStore.init(allocator, io, io, io, repo.path);
+    var store = try ipld.BlockStore.init(allocator, io, repo.path);
     defer store.deinit();
 
     const cid = ipld.CID.fromHex(cid_str) catch {
@@ -299,7 +299,7 @@ pub fn cmdVerify(
     repo: *Repository,
     cid_str: []const u8,
 ) !void {
-    var store = try ipld.BlockStore.init(allocator, io, io, io, repo.path);
+    var store = try ipld.BlockStore.init(allocator, io, repo.path);
     defer store.deinit();
 
     const cid = ipld.CID.fromHex(cid_str) catch {

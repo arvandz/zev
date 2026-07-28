@@ -435,8 +435,7 @@ pub fn snapshotRestore(allocator: std.mem.Allocator, repo: *Repository, name_or_
         std.debug.print("   Metrics were: {s}\n", .{snap.metrics_snapshot});
 }
 
-pub fn snapshotDiff(allocator: std.mem.Allocator,
-    io: std.Io, repo: *Repository, name_a: []const u8, name_b: []const u8) !void {
+pub fn snapshotDiff(allocator: std.mem.Allocator, repo: *Repository, name_a: []const u8, name_b: []const u8) !void {
     const id_a = (try resolveSnapshotId(allocator, repo, name_a)) orelse {
         std.debug.print("Error: Snapshot '{s}' not found\n", .{name_a});
         return;
@@ -461,9 +460,9 @@ pub fn snapshotDiff(allocator: std.mem.Allocator,
     if (snap_a.metrics_snapshot.len > 0 or snap_b.metrics_snapshot.len > 0) {
         std.debug.print("\n   Metric changes:\n", .{});
 
-        var map_a = std.StringHashMap([]const u8).init(allocator, io, io, io, );
+        var map_a = std.StringHashMap([]const u8).init(allocator);
         defer map_a.deinit();
-        var map_b = std.StringHashMap([]const u8).init(allocator, io, io, io, );
+        var map_b = std.StringHashMap([]const u8).init(allocator);
         defer map_b.deinit();
 
         var it_a = std.mem.splitSequence(u8, snap_a.metrics_snapshot, ";");
@@ -479,7 +478,7 @@ pub fn snapshotDiff(allocator: std.mem.Allocator,
             try map_b.put(kv[0..eq], kv[eq + 1 ..]);
         }
 
-        var all_keys = std.StringHashMap(bool).init(allocator, io, io, io, );
+        var all_keys = std.StringHashMap(bool).init(allocator);
         defer all_keys.deinit();
         var ka = map_a.iterator();
         while (ka.next()) |e| try all_keys.put(e.key_ptr.*, true);

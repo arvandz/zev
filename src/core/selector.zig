@@ -516,7 +516,7 @@ pub fn dagQuery(
     query_str: []const u8,
     output_format: []const u8,
 ) !void {
-    var store = try ipld.BlockStore.init(allocator, io, io, io, repo.path);
+    var store = try ipld.BlockStore.init(allocator, io, repo.path);
     defer store.deinit();
 
     std.debug.print("🔍 Query: {s}\n\n", .{query_str});

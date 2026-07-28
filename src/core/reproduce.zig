@@ -211,7 +211,7 @@ fn loadRunCommand(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, c
 }
 
 fn loadMetricsForHash(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, hash: []const u8) !std.StringHashMap(f64) {
-    var map = std.StringHashMap(f64).init(allocator, io, io, io, );
+    var map = std.StringHashMap(f64).init(allocator);
     const path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "metrics", hash });
     defer allocator.free(path);
     const content = std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(64 * 1024)) catch return map;
@@ -266,7 +266,7 @@ fn loadMetricsFromSnapshot(allocator: std.mem.Allocator, io: std.Io, repo: *Repo
             allocator.free(commit_hash);
             continue;
         }
-        var map = std.StringHashMap(f64).init(allocator, io, io, io, );
+        var map = std.StringHashMap(f64).init(allocator);
         var mi = std.mem.splitSequence(u8, metrics_raw, ";");
         while (mi.next()) |kv| {
             const eq = std.mem.indexOf(u8, kv, "=") orelse continue;
@@ -313,7 +313,7 @@ fn checkoutCommit(
 
     const tree_data = try repo.store.get(io, c.tree_cid);
     defer allocator.free(tree_data);
-    var t = try tree_mod.Tree.deserialize(allocator, io, tree_data);
+    var t = try tree_mod.Tree.deserialize(allocator, tree_data);
     defer t.deinit();
 
     var count: usize = 0;
@@ -334,10 +334,9 @@ fn checkoutCommit(
 
 fn parseMetricsFromOutput(
     allocator: std.mem.Allocator,
-    io: std.Io,
     output: []const u8,
 ) !std.StringHashMap(f64) {
-    var map = std.StringHashMap(f64).init(allocator, io, io, io, );
+    var map = std.StringHashMap(f64).init(allocator);
 
     var line_iter = std.mem.splitSequence(u8, output, "\n");
     while (line_iter.next()) |line| {
@@ -551,7 +550,8 @@ fn doReproduce(
     std.debug.print("   Completed in {d}ms, exit code: {d}\n\n", .{ elapsed_ms, exit_code });
 
     const output = output_buf[0..output_len];
-    var repro_metrics = try parseMetricsFromOutput(allocator, io, output);
+    var repro_metrics = try     var repro_metrics = try parseMetricsFromOutput(allocator, output);
+allocator, io, output);
     defer freeMetricsMap(allocator, &repro_metrics);
 
     const metrics_out_path = try std.fs.path.join(allocator, &.{ work_dir, "metrics.txt" });

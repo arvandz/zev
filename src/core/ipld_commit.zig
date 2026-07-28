@@ -167,7 +167,7 @@ pub fn textCommitToIPLD(
             metric_entries[i] = .{ .key = m.key, .value = m.value };
         }
 
-        var arena = std.heap.ArenaAllocator.init(allocator, io, io, io, );
+        var arena = std.heap.ArenaAllocator.init(allocator);
         defer arena.deinit();
         const aa = arena.allocator();
 
@@ -181,7 +181,7 @@ pub fn textCommitToIPLD(
         break :blk mcid;
     } else null;
 
-    var arena = std.heap.ArenaAllocator.init(allocator, io, io, io, );
+    var arena = std.heap.ArenaAllocator.init(allocator);
     defer arena.deinit();
     const aa = arena.allocator();
 
@@ -208,7 +208,7 @@ pub fn migrateCommitsToIPLD(
     io: std.Io,
     repo: *Repository,
 ) !void {
-    var store = try ipld.BlockStore.init(allocator, io, io, io, repo.path);
+    var store = try ipld.BlockStore.init(allocator, io, repo.path);
     defer store.deinit();
 
     const head_hash = try resolveHEAD(allocator, repo);
@@ -291,7 +291,7 @@ pub fn onNewCommit(
     repo: *Repository,
     commit_hash: []const u8,
 ) !void {
-    var store = try ipld.BlockStore.init(allocator, io, io, io, repo.path);
+    var store = try ipld.BlockStore.init(allocator, io, repo.path);
     defer store.deinit();
 
     const tc = readTextCommit(allocator, repo, commit_hash) catch return;
@@ -322,7 +322,7 @@ pub fn onMetricsSet(
     metric_key: []const u8,
     metric_value: f64,
 ) !void {
-    var store = try ipld.BlockStore.init(allocator, io, io, io, repo.path);
+    var store = try ipld.BlockStore.init(allocator, io, repo.path);
     defer store.deinit();
 
     const all_metrics = try readMetricsForCommit(allocator, repo, commit_hash);
@@ -346,7 +346,7 @@ pub fn onMetricsSet(
     const commit_cid_for_metrics = ipld.CID.fromHex(commit_hash) catch
         ipld.CID.raw(commit_hash);
 
-    var arena = std.heap.ArenaAllocator.init(allocator, io, io, io, );
+    var arena = std.heap.ArenaAllocator.init(allocator);
     defer arena.deinit();
     const aa = arena.allocator();
 
@@ -379,7 +379,7 @@ pub fn ipldLog(
     repo: *Repository,
     max_entries: usize,
 ) !void {
-    var store = try ipld.BlockStore.init(allocator, io, io, io, repo.path);
+    var store = try ipld.BlockStore.init(allocator, io, repo.path);
     defer store.deinit();
 
     const head_cid = loadIPLDHead(allocator, repo) catch blk: {

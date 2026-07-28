@@ -186,9 +186,9 @@ pub fn compareMetrics(allocator: std.mem.Allocator, io: std.Io, repo: *Repositor
     };
     defer allocator.free(content_b);
 
-    var map_a = std.StringHashMap([]const u8).init(allocator, io, io, io, );
+    var map_a = std.StringHashMap([]const u8).init(allocator);
     defer map_a.deinit();
-    var map_b = std.StringHashMap([]const u8).init(allocator, io, io, io, );
+    var map_b = std.StringHashMap([]const u8).init(allocator);
     defer map_b.deinit();
 
     var iter_a = std.mem.splitSequence(u8, content_a, "\n");

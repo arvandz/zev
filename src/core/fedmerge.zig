@@ -51,7 +51,7 @@ const MetricMap = struct {
     entries: std.StringHashMap(f64),
 
     pub fn init(allocator: std.mem.Allocator) MetricMap {
-        return .{ .entries = std.StringHashMap(f64).init(allocator, io, io, io, ) };
+        return .{ .entries = std.StringHashMap(f64).init(allocator) };
     }
 
     pub fn deinit(self: *MetricMap) void {
@@ -115,7 +115,7 @@ fn collectMetrics(
             }
         }
     }
-    var visited = std.StringHashMap(void).init(allocator, io, io, io, );
+    var visited = std.StringHashMap(void).init(allocator);
     defer {
         var it = visited.keyIterator();
         while (it.next()) |k| allocator.free(k.*);
@@ -269,7 +269,7 @@ pub fn mergeFromCar(
     dry_run: bool,
     sign_result: bool,
 ) !void {
-    var store = try ipld.BlockStore.init(allocator, io, io, io, repo.path);
+    var store = try ipld.BlockStore.init(allocator, io, repo.path);
     defer store.deinit();
 
     std.debug.print("🔀 Federated Merge\n\n", .{});
@@ -342,16 +342,16 @@ pub fn mergeFromCar(
     std.debug.print("   HEAD A (ours):   {s}\n", .{short_a});
     std.debug.print("   HEAD B (theirs): {s}\n\n", .{short_b});
 
-    var metrics_a = MetricMap.init(allocator, io, io, io, );
+    var metrics_a = MetricMap.init(allocator);
     defer metrics_a.deinit();
-    var metrics_b = MetricMap.init(allocator, io, io, io, );
+    var metrics_b = MetricMap.init(allocator);
     defer metrics_b.deinit();
 
     try collectMetrics(allocator, io, &store, head_a, &metrics_a);
     try collectMetrics(allocator, io, &store, head_b, &metrics_b);
 
     std.debug.print("📊 Metrics comparison:\n\n", .{});
-    var all_keys = std.StringHashMap(void).init(allocator, io, io, io, );
+    var all_keys = std.StringHashMap(void).init(allocator);
     defer all_keys.deinit();
     var it_a = metrics_a.entries.keyIterator();
     while (it_a.next()) |k| try all_keys.put(k.*, {});
@@ -431,7 +431,7 @@ pub fn mergeFromCar(
         .merged_by = &pk_str,
     };
 
-    var arena = std.heap.ArenaAllocator.init(allocator, io, io, io, );
+    var arena = std.heap.ArenaAllocator.init(allocator);
     defer arena.deinit();
     const aa = arena.allocator();
 

@@ -404,7 +404,7 @@ pub fn contextBlame(
     const dir_path = try contextDir(allocator, io, repo);
     defer allocator.free(dir_path);
 
-    var latest = std.StringHashMap(ContextRecord).init(allocator, io, io, io, );
+    var latest = std.StringHashMap(ContextRecord).init(allocator);
     defer {
         var it = latest.iterator();
         while (it.next()) |e| {
@@ -480,7 +480,7 @@ pub fn contextStats(
     const dir_path = try contextDir(allocator, io, repo);
     defer allocator.free(dir_path);
 
-    var model_counts = std.StringHashMap(usize).init(allocator, io, io, io, );
+    var model_counts = std.StringHashMap(usize).init(allocator);
     defer {
         var it = model_counts.iterator();
         while (it.next()) |e| allocator.free(e.key_ptr.*);
@@ -490,7 +490,7 @@ pub fn contextStats(
     var kind_counts: [4]usize = @splat(0);
     var total: usize = 0;
 
-    var file_models = std.StringHashMap([]u8).init(allocator, io, io, io, );
+    var file_models = std.StringHashMap([]u8).init(allocator);
     defer {
         var it = file_models.iterator();
         while (it.next()) |e| {
@@ -499,13 +499,13 @@ pub fn contextStats(
         }
         file_models.deinit();
     }
-    var file_kinds = std.StringHashMap(AuthorKind).init(allocator, io, io, io, );
+    var file_kinds = std.StringHashMap(AuthorKind).init(allocator);
     defer {
         var it = file_kinds.iterator();
         while (it.next()) |e| allocator.free(e.key_ptr.*);
         file_kinds.deinit();
     }
-    var file_ts = std.StringHashMap(i64).init(allocator, io, io, io, );
+    var file_ts = std.StringHashMap(i64).init(allocator);
     defer {
         var it = file_ts.iterator();
         while (it.next()) |e| allocator.free(e.key_ptr.*);
@@ -601,7 +601,7 @@ pub fn contextQuery(
     };
     defer dir.close(io);
 
-    var latest = std.StringHashMap(ContextRecord).init(allocator, io, io, io, );
+    var latest = std.StringHashMap(ContextRecord).init(allocator);
     defer {
         var it = latest.iterator();
         while (it.next()) |e| {

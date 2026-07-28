@@ -45,7 +45,7 @@ fn compareFloat(a: f64, op: CompareOp, b: f64) bool {
 }
 
 fn readMetricsForCommit(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, hash: []const u8) !std.StringHashMap(f64) {
-    var map = std.StringHashMap(f64).init(allocator, io, io, io, );
+    var map = std.StringHashMap(f64).init(allocator);
     const path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "metrics", hash });
     defer allocator.free(path);
 

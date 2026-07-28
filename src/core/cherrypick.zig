@@ -56,7 +56,7 @@ pub fn cherryPick(
     var current_tree = try getTree(allocator, repo, current_commit.tree_cid);
     defer current_tree.deinit();
 
-    var new_tree = tree_mod.Tree.init(allocator, io, io, io, );
+    var new_tree = tree_mod.Tree.init(allocator);
     defer new_tree.deinit();
 
     for (current_tree.entries.items) |entry| {
@@ -160,7 +160,7 @@ pub fn cherryPick(
 fn getTree(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, tree_cid: cid_mod.CID) !tree_mod.Tree {
     const tree_data = try repo.store.get(io, tree_cid);
     defer allocator.free(tree_data);
-    return try tree_mod.Tree.deserialize(allocator, io, tree_data);
+    return try tree_mod.Tree.deserialize(allocator, tree_data);
 }
 
 fn updateHead(allocator: std.mem.Allocator,

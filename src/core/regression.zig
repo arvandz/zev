@@ -557,7 +557,7 @@ pub fn cmdCheck(
     repo: *Repository,
     ref: []const u8,
 ) !u8 {
-    var store = try ipld.BlockStore.init(allocator, io, io, io, repo.path);
+    var store = try ipld.BlockStore.init(allocator, io, repo.path);
     defer store.deinit();
 
     std.debug.print("🔎 Regression check: {s}\n\n", .{ref});

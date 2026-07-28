@@ -250,7 +250,8 @@ fn diffPython(
         });
     }
 
-    try diffNumericAssignments(allocator, io, content_a, content_b, out);
+    try     try diffNumericAssignments(allocator, content_a, content_b, out);
+allocator, io, content_a, content_b, out);
 }
 
 fn extractPythonDefs(allocator: std.mem.Allocator, content: []const u8) ![][]u8 {
@@ -286,18 +287,17 @@ fn extractImports(allocator: std.mem.Allocator, content: []const u8) ![][]u8 {
 
 fn diffNumericAssignments(
     allocator: std.mem.Allocator,
-    io: std.Io,
     content_a: []const u8,
     content_b: []const u8,
     out: *std.ArrayList(SemanticChange),
 ) !void {
-    var map_a = std.StringHashMap(f64).init(allocator, io, io, io, );
+    var map_a = std.StringHashMap(f64).init(allocator);
     defer {
         var it = map_a.keyIterator();
         while (it.next()) |k| allocator.free(k.*);
         map_a.deinit();
     }
-    var map_b = std.StringHashMap(f64).init(allocator, io, io, io, );
+    var map_b = std.StringHashMap(f64).init(allocator);
     defer {
         var it = map_b.keyIterator();
         while (it.next()) |k| allocator.free(k.*);
@@ -355,7 +355,7 @@ fn diffConfig(
     content_b: []const u8,
     out: *std.ArrayList(SemanticChange),
 ) !void {
-    var map_a = std.StringHashMap([]u8).init(allocator, io, io, io, );
+    var map_a = std.StringHashMap([]u8).init(allocator);
     defer {
         var it = map_a.iterator();
         while (it.next()) |e| {
@@ -364,7 +364,7 @@ fn diffConfig(
         }
         map_a.deinit();
     }
-    var map_b = std.StringHashMap([]u8).init(allocator, io, io, io, );
+    var map_b = std.StringHashMap([]u8).init(allocator);
     defer {
         var it = map_b.iterator();
         while (it.next()) |e| {

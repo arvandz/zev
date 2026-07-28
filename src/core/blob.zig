@@ -87,7 +87,7 @@ test "blob creation" {
 test "blob store put and get" {
     const allocator = std.testing.allocator;
     const test_dir = "test_blobs";
-    var store = try BlobStore.init(allocator, std.testing.io, test_dir);
+    var store = try BlobStore.init(std.testing.io, allocator, test_dir);
     defer std.Io.Dir.cwd().deleteTree(std.testing.io, test_dir) catch {};
 
     const data = "test data for blob store";
@@ -103,7 +103,7 @@ test "blob store has" {
     const allocator = std.testing.allocator;
     const test_dir = "test_blobs_has";
 
-    var store = try BlobStore.init(allocator, std.testing.io, test_dir);
+    var store = try BlobStore.init(std.testing.io, allocator, test_dir);
     defer std.Io.Dir.cwd().deleteTree(std.testing.io, test_dir) catch {};
 
     const data = "test data";

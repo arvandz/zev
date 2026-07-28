@@ -67,7 +67,7 @@ pub fn main(init: std.process.Init) !void {
             use_ipfs = true;
         }
 
-        var repo = try repository.Repository.init(allocator, io, io, io, io, path, use_ipfs);
+        var repo = try repository.Repository.init(allocator, io, path, use_ipfs);
 
         defer repo.deinit();
 
@@ -278,7 +278,7 @@ pub fn main(init: std.process.Init) !void {
             return;
         }
 
-        var file_tree = tree.Tree.init(allocator, io, io, io, );
+        var file_tree = tree.Tree.init(allocator);
         defer file_tree.deinit();
 
         const commit_cid = try repo.createCommit(io, author, message, &file_tree);
@@ -553,7 +553,7 @@ pub fn main(init: std.process.Init) !void {
         }
 
         const subcommand = args[2];
-        var ipfs_client = ipfs.IPFSClient.init(allocator, io, io, io, "http://127.0.0.1:5001");
+        var ipfs_client = ipfs.IPFSClient.init(allocator, "http://127.0.0.1:5001");
 
         if (std.mem.eql(u8, subcommand, "status")) {
             const version_str = ipfs_client.version(io, ) catch |err| {
@@ -696,7 +696,8 @@ pub fn main(init: std.process.Init) !void {
 
         const max_count = if (args.len >= 3) try std.fmt.parseInt(usize, args[2], 10) else 10;
 
-        try log.printLog(allocator, io, &repo.store, head_cid, max_count);
+        try log.        try log.printLog(allocator, &repo.store, head_cid, max_count);
+allocator, io, &repo.store, head_cid, max_count);
     } else if (std.mem.eql(u8, command, "status")) {
         if (!repository.Repository.exists(allocator, io, ".")) {
             std.debug.print("Not a zev repository.\n", .{});
@@ -2116,7 +2117,8 @@ pub fn main(init: std.process.Init) !void {
                 std.debug.print("Usage: zev snapshot diff <name-a> <name-b>\n", .{});
                 return;
             }
-            try snapshot_mod.snapshotDiff(allocator, io, &repo, args[3], args[4]);
+            try snapshot_mod.            try snapshot_mod.snapshotDiff(allocator, &repo, args[3], args[4]);
+allocator, io, &repo, args[3], args[4]);
         } else {
             std.debug.print("Unknown snapshot subcommand: {s}\n", .{sub});
         }

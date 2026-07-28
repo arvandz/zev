@@ -30,7 +30,7 @@ fn collectReachable(
         return;
     } else |_| {}
 
-    if (tree_mod.Tree.deserialize(allocator, io, data)) |*tree| {
+    if (tree_mod.Tree.deserialize(allocator, data)) |*tree| {
         var t = tree.*;
         defer t.deinit();
         for (t.entries.items) |entry| {
@@ -135,7 +135,7 @@ pub fn runGC(allocator: std.mem.Allocator,
         .bytes_freed = 0,
     };
 
-    var reachable = std.AutoHashMap([32]u8, void).init(allocator, io, io, io, );
+    var reachable = std.AutoHashMap([32]u8, void).init(allocator);
     defer reachable.deinit();
 
     std.debug.print("🔍 Scanning reachable objects...\n", .{});

@@ -13,7 +13,6 @@ pub const RebaseResult = enum {
 
 fn collectCommits(
     allocator: std.mem.Allocator,
-    io: std.Io,
     store: *blob_mod.BlobStore,
     start: cid_mod.CID,
     base: cid_mod.CID,
@@ -49,7 +48,7 @@ fn findCommonAncestor(
     a: cid_mod.CID,
     b: cid_mod.CID,
 ) !?cid_mod.CID {
-    var a_ancestors = std.AutoHashMap([32]u8, void).init(allocator, io, io, io, );
+    var a_ancestors = std.AutoHashMap([32]u8, void).init(allocator);
     defer a_ancestors.deinit();
 
     var current = a;
@@ -122,7 +121,7 @@ fn copyTreeObjects(
     const tree_data = repo.store.get(io, tree_cid) catch return;
     defer allocator.free(tree_data);
 
-    var t = tree_mod.Tree.deserialize(allocator, io, tree_data) catch return;
+    var t = tree_mod.Tree.deserialize(allocator, tree_data) catch return;
     defer t.deinit();
 
     for (t.entries.items) |entry| {

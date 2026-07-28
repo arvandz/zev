@@ -8,7 +8,7 @@ pub fn dagShow(
     repo: *Repository,
     cid_str: []const u8,
 ) !void {
-    var store = try ipld.BlockStore.init(allocator, io, io, io, repo.path);
+    var store = try ipld.BlockStore.init(allocator, io, repo.path);
     defer store.deinit();
 
     const c = parseCID(cid_str) catch {
@@ -40,7 +40,7 @@ pub fn dagWalk(
     cid_str: []const u8,
     max_depth: usize,
 ) !void {
-    var store = try ipld.BlockStore.init(allocator, io, io, io, repo.path);
+    var store = try ipld.BlockStore.init(allocator, io, repo.path);
     defer store.deinit();
 
     const c = parseCID(cid_str) catch {
@@ -110,7 +110,7 @@ pub fn dagPut(
     repo: *Repository,
     file_path: []const u8,
 ) !void {
-    var store = try ipld.BlockStore.init(allocator, io, io, io, repo.path);
+    var store = try ipld.BlockStore.init(allocator, io, repo.path);
     defer store.deinit();
 
     const data = std.Io.Dir.cwd().readFileAlloc(io, file_path, allocator, .limited(64 * 1024 * 1024)) catch |err| {
@@ -144,13 +144,13 @@ pub fn dagPut(
 }
 
 pub fn dagStat(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) !void {
-    var store = try ipld.BlockStore.init(allocator, io, io, io, repo.path);
+    var store = try ipld.BlockStore.init(allocator, io, repo.path);
     defer store.deinit();
 
     const block_count = store.count(io, );
 
     var total_bytes: u64 = 0;
-    var by_type = std.StringHashMap(usize).init(allocator, io, io, io, );
+    var by_type = std.StringHashMap(usize).init(allocator);
     defer {
         var it = by_type.iterator();
         while (it.next()) |e| allocator.free(e.key_ptr.*);
@@ -240,7 +240,7 @@ pub fn graftAdd(
         return;
     };
 
-    var store = try ipld.BlockStore.init(allocator, io, io, io, repo.path);
+    var store = try ipld.BlockStore.init(allocator, io, repo.path);
     defer store.deinit();
 
     const config_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "config" });
@@ -263,7 +263,7 @@ pub fn graftAdd(
         .grafted_by = author,
     };
 
-    var arena = std.heap.ArenaAllocator.init(allocator, io, io, io, );
+    var arena = std.heap.ArenaAllocator.init(allocator);
     defer arena.deinit();
     const aa = arena.allocator();
     const graft_val = try graft.toValue(aa);

@@ -157,7 +157,7 @@ pub fn loadConfig(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) !
 }
 
 fn loadMetricsForHash(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, hash: []const u8) !std.StringHashMap(f64) {
-    var map = std.StringHashMap(f64).init(allocator, io, io, io, );
+    var map = std.StringHashMap(f64).init(allocator);
     const path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "metrics", hash });
     defer allocator.free(path);
     const content = std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(64 * 1024)) catch return map;
@@ -211,7 +211,7 @@ fn loadMetricsFromSnapshot(allocator: std.mem.Allocator, io: std.Io, repo: *Repo
             }
         }
         if (!std.mem.eql(u8, snap_name, name)) continue;
-        var map = std.StringHashMap(f64).init(allocator, io, io, io, );
+        var map = std.StringHashMap(f64).init(allocator);
         var mi = std.mem.splitSequence(u8, metrics_raw, ";");
         while (mi.next()) |kv| {
             const eq = std.mem.indexOf(u8, kv, "=") orelse continue;

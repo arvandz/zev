@@ -445,7 +445,7 @@ pub fn archiveInfo(allocator: std.mem.Allocator, io: std.Io, archive_path: []con
     std.debug.print("   Source:   {s}\n", .{src_repo});
     std.debug.print("   Files:    {d}\n\n", .{file_count});
 
-    var counts = std.StringHashMap(usize).init(allocator, io, io, io, );
+    var counts = std.StringHashMap(usize).init(allocator);
     defer counts.deinit();
     var total_size: u64 = 0;
 

@@ -19,7 +19,7 @@ pub const IgnoreList = struct {
     }
 
     pub fn loadFromFile(allocator: std.mem.Allocator, io: std.Io, repo_path: []const u8) !IgnoreList {
-        var list = IgnoreList.init(allocator, io, io, io, );
+        var list = IgnoreList.init(allocator);
         errdefer list.deinit();
         try list.patterns.append(allocator, try allocator.dupe(u8, ".zev"));
         const ignore_path = try std.fs.path.join(allocator, &.{ repo_path, ".zevignore" });
@@ -50,7 +50,7 @@ pub const IgnoreList = struct {
     }
 
     pub fn loadDefault(allocator: std.mem.Allocator) !IgnoreList {
-        var list = IgnoreList.init(allocator, io, io, io, );
+        var list = IgnoreList.init(allocator);
         errdefer list.deinit();
         try list.patterns.append(allocator, try allocator.dupe(u8, ".zev"));
         return list;

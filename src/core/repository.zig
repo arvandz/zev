@@ -35,7 +35,7 @@ pub const Repository = struct {
         try head_writer.interface.writeAll("ref: refs/heads/main\n");
         try head_writer.flush();
 
-        var repo_config = config_mod.Config.init(allocator, io, io, io, );
+        var repo_config = config_mod.Config.init(allocator);
         if (use_ipfs) {
             repo_config.storage_backend = .hybrid;
             repo_config.ipfs_enabled = true;

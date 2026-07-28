@@ -107,8 +107,8 @@ pub const Commit = struct {
 test "commit serialization" {
     const allocator = std.testing.allocator;
 
-    const tree_cid = cid.CID.fromBytes("test tree");
-    const commit = Commit.init(io, std.testing.io, tree_cid, null, "Test Author", "Initial commit");
+    const tree_cid = cid.CID.fromBytes(io, "test tree");
+    const commit = Commit.init(std.testing.io, tree_cid, null, "Test Author", "Initial commit");
 
     const serialized = try commit.serialize(allocator);
     defer allocator.free(serialized);
