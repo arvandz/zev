@@ -348,7 +348,6 @@ fn extractNumericAssigns(
 
 fn diffConfig(
     allocator: std.mem.Allocator,
-    io: std.Io,
     content_a: []const u8,
     content_b: []const u8,
     out: *std.ArrayList(SemanticChange),
@@ -552,7 +551,8 @@ pub fn diffTrees(
         if (content_a != null and content_b != null) {
             switch (ftype) {
                 .python => try diffPython(allocator, content_a.?, content_b.?, &semantic),
-                .json, .yaml, .toml => try diffConfig(allocator, io, content_a.?, content_b.?, &semantic),
+                .json, .yaml, .toml => try                 .json, .yaml, .toml => try diffConfig(allocator, content_a.?, content_b.?, &semantic),
+allocator, io, content_a.?, content_b.?, &semantic),
                 .text, .markdown => try diffText(allocator, content_a.?, content_b.?, &semantic),
                 .binary => try semantic.append(allocator, .{
                     .kind = .binary_changed,
