@@ -241,7 +241,7 @@ fn iterateRecords(
     defer dir.close(io);
 
     var it = dir.iterate();
-    while (try it.next()) |entry| {
+    while (try it.next(io)) |entry| {
         if (entry.kind != .file) continue;
         const path = try std.fs.path.join(allocator, &.{ dir_path, entry.name });
         defer allocator.free(path);
@@ -342,7 +342,7 @@ pub fn contextShow(
     }
 
     var it = dir.iterate();
-    while (try it.next()) |entry| {
+    while (try it.next(io)) |entry| {
         if (entry.kind != .file) continue;
         const path = try std.fs.path.join(allocator, &.{ dir_path, entry.name });
         defer allocator.free(path);
@@ -407,7 +407,7 @@ pub fn contextBlame(
     var latest = std.StringHashMap(ContextRecord).init(allocator);
     defer {
         var it = latest.iterator();
-        while (it.next()) |e| {
+        while (it.next(io)) |e| {
             allocator.free(e.key_ptr.*);
             freeRecord(allocator, e.value_ptr.*);
         }
@@ -422,7 +422,7 @@ pub fn contextBlame(
     defer dir.close(io);
 
     var it = dir.iterate();
-    while (try it.next()) |entry| {
+    while (try it.next(io)) |entry| {
         if (entry.kind != .file) continue;
         const path = try std.fs.path.join(allocator, &.{ dir_path, entry.name });
         defer allocator.free(path);
@@ -483,7 +483,7 @@ pub fn contextStats(
     var model_counts = std.StringHashMap(usize).init(allocator);
     defer {
         var it = model_counts.iterator();
-        while (it.next()) |e| allocator.free(e.key_ptr.*);
+        while (it.next(io)) |e| allocator.free(e.key_ptr.*);
         model_counts.deinit();
     }
 
@@ -493,7 +493,7 @@ pub fn contextStats(
     var file_models = std.StringHashMap([]u8).init(allocator);
     defer {
         var it = file_models.iterator();
-        while (it.next()) |e| {
+        while (it.next(io)) |e| {
             allocator.free(e.key_ptr.*);
             allocator.free(e.value_ptr.*);
         }
@@ -502,13 +502,13 @@ pub fn contextStats(
     var file_kinds = std.StringHashMap(AuthorKind).init(allocator);
     defer {
         var it = file_kinds.iterator();
-        while (it.next()) |e| allocator.free(e.key_ptr.*);
+        while (it.next(io)) |e| allocator.free(e.key_ptr.*);
         file_kinds.deinit();
     }
     var file_ts = std.StringHashMap(i64).init(allocator);
     defer {
         var it = file_ts.iterator();
-        while (it.next()) |e| allocator.free(e.key_ptr.*);
+        while (it.next(io)) |e| allocator.free(e.key_ptr.*);
         file_ts.deinit();
     }
 
@@ -519,7 +519,7 @@ pub fn contextStats(
     defer dir.close(io);
 
     var it = dir.iterate();
-    while (try it.next()) |entry| {
+    while (try it.next(io)) |entry| {
         if (entry.kind != .file) continue;
         const path = try std.fs.path.join(allocator, &.{ dir_path, entry.name });
         defer allocator.free(path);
@@ -604,7 +604,7 @@ pub fn contextQuery(
     var latest = std.StringHashMap(ContextRecord).init(allocator);
     defer {
         var it = latest.iterator();
-        while (it.next()) |e| {
+        while (it.next(io)) |e| {
             allocator.free(e.key_ptr.*);
             freeRecord(allocator, e.value_ptr.*);
         }
@@ -612,7 +612,7 @@ pub fn contextQuery(
     }
 
     var it = dir.iterate();
-    while (try it.next()) |entry| {
+    while (try it.next(io)) |entry| {
         if (entry.kind != .file) continue;
         const path = try std.fs.path.join(allocator, &.{ dir_path, entry.name });
         defer allocator.free(path);
@@ -679,7 +679,7 @@ pub fn contextList(allocator: std.mem.Allocator,
     var count: usize = 0;
 
     var it = dir.iterate();
-    while (try it.next()) |entry| {
+    while (try it.next(io)) |entry| {
         if (entry.kind != .file) continue;
         const path = try std.fs.path.join(allocator, &.{ dir_path, entry.name });
         defer allocator.free(path);

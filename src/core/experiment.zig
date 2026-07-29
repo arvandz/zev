@@ -295,7 +295,7 @@ pub fn experimentList(allocator: std.mem.Allocator,
     var found: usize = 0;
 
     var iter = dir.iterate();
-    while (try iter.next()) |entry| {
+    while (try iter.next(io)) |entry| {
         if (std.mem.endsWith(u8, entry.name, ".results")) continue;
         if (entry.kind != .file) continue;
 

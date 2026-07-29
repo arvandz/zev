@@ -153,14 +153,14 @@ pub fn dagStat(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) !voi
     var by_type = std.StringHashMap(usize).init(allocator);
     defer {
         var it = by_type.iterator();
-        while (it.next()) |e| allocator.free(e.key_ptr.*);
+        while (it.next(io)) |e| allocator.free(e.key_ptr.*);
         by_type.deinit();
     }
 
     const ipld_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "ipld" });
     defer allocator.free(ipld_path);
 
-    var root_dir = std.Io.Dir.cwd().openDir(ipld_path, .{ .iterate = true }) catch {
+    var root_dir = std.Io.Dir.cwd().openDir(io, ipld_path, .{ .iterate = true }) catch {
         std.debug.print("📊 IPLD Block Store\n\n   No blocks yet.\n\n", .{});
         std.debug.print("   Blocks are created automatically when you use:\n", .{});
         std.debug.print("   zev dag put <file>\n", .{});
@@ -170,14 +170,14 @@ pub fn dagStat(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) !voi
     defer root_dir.close(io);
 
     var root_it = root_dir.iterate();
-    while (try root_it.next()) |shard_entry| {
+    while (try root_it.next(io)) |shard_entry| {
         if (shard_entry.kind != .directory) continue;
         const shard_path = try std.fs.path.join(allocator, &.{ ipld_path, shard_entry.name });
         defer allocator.free(shard_path);
         var shard_dir = std.Io.Dir.cwd().openDir(io, shard_path, .{ .iterate = true }) catch continue;
         defer shard_dir.close(io);
         var shard_it = shard_dir.iterate();
-        while (try shard_it.next()) |block_entry| {
+        while (try shard_it.next(io)) |block_entry| {
             if (block_entry.kind != .file) continue;
             const block_path = try std.fs.path.join(allocator, &.{ shard_path, block_entry.name });
             defer allocator.free(block_path);
@@ -217,7 +217,7 @@ pub fn dagStat(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) !voi
     if (by_type.count(io, ) > 0) {
         std.debug.print("   By type:\n", .{});
         var it = by_type.iterator();
-        while (it.next()) |entry| {
+        while (it.next(io)) |entry| {
             std.debug.print("   {s:<20} {d}\n", .{ entry.key_ptr.*, entry.value_ptr.* });
         }
         std.debug.print("\n", .{});
@@ -315,7 +315,7 @@ pub fn graftList(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) !v
 
     var count: usize = 0;
     var it = dir.iterate();
-    while (try it.next()) |entry| {
+    while (try it.next(io)) |entry| {
         if (entry.kind != .file) continue;
         const path = try std.fs.path.join(allocator, &.{ graft_path, entry.name });
         defer allocator.free(path);

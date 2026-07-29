@@ -135,7 +135,7 @@ fn collectMetricsForCommit(
             var cdir = dir.*;
             defer cdir.close(io);
             var cit = cdir.iterate();
-            while (cit.next() catch null) |entry| {
+            while (cit.next(io) catch null) |entry| {
                 if (entry.kind != .file) continue;
                 const ep = try std.fs.path.join(allocator, &.{ cd_path, entry.name });
                 defer allocator.free(ep);
@@ -155,14 +155,14 @@ fn collectMetricsForCommit(
     defer root_dir.close(io);
 
     var rit = root_dir.iterate();
-    while (try rit.next()) |shard| {
+    while (try rit.next(io)) |shard| {
         if (shard.kind != .directory) continue;
         const sp = try std.fs.path.join(allocator, &.{ store.base_path, shard.name });
         defer allocator.free(sp);
         var sd = std.Io.Dir.cwd().openDir(io, sp, .{ .iterate = true }) catch continue;
         defer sd.close(io);
         var si = sd.iterate();
-        while (try si.next()) |block| {
+        while (try si.next(io)) |block| {
             if (block.kind != .file) continue;
             const c = ipld.CID.fromHex(block.name) catch continue;
             const v = store.getNode(allocator, c) catch continue;

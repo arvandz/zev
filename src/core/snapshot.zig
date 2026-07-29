@@ -170,7 +170,7 @@ fn resolveSnapshotId(allocator: std.mem.Allocator, io: std.Io, repo: *Repository
     defer dir.close(io);
 
     var it = dir.iterate();
-    while (try it.next()) |entry| {
+    while (try it.next(io)) |entry| {
         if (!std.mem.endsWith(u8, entry.name, ".name")) continue;
         const full_path = try std.fs.path.join(allocator, &.{ dir_path, entry.name });
         defer allocator.free(full_path);
@@ -328,7 +328,7 @@ pub fn snapshotList(allocator: std.mem.Allocator,
     var count: usize = 0;
 
     var iter = dir.iterate();
-    while (try iter.next()) |entry| {
+    while (try iter.next(io)) |entry| {
         if (entry.kind != .file) continue;
         if (std.mem.endsWith(u8, entry.name, ".name")) continue;
 

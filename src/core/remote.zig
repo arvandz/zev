@@ -116,7 +116,7 @@ pub fn listRemotes(allocator: std.mem.Allocator,
     defer remotes_dir.close(io);
 
     var iterator = remotes_dir.iterate();
-    while (try iterator.next()) |entry| {
+    while (try iterator.next(io)) |entry| {
         if (entry.kind != .file) continue;
 
         const url = try getRemote(allocator, repo, entry.name);

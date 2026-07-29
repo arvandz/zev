@@ -638,18 +638,18 @@ fn scanAllBlocks(
 ) !void {
     const ipld_path = store.base_path;
 
-    var root_dir = std.Io.Dir.cwd().openDir(ipld_path, .{ .iterate = true }) catch return;
+    var root_dir = std.Io.Dir.cwd().openDir(io, ipld_path, .{ .iterate = true }) catch return;
     defer root_dir.close(io);
 
     var root_it = root_dir.iterate();
-    while (try root_it.next()) |shard_entry| {
+    while (try root_it.next(io)) |shard_entry| {
         if (shard_entry.kind != .directory) continue;
         const shard_path = try std.fs.path.join(allocator, &.{ ipld_path, shard_entry.name });
         defer allocator.free(shard_path);
         var shard_dir = std.Io.Dir.cwd().openDir(io, shard_path, .{ .iterate = true }) catch continue;
         defer shard_dir.close(io);
         var shard_it = shard_dir.iterate();
-        while (try shard_it.next()) |block_entry| {
+        while (try shard_it.next(io)) |block_entry| {
             if (block_entry.kind != .file) continue;
             const c = ipld.CID.fromHex(block_entry.name) catch continue;
             try engine.walk(c, sel, "", 0);

@@ -339,7 +339,7 @@ fn findSnapshotById(allocator: std.mem.Allocator,
     defer dir.close(io);
 
     var it = dir.iterate();
-    while (try it.next()) |entry| {
+    while (try it.next(io)) |entry| {
         if (!std.mem.endsWith(u8, entry.name, ".name")) continue;
         const full = try std.fs.path.join(allocator, &.{ dir_path, entry.name });
         defer allocator.free(full);

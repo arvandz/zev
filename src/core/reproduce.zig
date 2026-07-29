@@ -456,7 +456,7 @@ fn doReproduce(
         var wd = std.Io.Dir.cwd().openDir(io, work_dir, .{ .iterate = true }) catch return;
         defer wd.close(io);
         var wdit = wd.iterate();
-        while (try wdit.next()) |e| {
+        while (try wdit.next(io)) |e| {
             std.debug.print("   - {s}\n", .{e.name});
         }
         return;
@@ -508,7 +508,7 @@ fn doReproduce(
         var repo_dir = std.Io.Dir.cwd().openDir(io, repo.path, .{ .iterate = true }) catch unreachable;
         defer repo_dir.close(io);
         var rdit = repo_dir.iterate();
-        while (try rdit.next()) |entry| {
+        while (try rdit.next(io)) |entry| {
             if (entry.kind != .file) continue;
             if (std.mem.startsWith(u8, entry.name, ".")) continue;
             const src = try std.fs.path.join(allocator, &.{ repo.path, entry.name });
@@ -739,7 +739,7 @@ pub fn reproduceStatus(allocator: std.mem.Allocator, io: std.Io, repo: *Reposito
         entries.deinit(allocator);
     }
     var it = d.iterate();
-    while (try it.next()) |entry| {
+    while (try it.next(io)) |entry| {
         if (entry.kind != .file) continue;
         try entries.append(allocator, try allocator.dupe(u8, entry.name));
     }

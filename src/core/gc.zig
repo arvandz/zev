@@ -53,7 +53,7 @@ fn collectAllReachable(
     defer dir.close(io);
 
     var it = dir.iterate();
-    while (try it.next()) |entry| {
+    while (try it.next(io)) |entry| {
         if (entry.kind != .file) continue;
 
         const ref_path = try std.fs.path.join(allocator, &.{ heads_path, entry.name });
@@ -87,7 +87,7 @@ fn collectAllReachable(
     defer tags_dir.close(io);
 
     var tags_it = tags_dir.iterate();
-    while (try tags_it.next()) |entry| {
+    while (try tags_it.next(io)) |entry| {
         if (entry.kind != .file) continue;
 
         const tag_path = try std.fs.path.join(allocator, &.{ tags_path, entry.name });
@@ -151,7 +151,7 @@ pub fn runGC(allocator: std.mem.Allocator,
     defer objects_dir.close(io);
 
     var obj_it = objects_dir.iterate();
-    while (try obj_it.next()) |obj_entry| {
+    while (try obj_it.next(io)) |obj_entry| {
         if (obj_entry.kind != .file) continue;
         if (obj_entry.name.len != 64) continue;
         result.objects_checked += 1;

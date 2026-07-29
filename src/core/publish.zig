@@ -469,7 +469,7 @@ pub fn publishSnapshot(
 
     var found_id: ?[]u8 = null;
     var it = snap_dir.iterate();
-    while (try it.next()) |entry| {
+    while (try it.next(io)) |entry| {
         if (!std.mem.endsWith(u8, entry.name, ".name")) continue;
         const full = try std.fs.path.join(allocator, &.{ snap_dir_path, entry.name });
         defer allocator.free(full);

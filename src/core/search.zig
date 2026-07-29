@@ -140,7 +140,7 @@ pub fn searchExperiments(allocator: std.mem.Allocator, io: std.Io, repo: *Reposi
 
     var found: usize = 0;
     var it = dir.iterate();
-    while (try it.next()) |entry| {
+    while (try it.next(io)) |entry| {
         if (entry.kind != .file) continue;
         if (std.mem.endsWith(u8, entry.name, ".results")) continue;
 
@@ -311,7 +311,7 @@ pub fn searchLineage(allocator: std.mem.Allocator, io: std.Io, repo: *Repository
 
     var found: usize = 0;
     var it = dir.iterate();
-    while (try it.next()) |entry| {
+    while (try it.next(io)) |entry| {
         if (entry.kind != .file) continue;
 
         const path = try std.fs.path.join(allocator, &.{ dir_path, entry.name });
@@ -398,7 +398,7 @@ pub fn searchSnapshots(allocator: std.mem.Allocator, io: std.Io, repo: *Reposito
 
     var found: usize = 0;
     var it = dir.iterate();
-    while (try it.next()) |entry| {
+    while (try it.next(io)) |entry| {
         if (entry.kind != .file) continue;
         if (std.mem.endsWith(u8, entry.name, ".name")) continue;
 

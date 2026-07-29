@@ -84,7 +84,7 @@ fn findObject(
     var dir = try std.Io.Dir.cwd().openDir(io, objects_dir, .{ .iterate = true });
     defer dir.close(io);
     var it = dir.iterate();
-    while (try it.next()) |entry| {
+    while (try it.next(io)) |entry| {
         if (std.mem.startsWith(u8, entry.name, hash_prefix[0..@min(hash_prefix.len, 16)])) {
             return std.fs.path.join(allocator, &.{ objects_dir, entry.name });
         }

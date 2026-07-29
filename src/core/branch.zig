@@ -91,7 +91,7 @@ pub fn listBranches(allocator: std.mem.Allocator,
     defer allocator.free(current_branch);
 
     var iterator = heads_dir.iterate();
-    while (try iterator.next()) |entry| {
+    while (try iterator.next(io)) |entry| {
         if (entry.kind != .file) continue;
 
         const is_current = std.mem.eql(u8, entry.name, current_branch);

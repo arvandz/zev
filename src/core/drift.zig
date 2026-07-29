@@ -190,7 +190,7 @@ fn loadMetricsFromSnapshot(allocator: std.mem.Allocator, io: std.Io, repo: *Repo
     var dir = std.Io.Dir.cwd().openDir(io, dir_path, .{ .iterate = true }) catch return null;
     defer dir.close(io);
     var it = dir.iterate();
-    while (try it.next()) |entry| {
+    while (try it.next(io)) |entry| {
         if (entry.kind != .file or std.mem.endsWith(u8, entry.name, ".name")) continue;
         const path = try std.fs.path.join(allocator, &.{ dir_path, entry.name });
         defer allocator.free(path);
@@ -529,7 +529,7 @@ pub fn driftHistory(allocator: std.mem.Allocator, io: std.Io, repo: *Repository,
         entries.deinit(allocator);
     }
     var it = d.iterate();
-    while (try it.next()) |entry| {
+    while (try it.next(io)) |entry| {
         if (entry.kind != .file) continue;
         try entries.append(allocator, try allocator.dupe(u8, entry.name));
     }

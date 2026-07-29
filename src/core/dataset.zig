@@ -575,7 +575,7 @@ pub fn datasetLineage(
 
     var total: usize = 0;
     var it = dir.iterate();
-    while (try it.next()) |entry| {
+    while (try it.next(io)) |entry| {
         if (entry.kind != .file) continue;
         const path = try std.fs.path.join(allocator, &.{ assign_dir_path, entry.name });
         defer allocator.free(path);
@@ -650,7 +650,7 @@ pub fn datasetImpact(
     var total: usize = 0;
 
     var it = dir.iterate();
-    while (try it.next()) |entry| {
+    while (try it.next(io)) |entry| {
         if (entry.kind != .file) continue;
         total += 1;
         const path = try std.fs.path.join(allocator, &.{ assign_dir_path, entry.name });
@@ -708,7 +708,7 @@ pub fn datasetList(allocator: std.mem.Allocator,
     var count: usize = 0;
 
     var it = dir.iterate();
-    while (try it.next()) |entry| {
+    while (try it.next(io)) |entry| {
         if (entry.kind != .directory) continue;
         const meta_path = try std.fs.path.join(allocator, &.{ dir_path, entry.name, "dataset.meta" });
         defer allocator.free(meta_path);

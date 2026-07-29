@@ -108,7 +108,7 @@ pub fn listHooks(allocator: std.mem.Allocator,
 
     var found_any = false;
     var it = dir.iterate();
-    while (try it.next()) |entry| {
+    while (try it.next(io)) |entry| {
         if (entry.kind == .file) {
             found_any = true;
             const hook_path = try std.fs.path.join(allocator, &.{ hooks_dir, entry.name });

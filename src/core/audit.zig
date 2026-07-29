@@ -177,7 +177,7 @@ fn collectSnapshots(
     defer dir.close(io);
 
     var it = dir.iterate();
-    while (try it.next()) |entry| {
+    while (try it.next(io)) |entry| {
         if (entry.kind != .file or std.mem.endsWith(u8, entry.name, ".name")) continue;
         const path = try std.fs.path.join(allocator, &.{ dir_path, entry.name });
         defer allocator.free(path);
@@ -246,7 +246,7 @@ fn collectNotarizations(
     defer dir.close(io);
 
     var it = dir.iterate();
-    while (try it.next()) |entry| {
+    while (try it.next(io)) |entry| {
         if (entry.kind != .file) continue;
         const path = try std.fs.path.join(allocator, &.{ dir_path, entry.name });
         defer allocator.free(path);
@@ -307,7 +307,7 @@ fn collectDriftHistory(
     defer dir.close(io);
 
     var it = dir.iterate();
-    while (try it.next()) |entry| {
+    while (try it.next(io)) |entry| {
         if (entry.kind != .file) continue;
         const path = try std.fs.path.join(allocator, &.{ dir_path, entry.name });
         defer allocator.free(path);
@@ -361,7 +361,7 @@ fn collectReproductions(
     defer dir.close(io);
 
     var it = dir.iterate();
-    while (try it.next()) |entry| {
+    while (try it.next(io)) |entry| {
         if (entry.kind != .file) continue;
         const path = try std.fs.path.join(allocator, &.{ dir_path, entry.name });
         defer allocator.free(path);
@@ -422,7 +422,7 @@ fn collectExperiments(
     defer dir.close(io);
 
     var it = dir.iterate();
-    while (try it.next()) |entry| {
+    while (try it.next(io)) |entry| {
         if (entry.kind != .file) continue;
         const path = try std.fs.path.join(allocator, &.{ dir_path, entry.name });
         defer allocator.free(path);
@@ -479,7 +479,7 @@ fn collectContext(
     var dir = std.Io.Dir.cwd().openDir(io, dir_path, .{ .iterate = true }) catch return;
     defer dir.close(io);
     var it = dir.iterate();
-    while (try it.next()) |entry| {
+    while (try it.next(io)) |entry| {
         if (entry.kind != .file) continue;
         const path = try std.fs.path.join(allocator, &.{ dir_path, entry.name });
         defer allocator.free(path);

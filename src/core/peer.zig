@@ -258,7 +258,7 @@ fn buildManifest(allocator: std.mem.Allocator,
         var dir = std.Io.Dir.cwd().openDir(io, dir_path, .{ .iterate = true }) catch continue;
         defer dir.close(io);
         var it = dir.iterate();
-        while (try it.next()) |entry| {
+        while (try it.next(io)) |entry| {
             if (entry.kind != .file) continue;
             const line = try std.fmt.allocPrint(allocator, "{s}/{s}\n", .{ d, entry.name });
             defer allocator.free(line);
@@ -273,7 +273,7 @@ fn buildManifest(allocator: std.mem.Allocator,
     };
     defer heads_dir.close(io);
     var hit = heads_dir.iterate();
-    while (try hit.next()) |entry| {
+    while (try hit.next(io)) |entry| {
         if (entry.kind != .file) continue;
         const line = try std.fmt.allocPrint(allocator, "refs/heads/{s}\n", .{entry.name});
         defer allocator.free(line);

@@ -351,7 +351,7 @@ pub fn lineageList(allocator: std.mem.Allocator,
     var total: usize = 0;
 
     var iter = dir.iterate();
-    while (try iter.next()) |entry| {
+    while (try iter.next(io)) |entry| {
         if (entry.kind != .file) continue;
 
         const node = (try loadNode(allocator, repo, entry.name)) orelse continue;
@@ -400,7 +400,7 @@ pub fn lineageGraph(allocator: std.mem.Allocator,
     std.debug.print("\n🔗 Lineage DAG:\n\n", .{});
 
     var iter = dir.iterate();
-    while (try iter.next()) |entry| {
+    while (try iter.next(io)) |entry| {
         if (entry.kind != .file) continue;
 
         const node = (try loadNode(allocator, repo, entry.name)) orelse continue;
@@ -446,7 +446,7 @@ fn printDescendants(
     defer dir.close(io);
 
     var child_iter = dir.iterate();
-    while (try child_iter.next()) |entry| {
+    while (try child_iter.next(io)) |entry| {
         if (entry.kind != .file) continue;
         if (std.mem.eql(u8, entry.name, id)) continue;
 
@@ -479,7 +479,7 @@ pub fn lineageProvenance(allocator: std.mem.Allocator,
     var found: usize = 0;
 
     var iter = dir.iterate();
-    while (try iter.next()) |entry| {
+    while (try iter.next(io)) |entry| {
         if (entry.kind != .file) continue;
 
         const node = (try loadNode(allocator, repo, entry.name)) orelse continue;

@@ -86,7 +86,7 @@ pub fn stashList(allocator: std.mem.Allocator,
 
     var found_any = false;
     var it = dir.iterate();
-    while (try it.next()) |entry| {
+    while (try it.next(io)) |entry| {
         if (entry.kind != .file) continue;
         if (!std.mem.startsWith(u8, entry.name, "stash-")) continue;
         found_any = true;
@@ -206,7 +206,7 @@ fn getNextStashId(allocator: std.mem.Allocator,
 
     var max_id: usize = 0;
     var it = dir.iterate();
-    while (try it.next()) |entry| {
+    while (try it.next(io)) |entry| {
         if (!std.mem.startsWith(u8, entry.name, "stash-")) continue;
         const id = std.fmt.parseInt(usize, entry.name[6..], 10) catch continue;
         if (id >= max_id) max_id = id + 1;

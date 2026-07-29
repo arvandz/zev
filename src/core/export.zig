@@ -48,7 +48,7 @@ fn collectDir(
     defer dir.close(io);
 
     var it = dir.iterate();
-    while (try it.next()) |entry| {
+    while (try it.next(io)) |entry| {
         const abs = try std.fs.path.join(allocator, &.{ base_path, entry.name });
         const rel = if (rel_prefix.len > 0)
             try std.fs.path.join(allocator, &.{ rel_prefix, entry.name })
@@ -150,7 +150,7 @@ pub fn exportRepo(
         };
         defer sd.close(io);
         var sit = sd.iterate();
-        while (try sit.next()) |entry| {
+        while (try sit.next(io)) |entry| {
             if (entry.kind != .file or std.mem.endsWith(u8, entry.name, ".name")) continue;
             const sp = try std.fs.path.join(allocator, &.{ snap_dir, entry.name });
             defer allocator.free(sp);

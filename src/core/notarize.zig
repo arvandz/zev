@@ -634,7 +634,7 @@ pub fn notarizeVerify(allocator: std.mem.Allocator,
     defer d.close(io);
 
     var it = d.iterate();
-    while (try it.next()) |entry| {
+    while (try it.next(io)) |entry| {
         if (std.mem.startsWith(u8, entry.name, rec_id_prefix)) {
             found_rec = try loadRecord(allocator, repo, entry.name);
             break;
@@ -691,7 +691,7 @@ pub fn notarizeList(allocator: std.mem.Allocator,
     var count: usize = 0;
 
     var it = d.iterate();
-    while (try it.next()) |entry| {
+    while (try it.next(io)) |entry| {
         if (entry.kind != .file) continue;
         const rec = (try loadRecord(allocator, repo, entry.name)) orelse continue;
         defer freeRecord(allocator, rec);

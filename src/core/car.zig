@@ -365,14 +365,14 @@ fn collectAllCIDs(
     var root_dir = std.Io.Dir.cwd().openDir(io, store.base_path, .{ .iterate = true }) catch return;
     defer root_dir.close(io);
     var it = root_dir.iterate();
-    while (try it.next()) |shard| {
+    while (try it.next(io)) |shard| {
         if (shard.kind != .directory) continue;
         const sp = try std.fs.path.join(allocator, &.{ store.base_path, shard.name });
         defer allocator.free(sp);
         var sd = std.Io.Dir.cwd().openDir(io, sp, .{ .iterate = true }) catch continue;
         defer sd.close(io);
         var si = sd.iterate();
-        while (try si.next()) |block| {
+        while (try si.next(io)) |block| {
             if (block.kind != .file) continue;
             const c = ipld.CID.fromHex(block.name) catch continue;
             try out.append(allocator, c);

@@ -118,7 +118,7 @@ fn readMetricsForCommit(
     var entries: std.ArrayList(MetricEntry) = .empty;
 
     var it = dir.iterate();
-    while (try it.next()) |entry| {
+    while (try it.next(io)) |entry| {
         if (!std.mem.startsWith(u8, entry.name, short)) continue;
         if (entry.kind != .file) continue;
 
@@ -391,14 +391,14 @@ pub fn ipldLog(
         };
         defer root_dir.close(io);
         var rit = root_dir.iterate();
-        while (try rit.next()) |shard| {
+        while (try rit.next(io)) |shard| {
             if (shard.kind != .directory) continue;
             const sp = try std.fs.path.join(allocator, &.{ store.base_path, shard.name });
             defer allocator.free(sp);
             var sd = std.Io.Dir.cwd().openDir(io, sp, .{ .iterate = true }) catch continue;
             defer sd.close(io);
             var si = sd.iterate();
-            while (try si.next()) |block| {
+            while (try si.next(io)) |block| {
                 if (block.kind != .file) continue;
                 const c = ipld.CID.fromHex(block.name) catch continue;
                 const v = store.getNode(allocator, c) catch continue;
