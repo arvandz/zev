@@ -123,7 +123,8 @@ pub fn listHooks(allocator: std.mem.Allocator,
     if (!found_any) std.debug.print("No hooks installed\n", .{});
 }
 
-pub fn removeHook(allocator: std.mem.Allocator, repo_path: []const u8, hook_type: HookType) !void {
+pub fn removeHook(allocator: std.mem.Allocator,
+    io: std.Io, repo_path: []const u8, hook_type: HookType) !void {
     const hook_path = try std.fs.path.join(allocator, &.{ repo_path, ".zev", "hooks", hook_type.toString() });
     defer allocator.free(hook_path);
 

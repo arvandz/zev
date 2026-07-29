@@ -326,7 +326,7 @@ pub fn main(init: std.process.Init) !void {
                 return;
             }
             const name = args[3];
-            try remote.removeRemote(allocator, &repo, name);
+            try remote.removeRemote(allocator, io, &repo, name);
             std.debug.print("✅ Removed remote '{s}'\n", .{name});
         } else if (std.mem.eql(u8, args[2], "show")) {
             if (args.len < 4) {
@@ -334,7 +334,7 @@ pub fn main(init: std.process.Init) !void {
                 return;
             }
             const name = args[3];
-            const url = try remote.getRemote(allocator, &repo, name);
+            const url = try remote.getRemote(allocator, io, &repo, name);
             defer allocator.free(url);
 
             const protocol = remote.RemoteProtocol.fromUri(url) catch .file;
@@ -780,7 +780,7 @@ pub fn main(init: std.process.Init) !void {
                 std.debug.print("Unknown hook type: {s}\n", .{args[3]});
                 return;
             };
-            hooks_mod.removeHook(allocator, ".", hook_type) catch |err| {
+            hooks_mod.removeHook(allocator, io, ".", hook_type) catch |err| {
                 if (err == error.HookNotFound) {
                     std.debug.print("Hook {s} not found\n", .{args[3]});
                 } else return err;
@@ -805,7 +805,7 @@ pub fn main(init: std.process.Init) !void {
                 std.debug.print("Usage: zev tag -d <tag-name>\n", .{});
                 return;
             }
-            tag_mod.deleteTag(allocator, &repo, args[3]) catch |err| {
+            tag_mod.deleteTag(allocator, io, &repo, args[3]) catch |err| {
                 if (err == error.TagNotFound) {
                     std.debug.print("Error: Tag '{s}' not found\n", .{args[3]});
                 } else return err;
@@ -865,10 +865,10 @@ pub fn main(init: std.process.Init) !void {
                     return;
                 } else return err;
             };
-            stash_mod.stashDrop(allocator, &repo, id) catch {};
+            stash_mod.stashDrop(allocator, io, &repo, id) catch {};
         } else if (std.mem.eql(u8, args[2], "drop")) {
             const id = if (args.len >= 4) try std.fmt.parseInt(usize, args[3], 10) else 0;
-            stash_mod.stashDrop(allocator, &repo, id) catch |err| {
+            stash_mod.stashDrop(allocator, io, &repo, id) catch |err| {
                 if (err == error.StashNotFound) {
                     std.debug.print("Stash@{{{}}} not found\n", .{id});
                 } else return err;
@@ -902,7 +902,7 @@ pub fn main(init: std.process.Init) !void {
             const hash = if (args.len >= 4) args[3] else null;
             try bisect_mod.bisectBad(allocator, io, &repo, hash);
         } else if (std.mem.eql(u8, args[2], "reset")) {
-            try bisect_mod.bisectReset(allocator, &repo);
+            try bisect_mod.bisectReset(allocator, io, &repo);
         } else {
             std.debug.print("Unknown bisect subcommand: {s}\n", .{args[2]});
         }

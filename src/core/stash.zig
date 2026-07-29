@@ -185,7 +185,8 @@ pub fn stashApply(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, s
     std.debug.print("✅ Applied stash@{{{}}} ({} files restored)\n", .{ stash_id, restored });
 }
 
-pub fn stashDrop(allocator: std.mem.Allocator, repo: *Repository, stash_id: usize) !void {
+pub fn stashDrop(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository, stash_id: usize) !void {
     const stash_dir = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "stash" });
     defer allocator.free(stash_dir);
 

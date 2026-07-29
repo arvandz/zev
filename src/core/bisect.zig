@@ -211,7 +211,7 @@ fn bisectStep(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, good_
         std.debug.print("  Commit: {s}\n", .{bad_str[0..8]});
         std.debug.print("  Author: {s}\n", .{c.author});
         std.debug.print("  Message: {s}\n", .{msg});
-        try bisectReset(allocator, repo);
+        try bisectReset(allocator, io, repo);
         return;
     }
 
@@ -226,7 +226,8 @@ fn bisectStep(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, good_
     std.debug.print("  ~{} commits remaining to test\n", .{range / 2});
 }
 
-pub fn bisectReset(allocator: std.mem.Allocator, repo: *Repository) !void {
+pub fn bisectReset(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository) !void {
     const state_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "BISECT_STATE" });
     defer allocator.free(state_path);
     std.Io.Dir.cwd().deleteFile(io, state_path) catch {};

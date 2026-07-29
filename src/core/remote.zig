@@ -88,7 +88,8 @@ pub fn getRemote(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, na
     return try allocator.dupe(u8, url);
 }
 
-pub fn removeRemote(allocator: std.mem.Allocator, repo: *Repository, name: []const u8) !void {
+pub fn removeRemote(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository, name: []const u8) !void {
     const zev_path = try std.fs.path.join(allocator, &[_][]const u8{ repo.path, ".zev" });
     defer allocator.free(zev_path);
 

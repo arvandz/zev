@@ -105,7 +105,8 @@ pub fn listTags(allocator: std.mem.Allocator,
     }
 }
 
-pub fn deleteTag(allocator: std.mem.Allocator, repo: *Repository, tag_name: []const u8) !void {
+pub fn deleteTag(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository, tag_name: []const u8) !void {
     const tag_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "refs", "tags", tag_name });
     defer allocator.free(tag_path);
 
