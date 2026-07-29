@@ -109,7 +109,7 @@ pub fn deleteTag(allocator: std.mem.Allocator, repo: *Repository, tag_name: []co
     const tag_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "refs", "tags", tag_name });
     defer allocator.free(tag_path);
 
-    std.Io.Dir.cwd().deleteFile(tag_path) catch |err| {
+    std.Io.Dir.cwd().deleteFile(io, tag_path) catch |err| {
         if (err == error.FileNotFound) return error.TagNotFound;
         return err;
     };

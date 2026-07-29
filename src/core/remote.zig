@@ -95,7 +95,7 @@ pub fn removeRemote(allocator: std.mem.Allocator, repo: *Repository, name: []con
     const remote_file_path = try std.fs.path.join(allocator, &[_][]const u8{ zev_path, "remotes", name });
     defer allocator.free(remote_file_path);
 
-    try std.Io.Dir.cwd().deleteFile(remote_file_path);
+    try std.Io.Dir.cwd().deleteFile(io, remote_file_path);
 }
 
 pub fn listRemotes(allocator: std.mem.Allocator,
@@ -119,7 +119,7 @@ pub fn listRemotes(allocator: std.mem.Allocator,
     while (try iterator.next(io)) |entry| {
         if (entry.kind != .file) continue;
 
-        const url = try getRemote(allocator, repo, entry.name);
+        const url = try getRemote(allocator, io, repo, entry.name);
         defer allocator.free(url);
 
         const protocol = RemoteProtocol.fromUri(url) catch .file;

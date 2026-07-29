@@ -127,7 +127,7 @@ pub fn removeHook(allocator: std.mem.Allocator, repo_path: []const u8, hook_type
     const hook_path = try std.fs.path.join(allocator, &.{ repo_path, ".zev", "hooks", hook_type.toString() });
     defer allocator.free(hook_path);
 
-    std.Io.Dir.cwd().deleteFile(hook_path) catch |err| {
+    std.Io.Dir.cwd().deleteFile(io, hook_path) catch |err| {
         if (err == error.FileNotFound) return error.HookNotFound;
         return err;
     };

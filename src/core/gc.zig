@@ -188,7 +188,7 @@ pub fn runGC(allocator: std.mem.Allocator,
             if (dry_run) {
                 std.debug.print("  [dry-run] would remove: {s}\n", .{obj_entry.name[0..12]});
             } else {
-                std.Io.Dir.cwd().deleteFile(obj_path) catch {};
+                std.Io.Dir.cwd().deleteFile(io, obj_path) catch {};
                 std.debug.print("  removed: {s}\n", .{obj_entry.name[0..12]});
             }
         }

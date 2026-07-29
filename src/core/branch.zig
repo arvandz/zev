@@ -118,5 +118,5 @@ pub fn deleteBranch(allocator: std.mem.Allocator,
     const branch_path = try std.fs.path.join(allocator, &[_][]const u8{ zev_path, "refs", "heads", branch_name });
     defer allocator.free(branch_path);
 
-    try std.Io.Dir.cwd().deleteFile(branch_path);
+    try std.Io.Dir.cwd().deleteFile(io, branch_path);
 }

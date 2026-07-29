@@ -192,7 +192,7 @@ pub fn stashDrop(allocator: std.mem.Allocator, repo: *Repository, stash_id: usiz
     const stash_file_path = try std.fmt.allocPrint(allocator, "{s}/stash-{}", .{ stash_dir, stash_id });
     defer allocator.free(stash_file_path);
 
-    std.Io.Dir.cwd().deleteFile(stash_file_path) catch |err| {
+    std.Io.Dir.cwd().deleteFile(io, stash_file_path) catch |err| {
         if (err == error.FileNotFound) return error.StashNotFound;
         return err;
     };

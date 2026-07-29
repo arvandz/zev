@@ -229,6 +229,6 @@ fn bisectStep(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, good_
 pub fn bisectReset(allocator: std.mem.Allocator, repo: *Repository) !void {
     const state_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "BISECT_STATE" });
     defer allocator.free(state_path);
-    std.Io.Dir.cwd().deleteFile(state_path) catch {};
+    std.Io.Dir.cwd().deleteFile(io, state_path) catch {};
     std.debug.print("🔄 Bisect reset\n", .{});
 }

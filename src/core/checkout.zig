@@ -88,7 +88,7 @@ pub fn cleanWorkingDirectory(allocator: std.mem.Allocator, io: std.Io, repo: *Re
             try cleanWorkingDirectory(allocator, io, repo, entry.cid, file_path);
             std.Io.Dir.cwd().deleteDir(io, full_path) catch {};
         } else {
-            std.Io.Dir.cwd().deleteFile(io, full_path) catch {};
+            std.Io.Dir.cwd().deleteFile(io, io, full_path) catch {};
         }
     }
 }
