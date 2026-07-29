@@ -196,7 +196,7 @@ fn pushFile(allocator: std.mem.Allocator,
     else
         remote_url;
 
-    if (!Repository.exists(allocator, remote_path)) {
+    if (!Repository.exists(allocator, io, remote_path)) {
         return error.RemoteNotFound;
     }
 
@@ -246,7 +246,7 @@ fn pullFile(allocator: std.mem.Allocator,
     else
         remote_url;
 
-    if (!Repository.exists(allocator, remote_path)) {
+    if (!Repository.exists(allocator, io, remote_path)) {
         return error.RemoteNotFound;
     }
 
