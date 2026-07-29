@@ -544,7 +544,7 @@ pub fn forkRepo(allocator: std.mem.Allocator,
     } else {
         std.debug.print("   Trying file-by-file fetch...\n", .{});
 
-        var tmp_repo = Repository.open(allocator, target_dir) catch {
+        var tmp_repo = Repository.open(allocator, io, target_dir) catch {
             std.debug.print("❌ Could not open forked repo for sync\n", .{});
             return;
         };

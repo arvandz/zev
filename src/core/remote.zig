@@ -200,7 +200,7 @@ fn pushFile(allocator: std.mem.Allocator,
         return error.RemoteNotFound;
     }
 
-    var remote_repo = try Repository.open(allocator, remote_path);
+    var remote_repo = try Repository.open(allocator, io, remote_path);
     defer remote_repo.deinit();
 
     const zev_path = try std.fs.path.join(allocator, &[_][]const u8{ repo.path, ".zev" });
@@ -250,7 +250,7 @@ fn pullFile(allocator: std.mem.Allocator,
         return error.RemoteNotFound;
     }
 
-    var remote_repo = try Repository.open(allocator, remote_path);
+    var remote_repo = try Repository.open(allocator, io, remote_path);
     defer remote_repo.deinit();
 
     const remote_branch_path = try std.fs.path.join(allocator, &[_][]const u8{ remote_path, ".zev", "refs", "heads", branch_name });
