@@ -126,7 +126,7 @@ pub fn stashApply(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, s
     const stash_file_path = try std.fmt.allocPrint(allocator, "{s}/stash-{}", .{ stash_dir, stash_id });
     defer allocator.free(stash_file_path);
 
-    const file = std.Io.Dir.cwd().openFile(io, io, stash_file_path, .{}) catch |err| {
+    const file = std.Io.Dir.cwd().openFile(io, stash_file_path, .{}) catch |err| {
         if (err == error.FileNotFound) return error.StashNotFound;
         return err;
     };

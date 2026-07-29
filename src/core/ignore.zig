@@ -24,7 +24,7 @@ pub const IgnoreList = struct {
         try list.patterns.append(allocator, try allocator.dupe(u8, ".zev"));
         const ignore_path = try std.fs.path.join(allocator, &.{ repo_path, ".zevignore" });
         defer allocator.free(ignore_path);
-        const file = std.Io.Dir.cwd().openFile(io, io, ignore_path, .{}) catch |err| {
+        const file = std.Io.Dir.cwd().openFile(io, ignore_path, .{}) catch |err| {
             if (err == error.FileNotFound) return list;
             return err;
         };

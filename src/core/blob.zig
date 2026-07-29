@@ -52,7 +52,7 @@ pub const BlobStore = struct {
         const file_path = try std.fs.path.join(self.allocator, &[_][]const u8{ self.store_path, hash_str });
         defer self.allocator.free(file_path);
 
-        const file = try std.Io.Dir.cwd().openFile(io, io, file_path, .{});
+        const file = try std.Io.Dir.cwd().openFile(io, file_path, .{});
         defer file.close(io);
 
         const file_size = (try file.stat(io)).size;

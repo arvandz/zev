@@ -100,7 +100,7 @@ pub const Index = struct {
     }
 
     pub fn read(self: *Index, io: std.Io) !void {
-        const file = std.Io.Dir.cwd().openFile(io, io, self.index_path, .{}) catch |err| {
+        const file = std.Io.Dir.cwd().openFile(io, self.index_path, .{}) catch |err| {
             if (err == error.FileNotFound) {
                 return;
             }

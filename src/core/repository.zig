@@ -163,7 +163,7 @@ pub const Repository = struct {
         defer self.allocator.free(zev_path);
         const head_path = try std.fs.path.join(self.allocator, &[_][]const u8{ zev_path, "HEAD" });
         defer self.allocator.free(head_path);
-        const head_file = try std.Io.Dir.cwd().openFile(io, io, head_path, .{});
+        const head_file = try std.Io.Dir.cwd().openFile(io, head_path, .{});
         defer head_file.close(io);
         var read_buf: [256]u8 = undefined;
         var head_reader = head_file.reader(io, &read_buf);
@@ -174,7 +174,7 @@ pub const Repository = struct {
             const ref_path = head_content[5..];
             const full_ref_path = try std.fs.path.join(self.allocator, &[_][]const u8{ zev_path, ref_path });
             defer self.allocator.free(full_ref_path);
-            const ref_file = try std.Io.Dir.cwd().openFile(io, io, full_ref_path, .{});
+            const ref_file = try std.Io.Dir.cwd().openFile(io, full_ref_path, .{});
             defer ref_file.close(io);
             var ref_read_buf: [256]u8 = undefined;
             var ref_reader = ref_file.reader(io, &ref_read_buf);
@@ -201,7 +201,7 @@ pub const Repository = struct {
         const head_path = try std.fs.path.join(self.allocator, &[_][]const u8{ zev_path, "HEAD" });
         defer self.allocator.free(head_path);
 
-        const head_file = try std.Io.Dir.cwd().openFile(io, io, head_path, .{});
+        const head_file = try std.Io.Dir.cwd().openFile(io, head_path, .{});
         defer head_file.close(io);
 
         var buffer: [256]u8 = undefined;

@@ -78,7 +78,7 @@ pub fn getRemote(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, na
     defer allocator.free(zev_path);
     const remote_file_path = try std.fs.path.join(allocator, &[_][]const u8{ zev_path, "remotes", name });
     defer allocator.free(remote_file_path);
-    const remote_file = try std.Io.Dir.cwd().openFile(io, io, remote_file_path, .{});
+    const remote_file = try std.Io.Dir.cwd().openFile(io, remote_file_path, .{});
     defer remote_file.close(io);
     var read_buffer: [1024]u8 = undefined;
     var reader = remote_file.reader(io, &read_buffer);

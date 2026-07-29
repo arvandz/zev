@@ -34,7 +34,7 @@ pub const Config = struct {
         const config_path = try std.fs.path.join(allocator, &[_][]const u8{ repo_path, ".zev", "config" });
         defer allocator.free(config_path);
 
-        const file = std.Io.Dir.cwd().openFile(io, io, config_path, .{}) catch |err| {
+        const file = std.Io.Dir.cwd().openFile(io, config_path, .{}) catch |err| {
             if (err == error.FileNotFound) {
                 return config;
             }
