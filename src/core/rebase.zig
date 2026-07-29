@@ -144,7 +144,7 @@ pub fn rebase(
 
     const onto_ref_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "refs", "heads", onto_branch });
     defer allocator.free(onto_ref_path);
-    const onto_ref_file = std.Io.Dir.cwd().openFile(onto_ref_path, .{}) catch {
+    const onto_ref_file = std.Io.Dir.cwd().openFile(io, onto_ref_path, .{}) catch {
         std.debug.print("Error: Branch '{s}' not found\n", .{onto_branch});
         return .nothing_to_rebase;
     };
@@ -207,7 +207,7 @@ pub fn rebase(
     const head_path = try std.fs.path.join(allocator, &.{ zev_path, "HEAD" });
     defer allocator.free(head_path);
 
-    const head_file = try std.Io.Dir.cwd().openFile(head_path, .{});
+    const head_file = try std.Io.Dir.cwd().openFile(io, head_path, .{});
     defer head_file.close(io);
 
     var buf: [256]u8 = undefined;

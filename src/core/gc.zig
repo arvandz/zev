@@ -59,7 +59,7 @@ fn collectAllReachable(
         const ref_path = try std.fs.path.join(allocator, &.{ heads_path, entry.name });
         defer allocator.free(ref_path);
 
-        const file = std.Io.Dir.cwd().openFile(ref_path, .{}) catch continue;
+        const file = std.Io.Dir.cwd().openFile(io, ref_path, .{}) catch continue;
         defer file.close(io);
 
         var buf: [128]u8 = undefined;
@@ -93,7 +93,7 @@ fn collectAllReachable(
         const tag_path = try std.fs.path.join(allocator, &.{ tags_path, entry.name });
         defer allocator.free(tag_path);
 
-        const file = std.Io.Dir.cwd().openFile(tag_path, .{}) catch continue;
+        const file = std.Io.Dir.cwd().openFile(io, tag_path, .{}) catch continue;
         var file_scratch2: [4096]u8 = undefined;
         var file_reader2 = file.reader(io, &file_scratch2);
         defer file.close(io);
@@ -175,7 +175,7 @@ pub fn runGC(allocator: std.mem.Allocator,
             const obj_path = try std.fs.path.join(allocator, &.{ objects_path, obj_entry.name });
             defer allocator.free(obj_path);
 
-            const file = std.Io.Dir.cwd().openFile(obj_path, .{}) catch continue;
+            const file = std.Io.Dir.cwd().openFile(io, obj_path, .{}) catch continue;
             const stat = file.stat(io) catch {
                 file.close(io);
                 continue;

@@ -113,7 +113,7 @@ pub fn listHooks(allocator: std.mem.Allocator,
             found_any = true;
             const hook_path = try std.fs.path.join(allocator, &.{ hooks_dir, entry.name });
             defer allocator.free(hook_path);
-            const file = try std.Io.Dir.cwd().openFile(hook_path, .{});
+            const file = try std.Io.Dir.cwd().openFile(io, hook_path, .{});
             defer file.close(io);
             const stat = try file.stat(io);
             const executable = (stat.permissions.toMode() & 0o111) != 0;

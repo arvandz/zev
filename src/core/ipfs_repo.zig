@@ -147,7 +147,7 @@ pub const IPFSRepo = struct {
         const head_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "HEAD" });
         defer allocator.free(head_path);
 
-        const head_file = std.Io.Dir.cwd().openFile(io, head_path, .{}) catch |err| {
+        const head_file = std.Io.Dir.cwd().openFile(io, io, head_path, .{}) catch |err| {
             if (err == error.FileNotFound) {
                 std.debug.print("Warning: HEAD file not found\n", .{});
             }
@@ -176,7 +176,7 @@ pub const IPFSRepo = struct {
         var it = refs_dir.iterate();
         while (try it.next(io)) |entry| {
             if (entry.kind == .file) {
-                const ref_file = try refs_dir.openFile(io, entry.name, .{});
+                const ref_file = try refs_dir.openFile(io, io, entry.name, .{});
                 defer ref_file.close(io);
 
                 var ref_read_buf: [65]u8 = undefined;
@@ -268,7 +268,7 @@ pub const IPFSRepo = struct {
         const head_path = try std.fs.path.join(allocator, &.{ repo_path, ".zev", "HEAD" });
         defer allocator.free(head_path);
 
-        const head_file = std.Io.Dir.cwd().openFile(io, head_path, .{}) catch |err| {
+        const head_file = std.Io.Dir.cwd().openFile(io, io, head_path, .{}) catch |err| {
             if (err == error.FileNotFound) {
                 std.debug.print("Warning: HEAD file not found\n", .{});
             }
@@ -297,7 +297,7 @@ pub const IPFSRepo = struct {
         var it = refs_dir.iterate();
         while (try it.next(io)) |entry| {
             if (entry.kind == .file) {
-                const ref_file = try refs_dir.openFile(io, entry.name, .{});
+                const ref_file = try refs_dir.openFile(io, io, entry.name, .{});
                 defer ref_file.close(io);
 
                 var ref_read_buf: [65]u8 = undefined;

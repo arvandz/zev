@@ -83,7 +83,7 @@ pub fn getShallowBoundary(allocator: std.mem.Allocator, io: std.Io, repo_path: [
     const shallow_path = try std.fs.path.join(allocator, &.{ repo_path, ".zev", "shallow" });
     defer allocator.free(shallow_path);
 
-    const file = std.Io.Dir.cwd().openFile(io, shallow_path, .{}) catch return null;
+    const file = std.Io.Dir.cwd().openFile(io, io, shallow_path, .{}) catch return null;
     defer file.close(io);
 
     var read_buf: [128]u8 = undefined;

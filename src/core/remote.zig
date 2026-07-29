@@ -78,7 +78,7 @@ pub fn getRemote(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, na
     defer allocator.free(zev_path);
     const remote_file_path = try std.fs.path.join(allocator, &[_][]const u8{ zev_path, "remotes", name });
     defer allocator.free(remote_file_path);
-    const remote_file = try std.Io.Dir.cwd().openFile(io, remote_file_path, .{});
+    const remote_file = try std.Io.Dir.cwd().openFile(io, io, remote_file_path, .{});
     defer remote_file.close(io);
     var read_buffer: [1024]u8 = undefined;
     var reader = remote_file.reader(io, &read_buffer);
@@ -209,7 +209,7 @@ fn pushFile(allocator: std.mem.Allocator,
     const branch_path = try std.fs.path.join(allocator, &[_][]const u8{ zev_path, "refs", "heads", branch_name });
     defer allocator.free(branch_path);
 
-    const branch_file = try std.Io.Dir.cwd().openFile(branch_path, .{});
+    const branch_file = try std.Io.Dir.cwd().openFile(io, branch_path, .{});
     defer branch_file.close(io);
 
     var buffer: [256]u8 = undefined;
@@ -256,7 +256,7 @@ fn pullFile(allocator: std.mem.Allocator,
     const remote_branch_path = try std.fs.path.join(allocator, &[_][]const u8{ remote_path, ".zev", "refs", "heads", branch_name });
     defer allocator.free(remote_branch_path);
 
-    const remote_branch_file = try std.Io.Dir.cwd().openFile(remote_branch_path, .{});
+    const remote_branch_file = try std.Io.Dir.cwd().openFile(io, remote_branch_path, .{});
     defer remote_branch_file.close(io);
 
     var buffer: [256]u8 = undefined;

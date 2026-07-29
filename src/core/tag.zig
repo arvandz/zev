@@ -82,7 +82,7 @@ pub fn listTags(allocator: std.mem.Allocator,
             const tag_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "refs", "tags", entry.name });
             defer allocator.free(tag_path);
 
-            const tag_file = try std.Io.Dir.cwd().openFile(tag_path, .{});
+            const tag_file = try std.Io.Dir.cwd().openFile(io, tag_path, .{});
             defer tag_file.close(io);
 
             var buf: [512]u8 = undefined;
@@ -121,7 +121,7 @@ pub fn getTagCommit(allocator: std.mem.Allocator,
     const tag_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "refs", "tags", tag_name });
     defer allocator.free(tag_path);
 
-    const tag_file = std.Io.Dir.cwd().openFile(tag_path, .{}) catch |err| {
+    const tag_file = std.Io.Dir.cwd().openFile(io, tag_path, .{}) catch |err| {
         if (err == error.FileNotFound) return error.TagNotFound;
         return err;
     };

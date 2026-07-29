@@ -146,7 +146,7 @@ pub fn appendMetricHistory(
 
     const now = @divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s);
     const f = blk: {
-        if (std.Io.Dir.cwd().openFile(path, .{ .mode = .read_write })) |file| {
+        if (std.Io.Dir.cwd().openFile(io, path, .{ .mode = .read_write })) |file| {
             break :blk file;
         } else |_| {}
         break :blk try std.Io.Dir.cwd().createFile(path, .{});

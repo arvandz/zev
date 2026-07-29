@@ -34,7 +34,7 @@ fn loadState(allocator: std.mem.Allocator,
     const state_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "BISECT_STATE" });
     defer allocator.free(state_path);
 
-    const file = std.Io.Dir.cwd().openFile(state_path, .{}) catch return null;
+    const file = std.Io.Dir.cwd().openFile(io, state_path, .{}) catch return null;
     defer file.close(io);
 
     const stat = try file.stat(io);

@@ -138,7 +138,7 @@ pub const StorageManager = struct {
         var path_buf: [256]u8 = undefined;
         const path = try std.fmt.bufPrint(&path_buf, ".zev/objects/{s}/{s}", .{ prefix, suffix });
 
-        const file = try std.Io.Dir.cwd().openFile(io, path, .{});
+        const file = try std.Io.Dir.cwd().openFile(io, io, path, .{});
         defer file.close(io);
         const stat = try file.stat(io);
         const data = try self.allocator.alloc(u8, @intCast(stat.size));
@@ -163,7 +163,7 @@ pub const StorageManager = struct {
     fn getIPFSMapping(self: *StorageManager, io: std.Io, local_cid: []const u8) !?[]u8 {
         var path_buf: [256]u8 = undefined;
         const path = try std.fmt.bufPrint(&path_buf, ".zev/ipfs-map/{s}", .{local_cid});
-        const file = std.Io.Dir.cwd().openFile(io, path, .{}) catch |err| {
+        const file = std.Io.Dir.cwd().openFile(io, io, path, .{}) catch |err| {
             if (err == error.FileNotFound) return null;
             return err;
         };

@@ -171,7 +171,7 @@ fn updateHead(allocator: std.mem.Allocator,
     const head_path = try std.fs.path.join(allocator, &.{ zev_path, "HEAD" });
     defer allocator.free(head_path);
 
-    const head_file = try std.Io.Dir.cwd().openFile(head_path, .{});
+    const head_file = try std.Io.Dir.cwd().openFile(io, head_path, .{});
     defer head_file.close(io);
 
     var buf: [256]u8 = undefined;
