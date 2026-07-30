@@ -35,13 +35,16 @@ fn saveRecord(allocator: std.mem.Allocator,
     const path = try std.fs.path.join(allocator, &.{ dir, rec.id });
     defer allocator.free(path);
 
-    const f = try std.Io.Dir.cwd().createFile(path, .{});
+    const f = try std.Io.Dir.cwd().createFile(io, path, .{});
+    var f_buffer: [512]u8 = undefined;
+    var f_writer = f.writer(io, &f_buffer);
     defer f.close(io);
 
     const verified_str: []const u8 = if (rec.verified) "true" else "false";
     const content = try std.fmt.allocPrint(allocator, "id={s}\nsubject_type={s}\nsubject_id={s}\nsubject_cid={s}\nmetrics={s}\nauthor={s}\ntimestamp={d}\nchain={s}\ntx_hash={s}\nblock={s}\nverified={s}\n", .{ rec.id, rec.subject_type, rec.subject_id, rec.subject_cid, rec.metrics, rec.author, rec.timestamp, rec.chain, rec.tx_hash, rec.block, verified_str });
     defer allocator.free(content);
-    try f.writeAll(content);
+    try f_writer.interface.writeAll(content);
+    try f_writer.flush();
 }
 
 fn loadRecord(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, id: []const u8) !?NotarizationRecord {
@@ -276,8 +279,11 @@ fn submitEthereum(allocator: std.mem.Allocator,
     defer allocator.free(nonce_req);
 
     const tmp = "/tmp/zev_eth_req.json";
-    const tf = try std.Io.Dir.cwd().createFile(tmp, .{});
-    try tf.writeAll(nonce_req);
+    const tf = try std.Io.Dir.cwd().createFile(io, tmp, .{});
+    var tf_buffer: [512]u8 = undefined;
+    var tf_writer = tf.writer(io, &tf_buffer);
+    try tf_writer.interface.writeAll(nonce_req);
+    try tf_writer.flush();
     tf.close(io);
 
     const nonce_resp = try runCmd(allocator, io, &.{
@@ -772,9 +778,12 @@ pub fn notarizeConfig(
         }
     }
 
-    const f = try std.Io.Dir.cwd().createFile(config_path, .{});
+    const f = try std.Io.Dir.cwd().createFile(io, config_path, .{});
+    var f_buffer: [512]u8 = undefined;
+    var f_writer = f.writer(io, &f_buffer);
     defer f.close(io);
-    try f.writeAll(lines.items);
+    try f_writer.interface.writeAll(lines.items);
+    try f_writer.flush();
 
     std.debug.print("✅ Notarize config updated for chain: {s}\n", .{chain});
     if (rpc_url) |u| std.debug.print("   RPC URL: {s}\n", .{u});

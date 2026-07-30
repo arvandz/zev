@@ -87,9 +87,12 @@ pub fn saveThreshold(
     }
     if (!found) try appendThresholdLine(allocator, &lines, cfg);
 
-    const f = try std.Io.Dir.cwd().createFile(path, .{});
+    const f = try std.Io.Dir.cwd().createFile(io, path, .{});
+    var f_buffer: [512]u8 = undefined;
+    var f_writer = f.writer(io, &f_buffer);
     defer f.close(io);
-    try f.writeAll(lines.items);
+    try f_writer.interface.writeAll(lines.items);
+    try f_writer.flush();
 }
 
 fn appendThresholdLine(
@@ -149,7 +152,7 @@ pub fn appendMetricHistory(
         if (std.Io.Dir.cwd().openFile(io, path, .{ .mode = .read_write })) |file| {
             break :blk file;
         } else |_| {}
-        break :blk try std.Io.Dir.cwd().createFile(path, .{});
+        break :blk try std.Io.Dir.cwd().createFile(io, path, .{});
     };
     defer f.close(io);
     try f.seekFromEnd(0);

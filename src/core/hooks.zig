@@ -84,9 +84,12 @@ pub fn installHook(allocator: std.mem.Allocator,
     const hook_path = try std.fs.path.join(allocator, &.{ hooks_dir, hook_type.toString() });
     defer allocator.free(hook_path);
 
-    const file = try std.Io.Dir.cwd().createFile(hook_path, .{});
+    const file = try std.Io.Dir.cwd().createFile(io, hook_path, .{});
+    var file_buffer: [512]u8 = undefined;
+    var file_writer = file.writer(io, &file_buffer);
     defer file.close(io);
-    try file.writeAll(script_content);
+    try file_writer.interface.writeAll(script_content);
+    try file_writer.flush();
 
     try file.chmod(0o755);
     std.debug.print("✅ Installed {s} hook\n", .{hook_type.toString()});
@@ -143,7 +146,10 @@ pub fn initHooks(allocator: std.mem.Allocator,
     const sample_path = try std.fs.path.join(allocator, &.{ hooks_dir, "pre-commit.sample" });
     defer allocator.free(sample_path);
 
-    const sample_file = try std.Io.Dir.cwd().createFile(sample_path, .{});
+    const sample_file = try std.Io.Dir.cwd().createFile(io, sample_path, .{});
+    var sample_file_buffer: [512]u8 = undefined;
+    var sample_file_writer = sample_file.writer(io, &sample_file_buffer);
     defer sample_file.close(io);
-    try sample_file.writeAll("#!/bin/sh\n# Sample hook\n");
+    try sample_file_writer.interface.writeAll("#!/bin/sh\n# Sample hook\n");
+    try sample_file_writer.flush();
 }

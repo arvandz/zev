@@ -88,9 +88,12 @@ fn saveDatasetRecord(
     defer allocator.free(s);
     try out.appendSlice(allocator, s);
 
-    const f = try std.Io.Dir.cwd().createFile(path, .{});
+    const f = try std.Io.Dir.cwd().createFile(io, path, .{});
+    var f_buffer: [512]u8 = undefined;
+    var f_writer = f.writer(io, &f_buffer);
     defer f.close(io);
-    try f.writeAll(out.items);
+    try f_writer.interface.writeAll(out.items);
+    try f_writer.flush();
 }
 
 fn loadDatasetRecord(allocator: std.mem.Allocator, io: std.Io, path: []const u8) !?DatasetRecord {
@@ -174,9 +177,12 @@ fn saveShardRecord(
         "checksum={s}\nstrategy={s}\ncreated={d}\n", .{ shard.id, shard.dataset_name, shard.shard_index, shard.total_shards, shard.cid, shard.row_start, shard.row_end, shard.row_count, shard.byte_size, shard.checksum, shard.strategy, shard.created });
     defer allocator.free(s);
 
-    const f = try std.Io.Dir.cwd().createFile(path, .{});
+    const f = try std.Io.Dir.cwd().createFile(io, path, .{});
+    var f_buffer: [512]u8 = undefined;
+    var f_writer = f.writer(io, &f_buffer);
     defer f.close(io);
-    try f.writeAll(s);
+    try f_writer.interface.writeAll(s);
+    try f_writer.flush();
 }
 
 fn saveAssignment(
@@ -203,9 +209,12 @@ fn saveAssignment(
         try out.appendSlice(allocator, sl);
     }
 
-    const f = try std.Io.Dir.cwd().createFile(path, .{});
+    const f = try std.Io.Dir.cwd().createFile(io, path, .{});
+    var f_buffer: [512]u8 = undefined;
+    var f_writer = f.writer(io, &f_buffer);
     defer f.close(io);
-    try f.writeAll(out.items);
+    try f_writer.interface.writeAll(out.items);
+    try f_writer.flush();
 }
 
 fn detectFormat(path: []const u8) []const u8 {

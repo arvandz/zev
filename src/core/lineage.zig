@@ -69,12 +69,15 @@ fn saveNode(allocator: std.mem.Allocator,
     const path = try nodePath(allocator, io, repo, node.id);
     defer allocator.free(path);
 
-    const file = try std.Io.Dir.cwd().createFile(path, .{});
+    const file = try std.Io.Dir.cwd().createFile(io, path, .{});
+    var file_buffer: [512]u8 = undefined;
+    var file_writer = file.writer(io, &file_buffer);
     defer file.close(io);
 
     const content = try std.fmt.allocPrint(allocator, "id={s}\ntype={s}\ndescription={s}\nfile_cid={s}\ncreated_at={d}\ntags={s}\nparents={s}\nversion={s}\n", .{ node.id, node.node_type.toString(), node.description, node.file_cid, node.created_at, node.tags, node.parents, node.version });
     defer allocator.free(content);
-    try file.writeAll(content);
+    try file_writer.interface.writeAll(content);
+    try file_writer.flush();
 }
 
 fn loadNode(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, id: []const u8) !?LineageNode {

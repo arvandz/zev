@@ -447,9 +447,12 @@ pub fn mergeFromCar(
     const merge_short = try merge_cid.toShort(allocator);
     defer allocator.free(merge_short);
     {
-        const f = try std.Io.Dir.cwd().createFile(head_path, .{});
+        const f = try std.Io.Dir.cwd().createFile(io, head_path, .{});
+        var f_buffer: [512]u8 = undefined;
+        var f_writer = f.writer(io, &f_buffer);
         defer f.close(io);
-        try f.writeAll(merge_short);
+        try f_writer.interface.writeAll(merge_short);
+        try f_writer.flush();
     }
 
     if (resolved.items.len > 0) {

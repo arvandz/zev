@@ -84,9 +84,12 @@ fn saveRecord(
         try out.appendSlice(allocator, prompt_s);
     }
 
-    const f = try std.Io.Dir.cwd().createFile(path, .{});
+    const f = try std.Io.Dir.cwd().createFile(io, path, .{});
+    var f_buffer: [512]u8 = undefined;
+    var f_writer = f.writer(io, &f_buffer);
     defer f.close(io);
-    try f.writeAll(out.items);
+    try f_writer.interface.writeAll(out.items);
+    try f_writer.flush();
 }
 
 fn loadRecord(allocator: std.mem.Allocator, io: std.Io, path: []const u8) !?ContextRecord {

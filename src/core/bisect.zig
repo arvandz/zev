@@ -19,9 +19,12 @@ pub fn bisectStart(allocator: std.mem.Allocator,
     const state_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "BISECT_STATE" });
     defer allocator.free(state_path);
 
-    const file = try std.Io.Dir.cwd().createFile(state_path, .{});
+    const file = try std.Io.Dir.cwd().createFile(io, state_path, .{});
+    var file_buffer: [512]u8 = undefined;
+    var file_writer = file.writer(io, &file_buffer);
     defer file.close(io);
-    try file.writeAll("good=\nbad=\ncurrent=\n");
+    try file_writer.interface.writeAll("good=\nbad=\ncurrent=\n");
+    try file_writer.flush();
 
     std.debug.print("🔍 Bisect started\n", .{});
     std.debug.print("  Mark commits: zev bisect good <hash>\n", .{});
@@ -67,12 +70,15 @@ fn saveState(allocator: std.mem.Allocator,
     const state_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "BISECT_STATE" });
     defer allocator.free(state_path);
 
-    const file = try std.Io.Dir.cwd().createFile(state_path, .{});
+    const file = try std.Io.Dir.cwd().createFile(io, state_path, .{});
+    var file_buffer: [512]u8 = undefined;
+    var file_writer = file.writer(io, &file_buffer);
     defer file.close(io);
 
     var buf: [256]u8 = undefined;
     const line = try std.fmt.bufPrint(&buf, "good={s}\nbad={s}\ncurrent={s}\n", .{ good, bad, current });
-    try file.writeAll(line);
+    try file_writer.interface.writeAll(line);
+    try file_writer.flush();
 }
 
 fn collectHistory(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, tip: cid_mod.CID) !std.ArrayList(cid_mod.CID) {

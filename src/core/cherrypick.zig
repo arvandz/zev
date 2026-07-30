@@ -90,9 +90,12 @@ pub fn cherryPick(
         if (std.fs.path.dirname(pick_entry.name)) |dir| {
             try std.Io.Dir.cwd().createDirPath(io, dir);
         }
-        const out_file = try std.Io.Dir.cwd().createFile(pick_entry.name, .{});
+        const out_file = try std.Io.Dir.cwd().createFile(io, pick_entry.name, .{});
+        var out_file_buffer: [512]u8 = undefined;
+        var out_file_writer = out_file.writer(io, &out_file_buffer);
         defer out_file.close(io);
-        try out_file.writeAll(new_content);
+        try out_file_writer.interface.writeAll(new_content);
+        try out_file_writer.flush();
 
         var found = false;
         for (new_tree.entries.items) |*nt_entry| {
@@ -185,11 +188,14 @@ fn updateHead(allocator: std.mem.Allocator,
         const ref_path = try std.fs.path.join(allocator, &.{ zev_path, ref_rel });
         defer allocator.free(ref_path);
 
-        const ref_file = try std.Io.Dir.cwd().createFile(ref_path, .{});
+        const ref_file = try std.Io.Dir.cwd().createFile(io, ref_path, .{});
+        var ref_file_buffer: [512]u8 = undefined;
+        var ref_file_writer = ref_file.writer(io, &ref_file_buffer);
         defer ref_file.close(io);
 
         const hash = try new_cid.toString(allocator);
         defer allocator.free(hash);
-        try ref_file.writeAll(hash);
+        try ref_file_writer.interface.writeAll(hash);
+        try ref_file_writer.flush();
     }
 }

@@ -18,13 +18,16 @@ pub fn createBranch(allocator: std.mem.Allocator,
         if (err != error.FileNotFound) return err;
     }
 
-    const branch_file = try std.Io.Dir.cwd().createFile(branch_path, .{});
+    const branch_file = try std.Io.Dir.cwd().createFile(io, branch_path, .{});
+    var branch_file_buffer: [512]u8 = undefined;
+    var branch_file_writer = branch_file.writer(io, &branch_file_buffer);
     defer branch_file.close(io);
 
     const cid_str = try head_cid.toString(allocator);
     defer allocator.free(cid_str);
 
-    try branch_file.writeAll(cid_str);
+    try branch_file_writer.interface.writeAll(cid_str);
+    try branch_file_writer.flush();
 }
 
 pub fn checkoutBranch(allocator: std.mem.Allocator,
@@ -42,13 +45,16 @@ pub fn checkoutBranch(allocator: std.mem.Allocator,
     const head_path = try std.fs.path.join(allocator, &[_][]const u8{ zev_path, "HEAD" });
     defer allocator.free(head_path);
 
-    const head_file = try std.Io.Dir.cwd().createFile(head_path, .{});
+    const head_file = try std.Io.Dir.cwd().createFile(io, head_path, .{});
+    var head_file_buffer: [512]u8 = undefined;
+    var head_file_writer = head_file.writer(io, &head_file_buffer);
     defer head_file.close(io);
 
     const ref_content = try std.fmt.allocPrint(allocator, "ref: refs/heads/{s}\n", .{branch_name});
     defer allocator.free(ref_content);
 
-    try head_file.writeAll(ref_content);
+    try head_file_writer.interface.writeAll(ref_content);
+    try head_file_writer.flush();
 }
 
 pub fn getCurrentBranch(allocator: std.mem.Allocator,

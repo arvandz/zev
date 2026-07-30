@@ -181,7 +181,9 @@ pub fn exportRepo(
 
     std.debug.print("   Writing {d} file(s) to {s}\n\n", .{ export_files.len, output_path });
 
-    const out_f = try std.Io.Dir.cwd().createFile(output_path, .{});
+    const out_f = try std.Io.Dir.cwd().createFile(io, output_path, .{});
+    var out_f_buffer: [512]u8 = undefined;
+    var out_f_writer = out_f.writer(io, &out_f_buffer);
     defer out_f.close(io);
 
     var manifest_hash: std.ArrayList(u8) = .empty;
@@ -190,7 +192,8 @@ pub fn exportRepo(
     {
         const header = try std.fmt.allocPrint(allocator, "{s}\ncreated={d}\nrepo={s}\nfiles={d}\n---\n", .{ MAGIC, now, repo.path, export_files.len });
         defer allocator.free(header);
-        try out_f.writeAll(header);
+        try out_f_writer.interface.writeAll(header);
+        try out_f_writer.flush();
     }
 
     var total_bytes: u64 = 0;
@@ -205,9 +208,12 @@ pub fn exportRepo(
 
         const file_hdr = try std.fmt.allocPrint(allocator, "FILE {s} {d} {s}\n", .{ fi.rel, content.len, checksum });
         defer allocator.free(file_hdr);
-        try out_f.writeAll(file_hdr);
-        try out_f.writeAll(content);
-        try out_f.writeAll("\n");
+        try out_f_writer.interface.writeAll(file_hdr);
+        try out_f_writer.flush();
+        try out_f_writer.interface.writeAll(content);
+        try out_f_writer.flush();
+        try out_f_writer.interface.writeAll("\n");
+        try out_f_writer.flush();
 
         try manifest_hash.appendSlice(allocator, checksum);
         try manifest_hash.append(allocator, '\n');
@@ -222,7 +228,8 @@ pub fn exportRepo(
 
     const footer = try std.fmt.allocPrint(allocator, "MANIFEST\n{s}\nEND\n", .{manifest_str});
     defer allocator.free(footer);
-    try out_f.writeAll(footer);
+    try out_f_writer.interface.writeAll(footer);
+    try out_f_writer.flush();
 
     const kb = total_bytes / 1024;
     std.debug.print("✅ Export complete!\n\n", .{});
@@ -375,7 +382,7 @@ pub fn importArchive(
             }
         }
 
-        const wf = std.Io.Dir.cwd().createFile(out_path, .{}) catch |err| {
+        const wf = std.Io.Dir.cwd().createFile(io, out_path, .{}) catch |err| {
             std.debug.print("   ⚠️  Cannot write {s}: {}\n", .{ rel_path, err });
             skipped += 1;
             continue;
@@ -390,9 +397,12 @@ pub fn importArchive(
         const head_path = try std.fs.path.join(allocator, &.{ zev_target, "HEAD" });
         defer allocator.free(head_path);
         std.Io.Dir.cwd().access(head_path, .{}) catch {
-            const hf = try std.Io.Dir.cwd().createFile(head_path, .{});
+            const hf = try std.Io.Dir.cwd().createFile(io, head_path, .{});
+            var hf_buffer: [512]u8 = undefined;
+            var hf_writer = hf.writer(io, &hf_buffer);
             defer hf.close(io);
-            try hf.writeAll("ref: refs/heads/main\n");
+            try hf_writer.interface.writeAll("ref: refs/heads/main\n");
+            try hf_writer.flush();
         };
 
         std.debug.print("\n✅ Import complete!\n\n", .{});

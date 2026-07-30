@@ -29,10 +29,14 @@ pub fn createTag(allocator: std.mem.Allocator,
         defer allocator.free(tags_dir);
         try std.Io.Dir.cwd().createDirPath(io, tags_dir);
 
-        const tag_file = try std.Io.Dir.cwd().createFile(tag_path, .{ .exclusive = false });
+        const tag_file = try std.Io.Dir.cwd().createFile(io, tag_path, .{ .exclusive = false });
+        var tag_file_buffer: [512]u8 = undefined;
+        var tag_file_writer = tag_file.writer(io, &tag_file_buffer);
         defer tag_file.close(io);
-        try tag_file.writeAll(commit_hash);
-        try tag_file.writeAll("\n");
+        try tag_file_writer.interface.writeAll(commit_hash);
+        try tag_file_writer.flush();
+        try tag_file_writer.interface.writeAll("\n");
+        try tag_file_writer.flush();
     }
 }
 
@@ -51,13 +55,16 @@ pub fn createAnnotatedTag(allocator: std.mem.Allocator,
     const tag_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "refs", "tags", tag_name });
     defer allocator.free(tag_path);
 
-    const tag_file = try std.Io.Dir.cwd().createFile(tag_path, .{ .exclusive = false });
+    const tag_file = try std.Io.Dir.cwd().createFile(io, tag_path, .{ .exclusive = false });
+    var tag_file_buffer: [512]u8 = undefined;
+    var tag_file_writer = tag_file.writer(io, &tag_file_buffer);
     defer tag_file.close(io);
 
     const timestamp: u64 = 0;
     var buf: [1024]u8 = undefined;
     const content = try std.fmt.bufPrint(&buf, "commit {s}\ntagger {s}\ntime {}\n\n{s}\n", .{ commit_hash, tagger, timestamp, message });
-    try tag_file.writeAll(content);
+    try tag_file_writer.interface.writeAll(content);
+    try tag_file_writer.flush();
 }
 
 pub fn listTags(allocator: std.mem.Allocator,

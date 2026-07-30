@@ -221,12 +221,15 @@ pub fn rebase(
         const ref_path = try std.fs.path.join(allocator, &.{ zev_path, ref_path_rel });
         defer allocator.free(ref_path);
 
-        const ref_file = try std.Io.Dir.cwd().createFile(ref_path, .{});
+        const ref_file = try std.Io.Dir.cwd().createFile(io, ref_path, .{});
+        var ref_file_buffer: [512]u8 = undefined;
+        var ref_file_writer = ref_file.writer(io, &ref_file_buffer);
         defer ref_file.close(io);
 
         const new_hash = try new_head.toString(allocator);
         defer allocator.free(new_hash);
-        try ref_file.writeAll(new_hash);
+        try ref_file_writer.interface.writeAll(new_hash);
+        try ref_file_writer.flush();
     }
 
     std.debug.print("✅ Rebase complete. {} commit(s) replayed.\n", .{commits_to_replay.items.len});

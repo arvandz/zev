@@ -226,15 +226,18 @@ fn pushFile(allocator: std.mem.Allocator,
     }
     const head_cid = cid.CID{ .hash = hash };
 
-    try copyCommitHistory(allocator, repo, &remote_repo, head_cid);
+    try copyCommitHistory(allocator, io, repo, &remote_repo, head_cid);
 
     const remote_branch_path = try std.fs.path.join(allocator, &[_][]const u8{ remote_path, ".zev", "refs", "heads", branch_name });
     defer allocator.free(remote_branch_path);
 
-    const remote_branch_file = try std.Io.Dir.cwd().createFile(remote_branch_path, .{});
+    const remote_branch_file = try std.Io.Dir.cwd().createFile(io, remote_branch_path, .{});
+    var remote_branch_file_buffer: [512]u8 = undefined;
+    var remote_branch_file_writer = remote_branch_file.writer(io, &remote_branch_file_buffer);
     defer remote_branch_file.close(io);
 
-    try remote_branch_file.writeAll(commit_hash);
+    try remote_branch_file_writer.interface.writeAll(commit_hash);
+    try remote_branch_file_writer.flush();
 
     std.debug.print("✅ Pushed {s} to {s}\n", .{ branch_name, remote_path });
 }
@@ -281,10 +284,13 @@ fn pullFile(allocator: std.mem.Allocator,
     const local_branch_path = try std.fs.path.join(allocator, &[_][]const u8{ zev_path, "refs", "heads", branch_name });
     defer allocator.free(local_branch_path);
 
-    const local_branch_file = try std.Io.Dir.cwd().createFile(local_branch_path, .{});
+    const local_branch_file = try std.Io.Dir.cwd().createFile(io, local_branch_path, .{});
+    var local_branch_file_buffer: [512]u8 = undefined;
+    var local_branch_file_writer = local_branch_file.writer(io, &local_branch_file_buffer);
     defer local_branch_file.close(io);
 
-    try local_branch_file.writeAll(commit_hash);
+    try local_branch_file_writer.interface.writeAll(commit_hash);
+    try local_branch_file_writer.flush();
 
     std.debug.print("✅ Pulled {s} successfully\n", .{branch_name});
 }

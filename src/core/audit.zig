@@ -666,8 +666,11 @@ fn renderMarkdown(
     }
 
     const f = try std.Io.Dir.cwd().createFile(io, output_path, .{});
+    var f_buffer: [512]u8 = undefined;
+    var f_writer = f.writer(io, &f_buffer);
     defer f.close(io);
-    try f.writeAll(out.items);
+    try f_writer.interface.writeAll(out.items);
+    try f_writer.flush();
 
     std.debug.print("📄 Markdown report: {s} ({d} bytes)\n", .{ output_path, out.items.len });
 }
@@ -702,8 +705,11 @@ fn renderJson(
         std.debug.print("{s}", .{out.items});
     } else {
         const f = try std.Io.Dir.cwd().createFile(io, output_path, .{});
+        var f_buffer: [512]u8 = undefined;
+        var f_writer = f.writer(io, &f_buffer);
         defer f.close(io);
-        try f.writeAll(out.items);
+        try f_writer.interface.writeAll(out.items);
+        try f_writer.flush();
         std.debug.print("📄 JSON report: {s} ({d} bytes)\n", .{ output_path, out.items.len });
     }
 }

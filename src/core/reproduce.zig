@@ -84,9 +84,12 @@ fn saveReproduceRecord(
         try out.appendSlice(allocator, ms);
     }
 
-    const f = try std.Io.Dir.cwd().createFile(path, .{});
+    const f = try std.Io.Dir.cwd().createFile(io, path, .{});
+    var f_buffer: [512]u8 = undefined;
+    var f_writer = f.writer(io, &f_buffer);
     defer f.close(io);
-    try f.writeAll(out.items);
+    try f_writer.interface.writeAll(out.items);
+    try f_writer.flush();
 }
 
 pub fn captureRun(
@@ -108,18 +111,24 @@ pub fn captureRun(
 
     const cmd_path = try std.fs.path.join(allocator, &.{ dir, commit_hash });
     defer allocator.free(cmd_path);
-    const f = try std.Io.Dir.cwd().createFile(cmd_path, .{});
+    const f = try std.Io.Dir.cwd().createFile(io, cmd_path, .{});
+    var f_buffer: [512]u8 = undefined;
+    var f_writer = f.writer(io, &f_buffer);
     defer f.close(io);
 
     const content = try std.fmt.allocPrint(allocator, "run={s}\ncommit={s}\n", .{ run_command, commit_hash });
     defer allocator.free(content);
-    try f.writeAll(content);
+    try f_writer.interface.writeAll(content);
+    try f_writer.flush();
 
     const rc_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "run_command" });
     defer allocator.free(rc_path);
-    const rcf = try std.Io.Dir.cwd().createFile(rc_path, .{});
+    const rcf = try std.Io.Dir.cwd().createFile(io, rc_path, .{});
+    var rcf_buffer: [512]u8 = undefined;
+    var rcf_writer = rcf.writer(io, &rcf_buffer);
     defer rcf.close(io);
-    try rcf.writeAll(run_command);
+    try rcf_writer.interface.writeAll(run_command);
+    try rcf_writer.flush();
 
     if (env_file) |ef| {
         const env_dst = try std.fs.path.join(allocator, &.{ dir, "environment.txt" });
@@ -129,9 +138,12 @@ pub fn captureRun(
             return;
         };
         defer allocator.free(env_content);
-        const edf = try std.Io.Dir.cwd().createFile(env_dst, .{});
+        const edf = try std.Io.Dir.cwd().createFile(io, env_dst, .{});
+        var edf_buffer: [512]u8 = undefined;
+        var edf_writer = edf.writer(io, &edf_buffer);
         defer edf.close(io);
-        try edf.writeAll(env_content);
+        try edf_writer.interface.writeAll(env_content);
+        try edf_writer.flush();
         std.debug.print("   Environment captured from: {s}\n", .{ef});
     } else {
         try captureAutoEnv(allocator, io, dir);
@@ -157,9 +169,12 @@ fn captureAutoEnv(allocator: std.mem.Allocator,
         if (n > 0) {
             const env_path = try std.fs.path.join(allocator, &.{ capture_dir, "pip_freeze.txt" });
             defer allocator.free(env_path);
-            const ef = try std.Io.Dir.cwd().createFile(env_path, .{});
+            const ef = try std.Io.Dir.cwd().createFile(io, env_path, .{});
+            var ef_buffer: [512]u8 = undefined;
+            var ef_writer = ef.writer(io, &ef_buffer);
             defer ef.close(io);
-            try ef.writeAll(buf[0..n]);
+            try ef_writer.interface.writeAll(buf[0..n]);
+            try ef_writer.flush();
             std.debug.print("   Python env captured (pip freeze → .zev/capture/pip_freeze.txt)\n", .{});
             return;
         }
@@ -177,9 +192,12 @@ fn captureAutoEnv(allocator: std.mem.Allocator,
         if (n > 0) {
             const env_path = try std.fs.path.join(allocator, &.{ capture_dir, "conda_env.yml" });
             defer allocator.free(env_path);
-            const ef = try std.Io.Dir.cwd().createFile(env_path, .{});
+            const ef = try std.Io.Dir.cwd().createFile(io, env_path, .{});
+            var ef_buffer: [512]u8 = undefined;
+            var ef_writer = ef.writer(io, &ef_buffer);
             defer ef.close(io);
-            try ef.writeAll(buf[0..n]);
+            try ef_writer.interface.writeAll(buf[0..n]);
+            try ef_writer.flush();
             std.debug.print("   Conda env captured → .zev/capture/conda_env.yml\n", .{});
             return;
         }
@@ -324,9 +342,12 @@ fn checkoutCommit(
         const file_path = try std.fs.path.join(allocator, &.{ target_dir, entry.name });
         defer allocator.free(file_path);
 
-        const f = try std.Io.Dir.cwd().createFile(file_path, .{});
+        const f = try std.Io.Dir.cwd().createFile(io, file_path, .{});
+        var f_buffer: [512]u8 = undefined;
+        var f_writer = f.writer(io, &f_buffer);
         defer f.close(io);
-        try f.writeAll(blob_data);
+        try f_writer.interface.writeAll(blob_data);
+        try f_writer.flush();
         count += 1;
     }
     return count;
@@ -518,7 +539,7 @@ fn doReproduce(
             std.Io.Dir.cwd().access(dst, .{}) catch {
                 const data = std.Io.Dir.cwd().readFileAlloc(io, src, allocator, .limited(1024 * 1024)) catch continue;
                 defer allocator.free(data);
-                const wf = std.Io.Dir.cwd().createFile(dst, .{}) catch continue;
+                const wf = std.Io.Dir.cwd().createFile(io, dst, .{}) catch continue;
                 defer wf.close(io);
                 wf.writeAll(data) catch continue;
             };

@@ -221,7 +221,7 @@ fn buildSnapshotPayload(
 fn httpPost(allocator: std.mem.Allocator,
     io: std.Io, endpoint: []const u8, token: []const u8, payload: []const u8) !struct { status: u32, body: []u8 } {
     const tmp_path = "/tmp/zev_publish_payload.json";
-    const tmp_file = try std.Io.Dir.cwd().createFile(tmp_path, .{});
+    const tmp_file = try std.Io.Dir.cwd().createFile(io, tmp_path, .{});
     try tmp_file.writeAll(payload);
     tmp_file.close(io);
 
@@ -635,9 +635,12 @@ pub fn publishConfig(
         try lines.appendSlice(allocator, new);
     }
 
-    const file = try std.Io.Dir.cwd().createFile(config_path, .{});
+    const file = try std.Io.Dir.cwd().createFile(io, config_path, .{});
+    var file_buffer: [512]u8 = undefined;
+    var file_writer = file.writer(io, &file_buffer);
     defer file.close(io);
-    try file.writeAll(lines.items);
+    try file_writer.interface.writeAll(lines.items);
+    try file_writer.flush();
 
     std.debug.print("✅ Publish config updated:\n", .{});
     if (endpoint) |e| std.debug.print("   endpoint: {s}\n", .{e});

@@ -43,12 +43,15 @@ fn saveExperiment(allocator: std.mem.Allocator,
     const path = try experimentPath(allocator, io, repo, exp.name);
     defer allocator.free(path);
 
-    const file = try std.Io.Dir.cwd().createFile(path, .{});
+    const file = try std.Io.Dir.cwd().createFile(io, path, .{});
+    var file_buffer: [512]u8 = undefined;
+    var file_writer = file.writer(io, &file_buffer);
     defer file.close(io);
 
     const content = try std.fmt.allocPrint(allocator, "name={s}\ndescription={s}\nhypothesis={s}\nstatus={s}\nbranch={s}\ncreated_at={d}\ntags={s}\n", .{ exp.name, exp.description, exp.hypothesis, exp.status, exp.branch, exp.created_at, exp.tags });
     defer allocator.free(content);
-    try file.writeAll(content);
+    try file_writer.interface.writeAll(content);
+    try file_writer.flush();
 }
 
 fn loadExperiment(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, name: []const u8) !?Experiment {
@@ -208,9 +211,12 @@ pub fn experimentComplete(allocator: std.mem.Allocator,
     if (notes.len > 0) {
         const results_path = try experimentPath(allocator, io, repo, try std.fmt.allocPrint(allocator, "{s}.results", .{name}));
         defer allocator.free(results_path);
-        const f = try std.Io.Dir.cwd().createFile(results_path, .{});
+        const f = try std.Io.Dir.cwd().createFile(io, results_path, .{});
+        var f_buffer: [512]u8 = undefined;
+        var f_writer = f.writer(io, &f_buffer);
         defer f.close(io);
-        try f.writeAll(notes);
+        try f_writer.interface.writeAll(notes);
+        try f_writer.flush();
     }
 
     std.debug.print("✅ Experiment '{s}' marked as completed\n", .{name});

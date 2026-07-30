@@ -172,11 +172,14 @@ fn savePeerState(
 ) !void {
     const path = try std.fs.path.join(allocator, &.{ repo.path, PEER_STATE_FILE });
     defer allocator.free(path);
-    const f = try std.Io.Dir.cwd().createFile(path, .{});
+    const f = try std.Io.Dir.cwd().createFile(io, path, .{});
+    var f_buffer: [512]u8 = undefined;
+    var f_writer = f.writer(io, &f_buffer);
     defer f.close(io);
     const content = try std.fmt.allocPrint(allocator, "meta_cid={s}\nnode_id={s}\n", .{ meta_cid, node_id });
     defer allocator.free(content);
-    try f.writeAll(content);
+    try f_writer.interface.writeAll(content);
+    try f_writer.flush();
 }
 
 fn loadPeerState(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) !?struct { meta_cid: []u8, node_id: []u8 } {
@@ -315,8 +318,11 @@ pub fn peerAnnounce(allocator: std.mem.Allocator,
     defer allocator.free(pub_endpoint);
 
     const tmp = "/tmp/zev_pubsub_msg.json";
-    const tf = try std.Io.Dir.cwd().createFile(tmp, .{});
-    try tf.writeAll(msg);
+    const tf = try std.Io.Dir.cwd().createFile(io, tmp, .{});
+    var tf_buffer: [512]u8 = undefined;
+    var tf_writer = tf.writer(io, &tf_buffer);
+    try tf_writer.interface.writeAll(msg);
+    try tf_writer.flush();
     tf.close(io);
 
     const pub_resp = try ipfsPost(allocator, io, pub_endpoint, &.{ "--data-binary", "@/tmp/zev_pubsub_msg.json" });
@@ -403,9 +409,12 @@ pub fn peerSync(allocator: std.mem.Allocator,
                 defer allocator.free(content);
 
                 if (content.len > 0) {
-                    const f = try std.Io.Dir.cwd().createFile(local_path, .{});
+                    const f = try std.Io.Dir.cwd().createFile(io, local_path, .{});
+                    var f_buffer: [512]u8 = undefined;
+                    var f_writer = f.writer(io, &f_buffer);
                     defer f.close(io);
-                    try f.writeAll(content);
+                    try f_writer.interface.writeAll(content);
+                    try f_writer.flush();
                     std.debug.print("   ✅ {s}/{s}\n", .{ dir_name, file_name });
                     synced += 1;
                 }
@@ -508,8 +517,11 @@ pub fn forkRepo(allocator: std.mem.Allocator,
 
     const head_path = try std.fs.path.join(allocator, &.{ zev_dir, "HEAD" });
     defer allocator.free(head_path);
-    const hf = try std.Io.Dir.cwd().createFile(head_path, .{});
-    try hf.writeAll("ref: refs/heads/main\n");
+    const hf = try std.Io.Dir.cwd().createFile(io, head_path, .{});
+    var hf_buffer: [512]u8 = undefined;
+    var hf_writer = hf.writer(io, &hf_buffer);
+    try hf_writer.interface.writeAll("ref: refs/heads/main\n");
+    try hf_writer.flush();
     hf.close(io);
 
     std.debug.print("   Fetching metadata from IPFS...\n", .{});

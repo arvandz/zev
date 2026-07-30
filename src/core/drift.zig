@@ -53,9 +53,12 @@ fn driftHistoryDir(allocator: std.mem.Allocator,
 fn writeFile(allocator: std.mem.Allocator,
     io: std.Io, path: []const u8, content: []const u8) !void {
     _ = allocator;
-    const f = try std.Io.Dir.cwd().createFile(path, .{});
+    const f = try std.Io.Dir.cwd().createFile(io, path, .{});
+    var f_buffer: [512]u8 = undefined;
+    var f_writer = f.writer(io, &f_buffer);
     defer f.close(io);
-    try f.writeAll(content);
+    try f_writer.interface.writeAll(content);
+    try f_writer.flush();
 }
 
 fn buildConfigContent(

@@ -117,10 +117,14 @@ pub const Identity = struct {
         @memcpy(&seed, sk_bytes[0..32]);
 
         const encoded = b64Encode32(seed);
-        const f = try std.Io.Dir.cwd().createFile(id_path, .{ .mode = 0o600 });
+        const f = try std.Io.Dir.cwd().createFile(io, id_path, .{ .mode = 0o600 });
+        var f_buffer: [512]u8 = undefined;
+        var f_writer = f.writer(io, &f_buffer);
         defer f.close(io);
-        try f.writeAll(&encoded);
-        try f.writeAll("\n");
+        try f_writer.interface.writeAll(&encoded);
+        try f_writer.flush();
+        try f_writer.interface.writeAll("\n");
+        try f_writer.flush();
     }
 
     pub fn publicKeyB64(self: Identity) [43]u8 {

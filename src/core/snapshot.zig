@@ -46,19 +46,25 @@ fn saveSnapshot(allocator: std.mem.Allocator,
     const path = try snapshotPath(allocator, io, repo, snap.id);
     defer allocator.free(path);
 
-    const file = try std.Io.Dir.cwd().createFile(path, .{});
+    const file = try std.Io.Dir.cwd().createFile(io, path, .{});
+    var file_buffer: [512]u8 = undefined;
+    var file_writer = file.writer(io, &file_buffer);
     defer file.close(io);
 
     const permanent_str: []const u8 = if (snap.permanent) "true" else "false";
     const content = try std.fmt.allocPrint(allocator, "id={s}\nname={s}\ndescription={s}\ncommit_hash={s}\nbranch={s}\ncreated_at={d}\ntags={s}\nauthor={s}\nexperiment_ref={s}\nlineage_refs={s}\nmetrics_snapshot={s}\npermanent={s}\n", .{ snap.id, snap.name, snap.description, snap.commit_hash, snap.branch, snap.created_at, snap.tags, snap.author, snap.experiment_ref, snap.lineage_refs, snap.metrics_snapshot, permanent_str });
     defer allocator.free(content);
-    try file.writeAll(content);
+    try file_writer.interface.writeAll(content);
+    try file_writer.flush();
 
     const index_path = try std.fmt.allocPrint(allocator, "{s}.name", .{path});
     defer allocator.free(index_path);
-    const idx = try std.Io.Dir.cwd().createFile(index_path, .{});
+    const idx = try std.Io.Dir.cwd().createFile(io, index_path, .{});
+    var idx_buffer: [512]u8 = undefined;
+    var idx_writer = idx.writer(io, &idx_buffer);
     defer idx.close(io);
-    try idx.writeAll(snap.id);
+    try idx_writer.interface.writeAll(snap.id);
+    try idx_writer.flush();
 }
 
 fn loadSnapshot(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, id: []const u8) !?Snapshot {
