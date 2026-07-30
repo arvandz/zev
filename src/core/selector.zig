@@ -134,7 +134,7 @@ pub const SelectorEngine = struct {
         return .{
             .allocator = allocator,
             .store = store,
-            .results = std.ArrayList(QueryResult){},
+            .results = std.ArrayList(QueryResult).empty,
             .node_type_filter = node_type,
             .max_results = 1000,
         };

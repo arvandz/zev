@@ -320,7 +320,7 @@ pub fn computeSemanticDiff(
             try all_keys.put(try allocator.dupe(u8, k.*), {});
     }
 
-    var deltas = std.ArrayList(MetricDelta){};
+    var deltas = std.ArrayList(MetricDelta).empty;
     var key_it = all_keys.keyIterator();
     while (key_it.next()) |key| {
         const va = metrics_a.get(key.*);

@@ -26,7 +26,7 @@ pub fn loadThresholds(
     const content = std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(64 * 1024)) catch return try allocator.alloc(ThresholdConfig, 0);
     defer allocator.free(content);
 
-    var configs = std.ArrayList(ThresholdConfig){};
+    var configs = std.ArrayList(ThresholdConfig).empty;
     var lines = std.mem.splitSequence(u8, content, "\n");
     while (lines.next()) |line| {
         const trimmed = std.mem.trim(u8, line, " \t\r");
@@ -173,7 +173,7 @@ pub fn loadMetricHistory(
     const content = std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(1024 * 1024)) catch return try allocator.alloc(MetricRecord, 0);
     defer allocator.free(content);
 
-    var records = std.ArrayList(MetricRecord){};
+    var records = std.ArrayList(MetricRecord).empty;
     var lines = std.mem.splitSequence(u8, content, "\n");
     while (lines.next()) |line| {
         const trimmed = std.mem.trim(u8, line, " \t\r");
@@ -264,7 +264,7 @@ pub fn detectRegressions(
         allocator.free(thresholds);
     }
 
-    var regressions = std.ArrayList(Regression){};
+    var regressions = std.ArrayList(Regression).empty;
 
     for (deltas) |d| {
         const current = d.val_b orelse continue;

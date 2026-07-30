@@ -24,7 +24,7 @@ pub fn readTree(
     const content = try std.Io.Dir.cwd().readFileAlloc(io, obj_path, allocator, .limited(1024 * 1024));
     defer allocator.free(content);
 
-    var entries = std.ArrayList(TreeEntry){};
+    var entries = std.ArrayList(TreeEntry).empty;
     var lines = std.mem.splitSequence(u8, content, "\n");
     while (lines.next()) |line| {
         if (line.len == 0) continue;
@@ -499,7 +499,7 @@ pub fn diffTrees(
         allocator.free(entries_b);
     }
 
-    var diffs = std.ArrayList(FileDiff){};
+    var diffs = std.ArrayList(FileDiff).empty;
 
     for (entries_b) |eb| {
         var found_a: ?TreeEntry = null;
@@ -540,7 +540,7 @@ pub fn diffTrees(
         }
 
         const ftype = FileType.fromName(eb.name);
-        var semantic = std.ArrayList(SemanticChange){};
+        var semantic = std.ArrayList(SemanticChange).empty;
 
         const content_a = readObject(allocator, repo_path, ea.hash) catch null;
         defer if (content_a) |c| allocator.free(c);
