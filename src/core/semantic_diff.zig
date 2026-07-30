@@ -583,12 +583,12 @@ pub fn cmdSemanticDiff(
     var store = try ipld.BlockStore.init(allocator, io, repo.path);
     defer store.deinit();
 
-    const cid_a = resolveRef(allocator, &store, repo, ref_a) catch {
+    const cid_a = resolveRef(allocator, io, &store, repo, ref_a) catch {
         std.debug.print("❌ Cannot resolve: {s}\n", .{ref_a});
         std.debug.print("   Run: zev ipld migrate\n\n", .{});
         return;
     };
-    const cid_b = resolveRef(allocator, &store, repo, ref_b) catch {
+    const cid_b = resolveRef(allocator, io, &store, repo, ref_b) catch {
         std.debug.print("❌ Cannot resolve: {s}\n", .{ref_b});
         return;
     };

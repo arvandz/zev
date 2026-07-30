@@ -565,7 +565,7 @@ pub fn cmdCheck(
 
     std.debug.print("🔎 Regression check: {s}\n\n", .{ref});
 
-    const cid_b = semantic_diff.resolveRef(allocator, &store, repo, ref) catch {
+    const cid_b = semantic_diff.resolveRef(allocator, io, &store, repo, ref) catch {
         std.debug.print("❌ Cannot resolve: {s}\n", .{ref});
         return 2;
     };
