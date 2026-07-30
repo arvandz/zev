@@ -678,7 +678,7 @@ pub const BlockStore = struct {
     }
 
     pub fn getNode(self: BlockStore, allocator: std.mem.Allocator, c: CID) !Value {
-        const data = try self.get(c);
+        const data = try self.get(io, c);
         defer allocator.free(data);
         return decode(allocator, data);
     }
