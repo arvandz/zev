@@ -147,7 +147,7 @@ pub fn push(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, remote_
         .file => try pushFile(allocator, io, repo, remote_url, branch_name),
         .http, .https => try pushHTTP(allocator, remote_url, branch_name),
         .ssh => try pushSSH(allocator, remote_url, branch_name),
-        .ipfs => try pushIPFS(allocator, repo, remote_name, branch_name),
+        .ipfs => try pushIPFS(allocator, io, repo, remote_name, branch_name),
     }
 }
 
