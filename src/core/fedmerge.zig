@@ -90,7 +90,7 @@ fn collectMetrics(
         while (try si.next(io)) |block| {
             if (block.kind != .file) continue;
             const c = ipld.CID.fromHex(block.name) catch continue;
-            const v = store.getNode(allocator, c) catch continue;
+            const v = store.getNode(allocator, io, c) catch continue;
             defer v.deinit(allocator);
             if (v != .map) continue;
             const t = v.getString("zev") orelse continue;
@@ -142,7 +142,7 @@ fn collectMetricsInner(
     }
     try visited.put(short, {});
 
-    const node = store.getNode(allocator, c) catch return;
+    const node = store.getNode(allocator, io, c) catch return;
     defer node.deinit(allocator);
     if (node != .map) return;
 
@@ -203,7 +203,7 @@ fn findHeadCommit(
         while (try si.next(io)) |block| {
             if (block.kind != .file) continue;
             const c = ipld.CID.fromHex(block.name) catch continue;
-            const v = store.getNode(allocator, c) catch continue;
+            const v = store.getNode(allocator, io, c) catch continue;
             defer v.deinit(allocator);
             if (v != .map) continue;
             const t = v.getString("zev") orelse continue;

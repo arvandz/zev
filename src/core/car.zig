@@ -334,7 +334,7 @@ pub fn dagImport(
     std.debug.print("   Query:   zev dag query all:graft\n\n", .{});
 
     for (car.roots) |root_cid| {
-        const v = store.getNode(allocator, root_cid) catch continue;
+        const v = store.getNode(allocator, io, root_cid) catch continue;
         defer v.deinit(allocator);
         if (v == .map) {
             if (v.getString("zev")) |t| {

@@ -182,7 +182,7 @@ pub fn signCommitNode(
     const sig_str = try identity.signHash(block_data);
     const pk_str = identity.publicKeyB64();
 
-    const existing = try store.getNode(allocator, commit_cid);
+    const existing = try store.getNode(allocator, io, commit_cid);
     defer existing.deinit(allocator);
     if (existing != .map) return error.NotAMap;
 
@@ -220,7 +220,7 @@ pub fn verifyCID(
     store: *ipld.BlockStore,
     cid: ipld.CID,
 ) !VerifyResult {
-    const node = try store.getNode(allocator, cid);
+    const node = try store.getNode(allocator, io, cid);
     defer node.deinit(allocator);
 
     if (node != .map) return error.NotAMap;

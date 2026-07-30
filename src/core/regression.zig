@@ -446,7 +446,7 @@ pub fn recordMetricsToHistory(
         while (try si.next(io)) |block| {
             if (block.kind != .file) continue;
             const c = ipld.CID.fromHex(block.name) catch continue;
-            const v = store.getNode(allocator, c) catch continue;
+            const v = store.getNode(allocator, io, c) catch continue;
             defer v.deinit(allocator);
             if (v != .map) continue;
             if (!std.mem.eql(u8, v.getString("zev") orelse "", "metrics")) continue;
@@ -570,7 +570,7 @@ pub fn cmdCheck(
         return 2;
     };
 
-    const node_b = store.getNode(allocator, cid_b) catch {
+    const node_b = store.getNode(allocator, io, cid_b) catch {
         std.debug.print("❌ Cannot load node: {s}\n", .{ref});
         return 2;
     };

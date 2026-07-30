@@ -17,7 +17,7 @@ pub fn dagShow(
         return;
     };
 
-    const value = store.getNode(allocator, c) catch {
+    const value = store.getNode(allocator, io, c) catch {
         std.debug.print("❌ Block not found: {s}\n", .{cid_str});
         std.debug.print("   This CID may exist on IPFS but not locally.\n", .{});
         std.debug.print("   Fetch with: zev graft {s} --as <alias>\n", .{cid_str});
@@ -50,7 +50,7 @@ pub fn dagWalk(
 
     std.debug.print("🕸️  DAG Walk from {s} (depth={d})\n\n", .{ cid_str[0..@min(16, cid_str.len)], max_depth });
 
-    var dag = ipld.walkDag(allocator, &store, c, max_depth) catch {
+    var dag = ipld.walkDag(allocator, io, &store, c, max_depth) catch {
         std.debug.print("❌ Root block not found: {s}\n", .{cid_str});
         return;
     };

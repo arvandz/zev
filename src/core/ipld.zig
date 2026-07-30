@@ -677,7 +677,8 @@ pub const BlockStore = struct {
         return c;
     }
 
-    pub fn getNode(self: BlockStore, allocator: std.mem.Allocator, c: CID) !Value {
+    pub fn getNode(self: BlockStore, allocator: std.mem.Allocator,
+    io: std.Io, c: CID) !Value {
         const data = try self.get(io, c);
         defer allocator.free(data);
         return decode(allocator, data);
@@ -718,26 +719,28 @@ pub const DagNode = struct {
 
 pub fn walkDag(
     allocator: std.mem.Allocator,
+    io: std.Io,
     store: *BlockStore,
     root_cid: CID,
     max_depth: usize,
 ) !DagNode {
-    return walkDagInner(allocator, store, root_cid, max_depth, 0);
+    return walkDagInner(allocator, io, store, root_cid, max_depth, 0);
 }
 
 fn walkDagInner(
     allocator: std.mem.Allocator,
+    io: std.Io,
     store: *BlockStore,
     c: CID,
     max_depth: usize,
     depth: usize,
 ) anyerror!DagNode {
-    const value = store.getNode(allocator, c) catch
+    const value = store.getNode(allocator, io, c) catch
         return DagNode{ .cid = c, .value = .null, .children = &.{} };
 
     var children: std.ArrayList(DagNode) = .empty;
     if (depth < max_depth) {
-        try collectLinks(allocator, store, value, &children, max_depth, depth + 1);
+        try collectLinks(allocator, io, store, value, &children, max_depth, depth + 1);
     }
 
     return DagNode{
@@ -749,6 +752,7 @@ fn walkDagInner(
 
 fn collectLinks(
     allocator: std.mem.Allocator,
+    io: std.Io,
     store: *BlockStore,
     value: Value,
     children: *std.ArrayList(DagNode),
@@ -757,17 +761,17 @@ fn collectLinks(
 ) anyerror!void {
     switch (value) {
         .link => |c| {
-            const child = try walkDagInner(allocator, store, c, max_depth, depth);
+            const child = try walkDagInner(allocator, io, store, c, max_depth, depth);
             try children.append(allocator, child);
         },
         .map => |m| {
             for (m) |entry| {
-                try collectLinks(allocator, store, entry.value, children, max_depth, depth);
+                try collectLinks(allocator, io, store, entry.value, children, max_depth, depth);
             }
         },
         .list => |l| {
             for (l) |item| {
-                try collectLinks(allocator, store, item, children, max_depth, depth);
+                try collectLinks(allocator, io, store, item, children, max_depth, depth);
             }
         },
         else => {},

@@ -165,7 +165,7 @@ fn collectMetricsForCommit(
         while (try si.next(io)) |block| {
             if (block.kind != .file) continue;
             const c = ipld.CID.fromHex(block.name) catch continue;
-            const v = store.getNode(allocator, c) catch continue;
+            const v = store.getNode(allocator, io, c) catch continue;
             defer v.deinit(allocator);
             if (v != .map) continue;
             const t = v.getString("zev") orelse continue;
@@ -288,18 +288,18 @@ pub fn computeSemanticDiff(
     cid_a: ipld.CID,
     cid_b: ipld.CID,
 ) !SemanticDiff {
-    const node_a = try store.getNode(allocator, cid_a);
+    const node_a = try store.getNode(allocator, io, cid_a);
     defer node_a.deinit(allocator);
-    const node_b = try store.getNode(allocator, cid_b);
+    const node_b = try store.getNode(allocator, io, cid_b);
     defer node_b.deinit(allocator);
 
-    var metrics_a = try collectMetricsForCommit(allocator, store, cid_a);
+    var metrics_a = try collectMetricsForCommit(allocator, io, store, cid_a);
     defer {
         var kit = metrics_a.keyIterator();
         while (kit.next()) |k| allocator.free(k.*);
         metrics_a.deinit();
     }
-    var metrics_b = try collectMetricsForCommit(allocator, store, cid_b);
+    var metrics_b = try collectMetricsForCommit(allocator, io, store, cid_b);
     defer {
         var kit = metrics_b.keyIterator();
         while (kit.next()) |k| allocator.free(k.*);
@@ -449,7 +449,7 @@ pub fn resolveRef(
         var current = head_cid;
         var i: usize = 0;
         while (i < n) : (i += 1) {
-            const node = store.getNode(allocator, current) catch break;
+            const node = store.getNode(allocator, io, current) catch break;
             defer node.deinit(allocator);
             current = node.getLink("parent") orelse break;
         }

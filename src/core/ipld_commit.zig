@@ -401,7 +401,7 @@ pub fn ipldLog(
             while (try si.next(io)) |block| {
                 if (block.kind != .file) continue;
                 const c = ipld.CID.fromHex(block.name) catch continue;
-                const v = store.getNode(allocator, c) catch continue;
+                const v = store.getNode(allocator, io, c) catch continue;
                 defer v.deinit(allocator);
                 if (v != .map) continue;
                 const t = v.getString("zev") orelse continue;
@@ -431,7 +431,7 @@ pub fn ipldLog(
     var count: usize = 0;
 
     while (count < max_entries) {
-        const node = store.getNode(allocator, current_cid) catch break;
+        const node = store.getNode(allocator, io, current_cid) catch break;
         defer node.deinit(allocator);
 
         if (node != .map) break;
@@ -453,7 +453,7 @@ pub fn ipldLog(
             defer allocator.free(ms);
             std.debug.print("    📊 metrics → {s}\n", .{ms});
 
-            const mv = store.getNode(allocator, mc) catch continue;
+            const mv = store.getNode(allocator, io, mc) catch continue;
             defer mv.deinit(allocator);
             if (mv == .map) {
                 if (mv.getField("metrics")) |mmap| {
