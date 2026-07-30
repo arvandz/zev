@@ -543,9 +543,9 @@ pub fn diffTrees(
         const ftype = FileType.fromName(eb.name);
         var semantic = std.ArrayList(SemanticChange).empty;
 
-        const content_a = readObject(allocator, repo_path, ea.hash) catch null;
+        const content_a = readObject(allocator, io, repo_path, ea.hash) catch null;
         defer if (content_a) |c| allocator.free(c);
-        const content_b = readObject(allocator, repo_path, eb.hash) catch null;
+        const content_b = readObject(allocator, io, repo_path, eb.hash) catch null;
         defer if (content_b) |c| allocator.free(c);
 
         if (content_a != null and content_b != null) {
