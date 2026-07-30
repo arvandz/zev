@@ -276,7 +276,7 @@ fn pullFile(allocator: std.mem.Allocator,
     }
     const remote_head = cid.CID{ .hash = hash };
 
-    try copyCommitHistory(allocator, &remote_repo, repo, remote_head);
+    try copyCommitHistory(allocator, io, &remote_repo, repo, remote_head);
 
     const zev_path = try std.fs.path.join(allocator, &[_][]const u8{ repo.path, ".zev" });
     defer allocator.free(zev_path);
