@@ -79,7 +79,7 @@ fn findObject(
     defer allocator.free(objects_dir);
 
     const exact = try std.fs.path.join(allocator, &.{ objects_dir, hash_prefix });
-    if (std.Io.Dir.cwd().access(exact, .{})) |_| return exact else |_| allocator.free(exact);
+    if (std.Io.Dir.cwd().access(io, exact, .{})) |_| return exact else |_| allocator.free(exact);
 
     var dir = try std.Io.Dir.cwd().openDir(io, objects_dir, .{ .iterate = true });
     defer dir.close(io);
@@ -483,17 +483,18 @@ fn diffText(
 
 pub fn diffTrees(
     allocator: std.mem.Allocator,
+    io: std.Io,
     repo_path: []const u8,
     tree_hash_a: []const u8,
     tree_hash_b: []const u8,
 ) ![]FileDiff {
-    const entries_a = readTree(allocator, repo_path, tree_hash_a) catch &[_]TreeEntry{};
+    const entries_a = readTree(allocator, io, repo_path, tree_hash_a) catch &[_]TreeEntry{};
     defer {
         for (entries_a) |e| e.deinit(allocator);
         allocator.free(entries_a);
     }
 
-    const entries_b = readTree(allocator, repo_path, tree_hash_b) catch &[_]TreeEntry{};
+    const entries_b = readTree(allocator, io, repo_path, tree_hash_b) catch &[_]TreeEntry{};
     defer {
         for (entries_b) |e| e.deinit(allocator);
         allocator.free(entries_b);
