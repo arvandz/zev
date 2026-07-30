@@ -163,7 +163,7 @@ pub fn pull(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, remote_
         .file => try pullFile(allocator, io, repo, remote_url, branch_name),
         .http, .https => try pullHTTP(allocator, repo, remote_url, branch_name),
         .ssh => try pullSSH(allocator, repo, remote_url, branch_name),
-        .ipfs => try pullIPFS(allocator, repo, remote_url, branch_name),
+        .ipfs => try pullIPFS(allocator, io, repo, remote_url, branch_name),
     }
 }
 
