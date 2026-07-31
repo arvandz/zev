@@ -171,7 +171,7 @@ pub fn diffUnstaged(allocator: std.mem.Allocator, io: std.Io, repo: *repository.
         const working_content = std.Io.Dir.cwd().readFileAlloc(io, entry.name, allocator, .limited(10 * 1024 * 1024)) catch continue;
         defer allocator.free(working_content);
 
-        const working_cid = cid.CID.fromBytes(io, working_content);
+        const working_cid = cid.CID.fromBytes(working_content);
 
         if (!working_cid.equals(entry.cid)) {
             std.debug.print("\nModified: {s}\n", .{entry.name});

@@ -156,7 +156,7 @@ fn computeRecordId(allocator: std.mem.Allocator,
     io: std.Io, subject_cid: []const u8, timestamp: i64) ![]u8 {
     const raw = try std.fmt.allocPrint(allocator, "notarize:{s}:{d}", .{ subject_cid, timestamp });
     defer allocator.free(raw);
-    const c = cid_mod.CID.fromBytes(io, raw);
+    const c = cid_mod.CID.fromBytes(raw);
     return try c.toString(allocator);
 }
 
@@ -375,7 +375,7 @@ fn notarizeLocal(
     const combined = try std.fmt.allocPrint(allocator, "{s}:{d}", .{ payload, timestamp });
     defer allocator.free(combined);
 
-    const fingerprint_cid = cid_mod.CID.fromBytes(io, combined);
+    const fingerprint_cid = cid_mod.CID.fromBytes(combined);
     const fingerprint = try fingerprint_cid.toString(allocator);
 
     const proof_path = "/tmp/zev_notarization_proof.json";

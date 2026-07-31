@@ -442,7 +442,7 @@ fn doReproduce(
 
     const id_raw = try std.fmt.allocPrint(allocator, "repro:{s}:{d}", .{ commit_hash, now });
     defer allocator.free(id_raw);
-    const id_cid = cid_mod.CID.fromBytes(io, id_raw);
+    const id_cid = cid_mod.CID.fromBytes(id_raw);
     const rec_id = try id_cid.toString(allocator);
     defer allocator.free(rec_id);
     const rec_id_short = rec_id[0..16];
