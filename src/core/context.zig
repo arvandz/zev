@@ -192,8 +192,7 @@ fn computeFileCid(allocator: std.mem.Allocator, io: std.Io, file_path: []const u
     return try c.toString(allocator);
 }
 
-fn computePromptHash(allocator: std.mem.Allocator,
-    io: std.Io, prompt: []const u8) ![]u8 {
+fn computePromptHash(allocator: std.mem.Allocator, prompt: []const u8) ![]u8 {
     const c = cid_mod.CID.fromBytes(prompt);
     return try c.toString(allocator);
 }
@@ -279,7 +278,8 @@ pub fn contextAdd(
 
     const prompt_text = prompt orelse "";
     const prompt_hash = if (prompt_text.len > 0)
-        try computePromptHash(allocator, io, prompt_text)
+        try         try computePromptHash(allocator, prompt_text)
+allocator, io, prompt_text)
     else
         try allocator.dupe(u8, "none");
     defer allocator.free(prompt_hash);

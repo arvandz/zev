@@ -12,7 +12,7 @@ pub fn createBranch(allocator: std.mem.Allocator,
     const branch_path = try std.fs.path.join(allocator, &[_][]const u8{ zev_path, "refs", "heads", branch_name });
     defer allocator.free(branch_path);
 
-    if (std.Io.Dir.cwd().access(branch_path, .{})) {
+    if (std.Io.Dir.cwd().access(io, branch_path, .{})) {
         return error.BranchAlreadyExists;
     } else |err| {
         if (err != error.FileNotFound) return err;
@@ -38,7 +38,7 @@ pub fn checkoutBranch(allocator: std.mem.Allocator,
     const branch_path = try std.fs.path.join(allocator, &[_][]const u8{ zev_path, "refs", "heads", branch_name });
     defer allocator.free(branch_path);
 
-    std.Io.Dir.cwd().access(branch_path, .{}) catch {
+    std.Io.Dir.cwd().access(io, branch_path, .{}) catch {
         return error.BranchNotFound;
     };
 
