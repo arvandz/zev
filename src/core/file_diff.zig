@@ -253,7 +253,7 @@ fn diffPython(
 }
 
 fn extractPythonDefs(allocator: std.mem.Allocator, content: []const u8) ![][]u8 {
-    var defs = std.ArrayList([]u8){};
+    var defs = std.ArrayList([]u8).empty;
     var lines = std.mem.splitSequence(u8, content, "\n");
     while (lines.next()) |line| {
         const trimmed = std.mem.trimLeft(u8, line, " \t");
@@ -270,7 +270,7 @@ fn extractPythonDefs(allocator: std.mem.Allocator, content: []const u8) ![][]u8 
 }
 
 fn extractImports(allocator: std.mem.Allocator, content: []const u8) ![][]u8 {
-    var imports = std.ArrayList([]u8){};
+    var imports = std.ArrayList([]u8).empty;
     var lines = std.mem.splitSequence(u8, content, "\n");
     while (lines.next()) |line| {
         const trimmed = std.mem.trim(u8, line, " \t");
@@ -439,9 +439,9 @@ fn diffText(
     content_b: []const u8,
     out: *std.ArrayList(SemanticChange),
 ) !void {
-    var lines_a = std.ArrayList([]const u8){};
+    var lines_a = std.ArrayList([]const u8).empty;
     defer lines_a.deinit(allocator);
-    var lines_b = std.ArrayList([]const u8){};
+    var lines_b = std.ArrayList([]const u8).empty;
     defer lines_b.deinit(allocator);
 
     var it = std.mem.splitSequence(u8, content_a, "\n");

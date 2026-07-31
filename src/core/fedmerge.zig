@@ -22,7 +22,7 @@ pub const MergeNode = struct {
     };
 
     pub fn toValue(self: MergeNode, allocator: std.mem.Allocator) !ipld.Value {
-        var entries = std.ArrayList(ipld.Value.MapEntry){};
+        var entries = std.ArrayList(ipld.Value.MapEntry).empty;
 
         try entries.append(allocator, .{ .key = try allocator.dupe(u8, "zev"), .value = .{ .string = try allocator.dupe(u8, "merge") } });
         try entries.append(allocator, .{ .key = try allocator.dupe(u8, "parent_a"), .value = .{ .link = self.parent_a } });
@@ -358,7 +358,7 @@ pub fn mergeFromCar(
     var it_b = metrics_b.entries.keyIterator();
     while (it_b.next()) |k| try all_keys.put(k.*, {});
 
-    var resolved = std.ArrayList(MergeNode.ResolvedConflict){};
+    var resolved = std.ArrayList(MergeNode.ResolvedConflict).empty;
     defer resolved.deinit(allocator);
 
     var key_it = all_keys.keyIterator();

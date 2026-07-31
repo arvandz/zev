@@ -14,7 +14,7 @@ pub const CarWriter = struct {
         return .{
             .allocator = allocator,
             .file = file,
-            .roots = std.ArrayList(ipld.CID){},
+            .roots = std.ArrayList(ipld.CID).empty,
             .written = std.StringHashMap(void).init(allocator),
             .block_count = 0,
             .byte_count = 0,

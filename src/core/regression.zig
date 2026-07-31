@@ -64,7 +64,7 @@ pub fn saveThreshold(
     const path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "regression_config" });
     defer allocator.free(path);
 
-    var lines = std.ArrayList(u8){};
+    var lines = std.ArrayList(u8).empty;
     defer lines.deinit(allocator);
 
     const existing = std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(64 * 1024)) catch "";

@@ -190,7 +190,7 @@ pub fn signCommitNode(
     defer arena.deinit();
     const aa = arena.allocator();
 
-    var entries = std.ArrayList(ipld.Value.MapEntry){};
+    var entries = std.ArrayList(ipld.Value.MapEntry).empty;
 
     for (existing.map) |entry| {
         if (std.mem.eql(u8, entry.key, "sig")) continue;
@@ -232,7 +232,7 @@ pub fn verifyCID(
     defer arena.deinit();
     const aa = arena.allocator();
 
-    var stripped = std.ArrayList(ipld.Value.MapEntry){};
+    var stripped = std.ArrayList(ipld.Value.MapEntry).empty;
     for (node.map) |entry| {
         if (std.mem.eql(u8, entry.key, "sig")) continue;
         if (std.mem.eql(u8, entry.key, "sig_pk")) continue;
