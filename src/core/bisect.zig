@@ -12,7 +12,7 @@ pub const BisectState = struct {
 
 pub fn bisectStart(allocator: std.mem.Allocator,
     io: std.Io, repo: *Repository) !void {
-    const head = try repo.getHeadCommit();
+    const head = try repo.getHeadCommit(io);
     const head_str = try head.toString(allocator);
     defer allocator.free(head_str);
 
@@ -128,14 +128,15 @@ fn checkoutForBisect(allocator: std.mem.Allocator, io: std.Io, repo: *Repository
     std.debug.print("  zev bisect bad   (if this commit is bad)\n", .{});
 }
 
-fn resolveHash(allocator: std.mem.Allocator, repo: *Repository, hash_opt: ?[]const u8, state_current: []const u8) ![]u8 {
+fn resolveHash(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository, hash_opt: ?[]const u8, state_current: []const u8) ![]u8 {
     if (hash_opt) |h| {
         return try allocator.dupe(u8, h);
     }
     if (state_current.len == 64) {
         return try allocator.dupe(u8, state_current);
     }
-    const head = try repo.getHeadCommit();
+    const head = try repo.getHeadCommit(io);
     return try head.toString(allocator);
 }
 
@@ -149,7 +150,7 @@ pub fn bisectGood(allocator: std.mem.Allocator,
     defer allocator.free(state.bad);
     defer allocator.free(state.current);
 
-    const good_hash = try resolveHash(allocator, repo, hash_opt, state.current);
+    const good_hash = try resolveHash(allocator, io, repo, hash_opt, state.current);
     defer allocator.free(good_hash);
 
     std.debug.print("✅ Marked {s} as good\n", .{good_hash[0..8]});
@@ -167,7 +168,7 @@ pub fn bisectBad(allocator: std.mem.Allocator,
     defer allocator.free(state.bad);
     defer allocator.free(state.current);
 
-    const bad_hash = try resolveHash(allocator, repo, hash_opt, state.current);
+    const bad_hash = try resolveHash(allocator, io, repo, hash_opt, state.current);
     defer allocator.free(bad_hash);
 
     std.debug.print("❌ Marked {s} as bad\n", .{bad_hash[0..8]});

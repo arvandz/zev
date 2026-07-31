@@ -518,7 +518,7 @@ pub fn datasetAssign(
 ) !void {
     const now = @divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s);
 
-    const head = repo.getHeadCommit() catch {
+    const head = repo.getHeadCommit(io) catch {
         std.debug.print("❌ No commits yet. Commit first.\n", .{});
         return;
     };

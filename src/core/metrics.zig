@@ -11,7 +11,7 @@ fn metricsPath(allocator: std.mem.Allocator,
 }
 
 pub fn setMetric(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, key: []const u8, value: []const u8) !void {
-    const head = try repo.getHeadCommit();
+    const head = try repo.getHeadCommit(io);
     const hash_str = try head.toString(allocator);
     defer allocator.free(hash_str);
 
@@ -71,7 +71,7 @@ pub fn showMetrics(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, 
     const hash_str = if (hash_opt) |h|
         try allocator.dupe(u8, h)
     else blk: {
-        const head = try repo.getHeadCommit();
+        const head = try repo.getHeadCommit(io);
         break :blk try head.toString(allocator);
     };
     defer allocator.free(hash_str);
@@ -112,7 +112,7 @@ pub fn showMetrics(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, 
 pub fn listMetrics(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) !void {
     const commit_mod = @import("commit.zig");
 
-    const head = repo.getHeadCommit() catch {
+    const head = repo.getHeadCommit(io) catch {
         std.debug.print("No commits yet.\n", .{});
         return;
     };

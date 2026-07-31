@@ -497,7 +497,7 @@ pub fn main(init: std.process.Init) !void {
             }
             return;
         };
-        const head_commit = repo.getHeadCommit() catch null;
+        const head_commit = repo.getHeadCommit(io) catch null;
         if (head_commit) |commit_cid| {
             const checkout_mod = @import("core/checkout.zig");
             checkout_mod.checkoutCommit(allocator, &repo, commit_cid) catch |err| {
@@ -689,7 +689,7 @@ pub fn main(init: std.process.Init) !void {
         var repo = try repository.Repository.open(allocator, io, ".");
         defer repo.deinit();
 
-        const head_cid = repo.getHeadCommit() catch {
+        const head_cid = repo.getHeadCommit(io) catch {
             std.debug.print("No commits yet.\n", .{});
             return;
         };

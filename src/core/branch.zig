@@ -4,7 +4,7 @@ const cid = @import("cid.zig");
 
 pub fn createBranch(allocator: std.mem.Allocator,
     io: std.Io, repo: *repository.Repository, branch_name: []const u8) !void {
-    const head_cid = try repo.getHeadCommit();
+    const head_cid = try repo.getHeadCommit(io);
 
     const zev_path = try std.fs.path.join(allocator, &[_][]const u8{ repo.path, ".zev" });
     defer allocator.free(zev_path);

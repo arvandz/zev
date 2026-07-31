@@ -724,7 +724,7 @@ pub fn reproduceCommit(
     dry_run: bool,
 ) !void {
     const commit_hash = if (std.mem.eql(u8, commit_ref, "HEAD")) blk: {
-        const head = repo.getHeadCommit() catch {
+        const head = repo.getHeadCommit(io) catch {
             std.debug.print("No commits yet.\n", .{});
             return;
         };

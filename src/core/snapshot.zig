@@ -192,7 +192,7 @@ fn resolveSnapshotId(allocator: std.mem.Allocator, io: std.Io, repo: *Repository
 }
 
 fn captureMetrics(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) ![]u8 {
-    const head = repo.getHeadCommit() catch return try allocator.dupe(u8, "");
+    const head = repo.getHeadCommit(io) catch return try allocator.dupe(u8, "");
     const hash_str = head.toString(allocator) catch return try allocator.dupe(u8, "");
     defer allocator.free(hash_str);
 

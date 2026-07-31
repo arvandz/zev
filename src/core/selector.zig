@@ -272,6 +272,7 @@ pub const ParsedQuery = struct {
 
 pub fn parseQuery(
     allocator: std.mem.Allocator,
+    io: std.Io,
     store: *ipld.BlockStore,
     repo: *Repository,
     query: []const u8,
@@ -281,7 +282,7 @@ pub fn parseQuery(
     }
 
     if (std.mem.startsWith(u8, query, "HEAD")) {
-        return parseHeadQuery(allocator, store, repo, query);
+        return parseHeadQuery(allocator, io, store, repo, query);
     }
 
     return parseCIDQuery(allocator, query);
@@ -321,6 +322,7 @@ fn parseAllQuery(
 
 fn parseHeadQuery(
     allocator: std.mem.Allocator,
+    io: std.Io,
     store: *ipld.BlockStore,
     repo: *Repository,
     query: []const u8,
@@ -339,7 +341,7 @@ fn parseHeadQuery(
         }
     }
 
-    const head_hash = repo.getHeadCommit() catch {
+    const head_hash = repo.getHeadCommit(io) catch {
         return error.NoCommits;
     };
     var head_cid = ipld.CID{
@@ -521,7 +523,7 @@ pub fn dagQuery(
 
     std.debug.print("🔍 Query: {s}\n\n", .{query_str});
 
-    var pq = parseQuery(allocator, &store, repo, query_str) catch |err| {
+    var pq = parseQuery(allocator, io, &store, repo, query_str) catch |err| {
         std.debug.print("❌ Parse error: {}\n", .{err});
         std.debug.print("\nQuery syntax:\n", .{});
         std.debug.print("  all:commit                        — all commit nodes\n", .{});

@@ -17,7 +17,7 @@ pub fn createTag(allocator: std.mem.Allocator,
         if (c == ' ' or c == '\t' or c == '\n') return error.InvalidTagName;
     }
 
-    const head_cid = try repo.getHeadCommit();
+    const head_cid = try repo.getHeadCommit(io);
     const commit_hash = try head_cid.toString(allocator);
     defer allocator.free(commit_hash);
 
@@ -44,7 +44,7 @@ pub fn createAnnotatedTag(allocator: std.mem.Allocator,
     io: std.Io, repo: *Repository, tag_name: []const u8, message: []const u8, tagger: []const u8) !void {
     if (tag_name.len == 0) return error.InvalidTagName;
 
-    const head_cid = try repo.getHeadCommit();
+    const head_cid = try repo.getHeadCommit(io);
     const commit_hash = try head_cid.toString(allocator);
     defer allocator.free(commit_hash);
 

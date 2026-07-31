@@ -27,7 +27,7 @@ pub fn cherryPick(
     defer allocator.free(pick_commit.author);
     defer allocator.free(pick_commit.message);
 
-    const current_head = repo.getHeadCommit() catch {
+    const current_head = repo.getHeadCommit(io) catch {
         std.debug.print("Error: No commits on current branch\n", .{});
         return .conflict;
     };

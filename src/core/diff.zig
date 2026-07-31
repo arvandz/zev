@@ -151,7 +151,7 @@ pub fn diffCommits(allocator: std.mem.Allocator, io: std.Io, repo: *repository.R
 }
 
 pub fn diffUnstaged(allocator: std.mem.Allocator, io: std.Io, repo: *repository.Repository) !void {
-    const head_cid = repo.getHeadCommit() catch {
+    const head_cid = repo.getHeadCommit(io) catch {
         std.debug.print("No commits yet\n", .{});
         return;
     };
@@ -192,7 +192,7 @@ pub fn diffStaged(allocator: std.mem.Allocator, io: std.Io, repo: *repository.Re
         return;
     }
 
-    const head_cid = repo.getHeadCommit() catch {
+    const head_cid = repo.getHeadCommit(io) catch {
         for (repo.index.entries.items) |entry| {
             std.debug.print("\nNew file: {s}\n", .{entry.path});
             const content = try repo.store.get(io, entry.cid);

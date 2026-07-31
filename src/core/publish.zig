@@ -287,7 +287,7 @@ pub fn publishCommit(
     };
     defer freePublishConfig(allocator, cfg);
 
-    const head = repo.getHeadCommit() catch {
+    const head = repo.getHeadCommit(io) catch {
         std.debug.print("Error: No commits yet.\n", .{});
         return;
     };

@@ -458,7 +458,7 @@ pub fn driftCheck(allocator: std.mem.Allocator,
         return;
     }
 
-    const head = repo.getHeadCommit() catch {
+    const head = repo.getHeadCommit(io) catch {
         std.debug.print("No commits yet.\n", .{});
         return;
     };

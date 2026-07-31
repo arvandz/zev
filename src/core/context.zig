@@ -198,8 +198,9 @@ fn computePromptHash(allocator: std.mem.Allocator,
     return try c.toString(allocator);
 }
 
-fn getHeadHash(allocator: std.mem.Allocator, repo: *Repository) ![]u8 {
-    const head = repo.getHeadCommit() catch
+fn getHeadHash(allocator: std.mem.Allocator,
+    io: std.Io, repo: *Repository) ![]u8 {
+    const head = repo.getHeadCommit(io) catch
         return try allocator.dupe(u8, "none");
     return try head.toString(allocator);
 }
@@ -283,7 +284,7 @@ pub fn contextAdd(
         try allocator.dupe(u8, "none");
     defer allocator.free(prompt_hash);
 
-    const commit_hash = try getHeadHash(allocator, repo);
+    const commit_hash = try getHeadHash(allocator, io, repo);
     defer allocator.free(commit_hash);
 
     const record_id = try makeRecordId(allocator, io, file_path, now);

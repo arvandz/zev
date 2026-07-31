@@ -74,7 +74,7 @@ fn freeMetricsMap(allocator: std.mem.Allocator, map: *std.StringHashMap(f64)) vo
 }
 
 pub fn searchCommits(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, query: []const u8, max: usize) !void {
-    const head = repo.getHeadCommit() catch {
+    const head = repo.getHeadCommit(io) catch {
         std.debug.print("No commits yet.\n", .{});
         return;
     };
@@ -234,7 +234,7 @@ pub fn searchMetrics(allocator: std.mem.Allocator, io: std.Io, repo: *Repository
 
     std.debug.print("🔍 Searching metrics: {s}\n\n", .{filter});
 
-    const head = repo.getHeadCommit() catch {
+    const head = repo.getHeadCommit(io) catch {
         std.debug.print("No commits yet.\n", .{});
         return;
     };
