@@ -426,9 +426,9 @@ pub fn main(init: std.process.Init) !void {
             const option = args[2];
 
             if (std.mem.eql(u8, option, "--staged") or std.mem.eql(u8, option, "--cached")) {
-                try diff.diffStaged(allocator, &repo);
+                try diff.diffStaged(allocator, io, &repo);
             } else {
-                try diff.diffWorkingToStaging(allocator, &repo, option);
+                try diff.diffWorkingToStaging(allocator, io, &repo, option);
             }
         } else {
             try diff.diffUnstaged(allocator, &repo);
