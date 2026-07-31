@@ -431,7 +431,7 @@ pub fn main(init: std.process.Init) !void {
                 try diff.diffWorkingToStaging(allocator, io, &repo, option);
             }
         } else {
-            try diff.diffUnstaged(allocator, &repo);
+            try diff.diffUnstaged(allocator, io, &repo);
         }
     } else if (std.mem.eql(u8, command, "branch")) {
         if (!repository.Repository.exists(allocator, io, ".")) {
