@@ -312,7 +312,7 @@ fn extractJsonFieldRaw(allocator: std.mem.Allocator, json: []const u8, field: []
     const search = try std.fmt.allocPrint(allocator, "\"{s}\":", .{field});
     defer allocator.free(search);
     const idx = std.mem.indexOf(u8, json, search) orelse return error.FieldNotFound;
-    const after = std.mem.trimLeft(u8, json[idx + search.len ..], " \t");
+    const after = std.mem.trimStart(u8, json[idx + search.len ..], " \t");
     if (after.len == 0) return error.FieldNotFound;
     if (after[0] == '"') {
         const end = std.mem.indexOf(u8, after[1..], "\"") orelse return error.FieldNotFound;

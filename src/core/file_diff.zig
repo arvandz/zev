@@ -256,7 +256,7 @@ fn extractPythonDefs(allocator: std.mem.Allocator, content: []const u8) ![][]u8 
     var defs = std.ArrayList([]u8).empty;
     var lines = std.mem.splitSequence(u8, content, "\n");
     while (lines.next()) |line| {
-        const trimmed = std.mem.trimLeft(u8, line, " \t");
+        const trimmed = std.mem.trimStart(u8, line, " \t");
         if (std.mem.startsWith(u8, trimmed, "def ") or
             std.mem.startsWith(u8, trimmed, "class ") or
             std.mem.startsWith(u8, trimmed, "async def "))

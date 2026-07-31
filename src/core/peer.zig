@@ -61,7 +61,7 @@ fn extractJsonStr(allocator: std.mem.Allocator, json: []const u8, field: []const
 
     const idx = std.mem.indexOf(u8, json, search) orelse return null;
     const after = json[idx + search.len ..];
-    const trimmed = std.mem.trimLeft(u8, after, " \t\n\r");
+    const trimmed = std.mem.trimStart(u8, after, " \t\n\r");
     if (trimmed.len == 0 or trimmed[0] != '"') return null;
     const start = 1;
     const end = std.mem.indexOf(u8, trimmed[start..], "\"") orelse return null;
