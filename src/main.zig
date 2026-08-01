@@ -520,7 +520,7 @@ pub fn main(init: std.process.Init) !void {
         defer repo.deinit();
 
         const source_branch = args[2];
-        const result = try merge.merge(allocator, &repo, source_branch);
+        const result = try merge.merge(allocator, io, &repo, source_branch);
 
         switch (result) {
             .FastForward => {
