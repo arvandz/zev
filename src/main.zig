@@ -500,7 +500,7 @@ pub fn main(init: std.process.Init) !void {
         const head_commit = repo.getHeadCommit(io) catch null;
         if (head_commit) |commit_cid| {
             const checkout_mod = @import("core/checkout.zig");
-            checkout_mod.checkoutCommit(allocator, &repo, commit_cid) catch |err| {
+            checkout_mod.checkoutCommit(allocator, io, &repo, commit_cid) catch |err| {
                 std.debug.print("Warning: Could not checkout files: {}\n", .{err});
             };
         }
