@@ -254,8 +254,7 @@ pub fn snapshotCreate(
     defer allocator.free(branch);
 
     const now = @divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s);
-    const snap_id = try     const snap_id = try computeSnapshotId(allocator, name, commit_hash, now);
-allocator, io, name, commit_hash, now);
+    const snap_id = try computeSnapshotId(allocator, name, commit_hash, now);
     defer allocator.free(snap_id);
 
     const existing_id = try resolveSnapshotId(allocator, repo, name);

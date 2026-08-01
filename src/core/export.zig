@@ -202,8 +202,7 @@ pub fn exportRepo(
         const content = (try readFileSafe(allocator, fi.abs)) orelse continue;
         defer allocator.free(content);
 
-        const checksum = try         const checksum = try computeChecksum(allocator, content);
-allocator, io, content);
+        const checksum = try computeChecksum(allocator, content);
         defer allocator.free(checksum);
 
         const file_hdr = try std.fmt.allocPrint(allocator, "FILE {s} {d} {s}\n", .{ fi.rel, content.len, checksum });
@@ -350,8 +349,7 @@ pub fn importArchive(
         try manifest_acc.appendSlice(allocator, checksum);
         try manifest_acc.append(allocator, '\n');
 
-        const actual_checksum = try         const actual_checksum = try computeChecksum(allocator, file_content);
-allocator, io, file_content);
+        const actual_checksum = try computeChecksum(allocator, file_content);
         defer allocator.free(actual_checksum);
         const valid = std.mem.eql(u8, actual_checksum, checksum);
 

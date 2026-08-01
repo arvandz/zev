@@ -465,8 +465,7 @@ pub fn notarizeSnapshot(
     const payload = try buildPayload(allocator, "snapshot", snap_name, snap.cid, snap.metrics, author, now);
     defer allocator.free(payload);
 
-    const rec_id = try     const rec_id = try computeRecordId(allocator, snap.cid, now);
-allocator, io, snap.cid, now);
+    const rec_id = try computeRecordId(allocator, snap.cid, now);
     defer allocator.free(rec_id);
 
     std.debug.print("⛓️  Notarizing snapshot '{s}'\n\n", .{snap_name});
@@ -590,8 +589,7 @@ pub fn notarizeCommit(
     const payload = try buildPayload(allocator, "commit", commit_hash, commit_hash, metrics_str, author, now);
     defer allocator.free(payload);
 
-    const rec_id = try     const rec_id = try computeRecordId(allocator, commit_hash, now);
-allocator, io, commit_hash, now);
+    const rec_id = try computeRecordId(allocator, commit_hash, now);
     defer allocator.free(rec_id);
 
     std.debug.print("⛓️  Notarizing commit {s}\n\n", .{commit_hash[0..8]});
@@ -668,8 +666,7 @@ pub fn notarizeVerify(allocator: std.mem.Allocator,
     if (rec.metrics.len > 0)
         std.debug.print("   Metrics:     {s}\n", .{rec.metrics});
 
-    const recomputed = try     const recomputed = try computeRecordId(allocator, rec.subject_cid, rec.timestamp);
-allocator, io, rec.subject_cid, rec.timestamp);
+    const recomputed = try computeRecordId(allocator, rec.subject_cid, rec.timestamp);
     defer allocator.free(recomputed);
 
     const id_matches = std.mem.eql(u8, recomputed, rec.id);
