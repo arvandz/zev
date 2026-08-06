@@ -147,7 +147,7 @@ pub fn appendMetricHistory(
     const path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "metric_history" });
     defer allocator.free(path);
 
-    const now = @divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s);
+    const now: i64 = @intCast(@divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s));
     const f = blk: {
         if (std.Io.Dir.cwd().openFile(io, path, .{ .mode = .read_write })) |file| {
             break :blk file;
@@ -155,10 +155,10 @@ pub fn appendMetricHistory(
         break :blk try std.Io.Dir.cwd().createFile(io, path, .{});
     };
     defer f.close(io);
-    try f.seekFromEnd(0);
     const line = try std.fmt.allocPrint(allocator, "{s} {s} {d:.6} {d}\n", .{ commit_short, metric, value, now });
     defer allocator.free(line);
-    try f.writeAll(line);
+    const stat = try f.stat(io);
+    try f.writePositionalAll(io, line, stat.size);
 }
 
 pub fn loadMetricHistory(
@@ -196,12 +196,8 @@ pub fn loadMetricHistory(
     return records.toOwnedSlice(allocator);
 }
 
-pub fn getBestHistorical(
-    allocator: std.mem.Allocator,
-    repo: *Repository,
-    metric: []const u8,
-) !?f64 {
-    const records = try loadMetricHistory(allocator, repo, metric);
+pub fn getBestHistorical(io: std.Io, allocator: std.mem.Allocator, repo: *Repository, metric: []const u8) !?f64 {
+    const records = try loadMetricHistory(allocator, io, repo, metric);
     defer {
         for (records) |r| r.deinit(allocator);
         allocator.free(records);
@@ -253,12 +249,8 @@ pub const Regression = struct {
     }
 };
 
-pub fn detectRegressions(
-    allocator: std.mem.Allocator,
-    repo: *Repository,
-    deltas: []const semantic_diff.MetricDelta,
-) ![]Regression {
-    const thresholds = try loadThresholds(allocator, repo);
+pub fn detectRegressions(io: std.Io, allocator: std.mem.Allocator, repo: *Repository, deltas: []const semantic_diff.MetricDelta) ![]Regression {
+    const thresholds = try loadThresholds(allocator, io, repo);
     defer {
         for (thresholds) |t| t.deinit(allocator);
         allocator.free(thresholds);
@@ -334,7 +326,7 @@ pub fn detectRegressions(
         }
 
         if (d.direction == .degraded) {
-            const best = try getBestHistorical(allocator, repo, d.key) orelse continue;
+            const best = try getBestHistorical(io, allocator, repo, d.key) orelse continue;
             const vs_best_delta = current - best;
             const higher_better = isHigherBetter(d.key);
             const is_regression = (higher_better and vs_best_delta < -0.05) or
@@ -482,12 +474,7 @@ pub fn recordMetricsToHistory(
     }
 }
 
-pub fn cmdThresholdSet(
-    allocator: std.mem.Allocator,
-    repo: *Repository,
-    metric: []const u8,
-    args: []const []const u8,
-) !void {
+pub fn cmdThresholdSet(io: std.Io, allocator: std.mem.Allocator, repo: *Repository, metric: []const u8, args: []const []const u8) !void {
     var cfg = ThresholdConfig{
         .metric = try allocator.dupe(u8, metric),
         .min_value = null,
@@ -514,7 +501,7 @@ pub fn cmdThresholdSet(
         }
     }
 
-    try saveThreshold(allocator, repo, cfg);
+    try saveThreshold(allocator, io, repo, cfg);
 
     std.debug.print("✅ Threshold set for {s}:\n", .{metric});
     if (cfg.min_value) |v| std.debug.print("   min:        {d:.4}\n", .{v});
@@ -524,11 +511,8 @@ pub fn cmdThresholdSet(
     std.debug.print("\n", .{});
 }
 
-pub fn cmdThresholdList(
-    allocator: std.mem.Allocator,
-    repo: *Repository,
-) !void {
-    const thresholds = try loadThresholds(allocator, repo);
+pub fn cmdThresholdList(io: std.Io, allocator: std.mem.Allocator, repo: *Repository) !void {
+    const thresholds = try loadThresholds(allocator, io, repo);
     defer {
         for (thresholds) |t| t.deinit(allocator);
         allocator.free(thresholds);
@@ -542,7 +526,12 @@ pub fn cmdThresholdList(
 
     std.debug.print("📏 Configured thresholds:\n\n", .{});
     std.debug.print("   {s:<20} {s:<12} {s:<12} {s:<12} {s}\n", .{ "metric", "min", "max", "warn_delta", "warn_pct%" });
-    std.debug.print("   {s}\n", .{"─"**65});
+    const dash65 = comptime blk: {
+        var s: []const u8 = "";
+        for (0..65) |_| s = s ++ "─";
+        break :blk s;
+    };
+    std.debug.print("   {s}\n", .{dash65});
     for (thresholds) |t| {
         std.debug.print("   {s:<20}", .{t.metric});
         if (t.min_value) |v| std.debug.print(" {d:<11.4}", .{v}) else std.debug.print(" {s:<11}", .{"-"});
@@ -582,8 +571,8 @@ pub fn cmdCheck(
         return 0;
     }
 
-    try recordMetricsToHistory(allocator, repo, &store, parent_cid.?);
-    try recordMetricsToHistory(allocator, repo, &store, cid_b);
+    try recordMetricsToHistory(allocator, io, repo, &store, parent_cid.?);
+    try recordMetricsToHistory(allocator, io, repo, &store, cid_b);
 
     const diff = try semantic_diff.computeSemanticDiff(allocator, io, &store, parent_cid.?, cid_b);
     defer {
@@ -626,7 +615,7 @@ pub fn cmdCheck(
         std.debug.print("\n", .{});
     }
 
-    const regressions = try detectRegressions(allocator, repo, diff.metrics);
+    const regressions = try detectRegressions(io, allocator, repo, diff.metrics);
     defer {
         for (regressions) |r| r.deinit(allocator);
         allocator.free(regressions);
@@ -653,12 +642,8 @@ pub fn cmdCheck(
     return 0;
 }
 
-pub fn cmdHistory(
-    allocator: std.mem.Allocator,
-    repo: *Repository,
-    metric: []const u8,
-) !void {
-    const records = try loadMetricHistory(allocator, repo, metric);
+pub fn cmdHistory(io: std.Io, allocator: std.mem.Allocator, repo: *Repository, metric: []const u8) !void {
+    const records = try loadMetricHistory(allocator, io, repo, metric);
     defer {
         for (records) |r| r.deinit(allocator);
         allocator.free(records);
@@ -694,7 +679,12 @@ pub fn cmdHistory(
     std.debug.print("\n\n", .{});
 
     std.debug.print("   {s:<12} {s:<10} {s}\n", .{ "commit", "value", "trend" });
-    std.debug.print("   {s}\n", .{"─"**35});
+    const dash35 = comptime blk: {
+        var s: []const u8 = "";
+        for (0..35) |_| s = s ++ "─";
+        break :blk s;
+    };
+    std.debug.print("   {s}\n", .{dash35});
 
     var prev: ?f64 = null;
     for (records) |r| {

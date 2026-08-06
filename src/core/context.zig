@@ -22,8 +22,7 @@ pub const ContextRecord = struct {
     notes: []const u8,
 };
 
-fn contextDir(allocator: std.mem.Allocator,
-    io: std.Io, repo: *Repository) ![]u8 {
+fn contextDir(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) ![]u8 {
     const dir = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "context" });
     try std.Io.Dir.cwd().createDirPath(io, dir);
     return dir;
@@ -197,8 +196,7 @@ fn computePromptHash(allocator: std.mem.Allocator, prompt: []const u8) ![]u8 {
     return try c.toString(allocator);
 }
 
-fn getHeadHash(allocator: std.mem.Allocator,
-    io: std.Io, repo: *Repository) ![]u8 {
+fn getHeadHash(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) ![]u8 {
     const head = repo.getHeadCommit(io) catch
         return try allocator.dupe(u8, "none");
     return try head.toString(allocator);
@@ -265,14 +263,14 @@ pub fn contextAdd(
     notes: ?[]const u8,
     kind_str: []const u8,
 ) !void {
-    const now = @divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s);
+    const now: i64 = @intCast(@divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s));
 
-    std.Io.Dir.cwd().access(file_path, .{}) catch {
+    std.Io.Dir.cwd().access(io, file_path, .{}) catch {
         std.debug.print("Error: file '{s}' not found\n", .{file_path});
         return;
     };
 
-    const file_cid = try computeFileCid(allocator, file_path);
+    const file_cid = try computeFileCid(allocator, io, file_path);
     defer allocator.free(file_cid);
 
     const prompt_text = prompt orelse "";
@@ -348,7 +346,7 @@ pub fn contextShow(
         if (entry.kind != .file) continue;
         const path = try std.fs.path.join(allocator, &.{ dir_path, entry.name });
         defer allocator.free(path);
-        const rec = (try loadRecord(allocator, path)) orelse continue;
+        const rec = (try loadRecord(allocator, io, path)) orelse continue;
         if (std.mem.eql(u8, rec.file_path, file_path)) {
             try records.append(allocator, rec);
         } else {
@@ -381,8 +379,8 @@ pub fn contextShow(
         std.debug.print("  Add one: zev context add {s} --model claude-3-5-sonnet\n\n", .{file_path});
     }
 
-    if (std.Io.Dir.cwd().access(file_path, .{}) catch null == null or true) {
-        const cur_cid = computeFileCid(allocator, file_path) catch null;
+    if (std.Io.Dir.cwd().access(io, file_path, .{}) catch null == null or true) {
+        const cur_cid = computeFileCid(allocator, io, file_path) catch null;
         if (cur_cid) |cid| {
             defer allocator.free(cid);
             if (found > 0) {
@@ -409,7 +407,7 @@ pub fn contextBlame(
     var latest = std.StringHashMap(ContextRecord).init(allocator);
     defer {
         var it = latest.iterator();
-        while (it.next(io)) |e| {
+        while (it.next()) |e| {
             allocator.free(e.key_ptr.*);
             freeRecord(allocator, e.value_ptr.*);
         }
@@ -428,7 +426,7 @@ pub fn contextBlame(
         if (entry.kind != .file) continue;
         const path = try std.fs.path.join(allocator, &.{ dir_path, entry.name });
         defer allocator.free(path);
-        const rec = (try loadRecord(allocator, path)) orelse continue;
+        const rec = (try loadRecord(allocator, io, path)) orelse continue;
 
         if (latest.get(rec.file_path)) |existing| {
             if (rec.generation_ts > existing.generation_ts) {
@@ -469,7 +467,7 @@ pub fn contextBlame(
     }
     std.debug.print("   {s}\n", .{divider});
 
-    if (latest.count(io, ) == 0) {
+    if (latest.count() == 0) {
         std.debug.print("  No files with context records.\n\n", .{});
     }
 }
@@ -485,7 +483,7 @@ pub fn contextStats(
     var model_counts = std.StringHashMap(usize).init(allocator);
     defer {
         var it = model_counts.iterator();
-        while (it.next(io)) |e| allocator.free(e.key_ptr.*);
+        while (it.next()) |e| allocator.free(e.key_ptr.*);
         model_counts.deinit();
     }
 
@@ -495,7 +493,7 @@ pub fn contextStats(
     var file_models = std.StringHashMap([]u8).init(allocator);
     defer {
         var it = file_models.iterator();
-        while (it.next(io)) |e| {
+        while (it.next()) |e| {
             allocator.free(e.key_ptr.*);
             allocator.free(e.value_ptr.*);
         }
@@ -504,13 +502,13 @@ pub fn contextStats(
     var file_kinds = std.StringHashMap(AuthorKind).init(allocator);
     defer {
         var it = file_kinds.iterator();
-        while (it.next(io)) |e| allocator.free(e.key_ptr.*);
+        while (it.next()) |e| allocator.free(e.key_ptr.*);
         file_kinds.deinit();
     }
     var file_ts = std.StringHashMap(i64).init(allocator);
     defer {
         var it = file_ts.iterator();
-        while (it.next(io)) |e| allocator.free(e.key_ptr.*);
+        while (it.next()) |e| allocator.free(e.key_ptr.*);
         file_ts.deinit();
     }
 
@@ -525,7 +523,7 @@ pub fn contextStats(
         if (entry.kind != .file) continue;
         const path = try std.fs.path.join(allocator, &.{ dir_path, entry.name });
         defer allocator.free(path);
-        const rec = (try loadRecord(allocator, path)) orelse continue;
+        const rec = (try loadRecord(allocator, io, path)) orelse continue;
         defer freeRecord(allocator, rec);
 
         const existing_ts = file_ts.get(rec.file_path) orelse -1;
@@ -606,7 +604,7 @@ pub fn contextQuery(
     var latest = std.StringHashMap(ContextRecord).init(allocator);
     defer {
         var it = latest.iterator();
-        while (it.next(io)) |e| {
+        while (it.next()) |e| {
             allocator.free(e.key_ptr.*);
             freeRecord(allocator, e.value_ptr.*);
         }
@@ -618,7 +616,7 @@ pub fn contextQuery(
         if (entry.kind != .file) continue;
         const path = try std.fs.path.join(allocator, &.{ dir_path, entry.name });
         defer allocator.free(path);
-        const rec = (try loadRecord(allocator, path)) orelse continue;
+        const rec = (try loadRecord(allocator, io, path)) orelse continue;
 
         const existing_ts = if (latest.get(rec.file_path)) |e| e.generation_ts else -1;
         if (rec.generation_ts > existing_ts) {
@@ -665,8 +663,7 @@ pub fn contextQuery(
     }
 }
 
-pub fn contextList(allocator: std.mem.Allocator,
-    io: std.Io, repo: *Repository) !void {
+pub fn contextList(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) !void {
     const dir_path = try contextDir(allocator, io, repo);
     defer allocator.free(dir_path);
 
@@ -685,7 +682,7 @@ pub fn contextList(allocator: std.mem.Allocator,
         if (entry.kind != .file) continue;
         const path = try std.fs.path.join(allocator, &.{ dir_path, entry.name });
         defer allocator.free(path);
-        const rec = (try loadRecord(allocator, path)) orelse continue;
+        const rec = (try loadRecord(allocator, io, path)) orelse continue;
         defer freeRecord(allocator, rec);
         count += 1;
         std.debug.print("  {s} {s:<28} {s}{s}\n", .{ kindIcon(rec.author_kind), rec.file_path, modelIcon(rec.model), rec.model });
@@ -702,7 +699,8 @@ pub fn contextList(allocator: std.mem.Allocator,
 pub fn contextAutoDetect(
     allocator: std.mem.Allocator,
     io: std.Io,
-    repo: Repository,
+    env_map: *std.process.Environ.Map,
+    repo: *Repository,
     file_path: []const u8,
 ) !void {
     std.Io.Dir.cwd().access(io, file_path, .{}) catch {
@@ -727,8 +725,7 @@ pub fn contextAutoDetect(
     };
 
     for (env_vars) |ev| {
-        const val = std.process.getEnvVarOwned(allocator, ev.env) catch continue;
-        defer allocator.free(val);
+        const val = env_map.get(ev.env) orelse continue;
         if (val.len == 0) continue;
         if (ev.model.len > 0) {
             detected_model = ev.model;
@@ -787,6 +784,7 @@ pub fn contextAutoDetect(
 pub fn contextAutoDetectAll(
     allocator: std.mem.Allocator,
     io: std.Io,
+    env_map: *std.process.Environ.Map,
     repo: *Repository,
 ) !void {
     const head_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "HEAD" });
@@ -852,7 +850,7 @@ pub fn contextAutoDetectAll(
             break;
         };
         if (!valid) continue;
-        try contextAutoDetect(allocator, repo, fname);
+        try contextAutoDetect(allocator, io, env_map, repo, fname);
         count += 1;
     }
     std.debug.print("Processed {d} file(s).\n", .{count});

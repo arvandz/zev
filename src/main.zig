@@ -44,10 +44,13 @@ const crypto_mod = @import("core/crypto.zig");
 const merge_mod = @import("core/fedmerge.zig");
 const sdiff = @import("core/semantic_diff.zig");
 const regression = @import("core/regression.zig");
+const weight_diff = @import("core/weight_diff.zig");
+const weight_merge = @import("core/weight_merge.zig");
 
 pub fn main(init: std.process.Init) !void {
     const io = init.io;
     const allocator = init.gpa;
+    const env_map = init.environ_map;
     const arena = init.arena.allocator();
 
     const args = try init.minimal.args.toSlice(arena);
@@ -120,6 +123,7 @@ pub fn main(init: std.process.Init) !void {
         }
 
         var config = try config_mod.Config.load(allocator, io, ".");
+        defer config.deinit();
 
         if (args.len < 3) {
             std.debug.print("Usage: zev config <get|set|list> [key] [value]\n", .{});
@@ -170,11 +174,9 @@ pub fn main(init: std.process.Init) !void {
                 const friendly_msg = validation_mod.getErrorMessage(err);
                 std.debug.print("❌ Error: {s}\n", .{friendly_msg});
                 std.debug.print("💡 Failed to set {s} = {s}\n", .{ key, value });
-                config.deinit();
                 return;
             };
             try config.save(io, ".");
-            config.deinit();
 
             std.debug.print("✅ Set {s} = {s}\n", .{ key, value });
 
@@ -214,35 +216,38 @@ pub fn main(init: std.process.Init) !void {
         var repo = try repository.Repository.open(allocator, io, ".");
         defer repo.deinit();
 
-        const filename = args[2];
-
         const ignore_mod = @import("core/ignore.zig");
         var ignore_list = try ignore_mod.IgnoreList.loadFromFile(allocator, io, ".");
         defer ignore_list.deinit();
-        if (ignore_list.isIgnored(filename)) {
-            std.debug.print("Ignored '{s}' (matches .zevignore pattern)\n", .{filename});
-            return;
+
+        var arg_i: usize = 2;
+        while (arg_i < args.len) : (arg_i += 1) {
+            const filename = args[arg_i];
+
+            if (ignore_list.isIgnored(filename)) {
+                std.debug.print("Ignored '{s}' (matches .zevignore pattern)\n", .{filename});
+                continue;
+            }
+
+            const file_data = try std.Io.Dir.cwd().readFileAlloc(io, filename, allocator, .unlimited);
+            defer allocator.free(file_data);
+
+            const file = try std.Io.Dir.cwd().openFile(io, filename, .{});
+            defer file.close(io);
+            const file_stat = try file.stat(io);
+
+            const content_id = try repo.store.put(io, file_data);
+
+            if (repo.storage) |*storage| {
+                const ipfs_cid = try storage.storeObject(io, file_data);
+                defer allocator.free(ipfs_cid);
+                std.debug.print("📦 Blob stored in IPFS: {s}\n", .{ipfs_cid});
+            }
+
+            try repo.index.addEntry(filename, content_id, file_data.len, @intCast(file_stat.permissions.toMode()));
+            std.debug.print("Added '{s}' to staging area\n", .{filename});
         }
-
-        const file_data = try std.Io.Dir.cwd().readFileAlloc(io, filename, allocator, .unlimited);
-        defer allocator.free(file_data);
-
-        const file = try std.Io.Dir.cwd().openFile(io, filename, .{});
-        defer file.close(io);
-        const file_stat = try file.stat(io);
-
-        const content_id = try repo.store.put(io, file_data);
-
-        if (repo.storage) |*storage| {
-            const ipfs_cid = try storage.storeObject(io, file_data);
-            defer allocator.free(ipfs_cid);
-            std.debug.print("📦 Blob stored in IPFS: {s}\n", .{ipfs_cid});
-        }
-
-        try repo.index.addEntry(filename, content_id, file_data.len, @intCast(file_stat.permissions.toMode()));
         try repo.index.write(io);
-
-        std.debug.print("Added '{s}' to staging area\n", .{filename});
     } else if (std.mem.eql(u8, command, "commit")) {
         if (args.len < 3) {
             std.debug.print("Usage: zev commit <message>\n", .{});
@@ -556,7 +561,9 @@ pub fn main(init: std.process.Init) !void {
         var ipfs_client = ipfs.IPFSClient.init(allocator, "http://127.0.0.1:5001");
 
         if (std.mem.eql(u8, subcommand, "status")) {
-            const version_str = ipfs_client.version(io, ) catch |err| {
+            const version_str = ipfs_client.version(
+                io,
+            ) catch |err| {
                 std.debug.print("❌ IPFS daemon not running or unreachable: {}\n", .{err});
                 std.debug.print("💡 Start IPFS with: ipfs daemon\n", .{});
                 return;
@@ -565,7 +572,9 @@ pub fn main(init: std.process.Init) !void {
             std.debug.print("✅ IPFS daemon connected\n", .{});
             std.debug.print("📦 Version: {s}\n", .{version_str});
         } else if (std.mem.eql(u8, subcommand, "id")) {
-            var node_id = ipfs_client.id(io, ) catch |err| {
+            var node_id = ipfs_client.id(
+                io,
+            ) catch |err| {
                 std.debug.print("❌ Failed to get node ID: {}\n", .{err});
                 return;
             };
@@ -584,7 +593,7 @@ pub fn main(init: std.process.Init) !void {
             defer allocator.free(file_data);
 
             std.debug.print("📤 Adding {s} to IPFS...\n", .{filename});
-            const ipfs_cid = try ipfs_client.add(file_data);
+            const ipfs_cid = try ipfs_client.add(io, file_data);
             defer allocator.free(ipfs_cid);
 
             std.debug.print("✅ Added to IPFS!\n", .{});
@@ -696,7 +705,7 @@ pub fn main(init: std.process.Init) !void {
 
         const max_count = if (args.len >= 3) try std.fmt.parseInt(usize, args[2], 10) else 10;
 
-        try log.printLog(allocator, &repo.store, head_cid, max_count);
+        try log.printLog(io, allocator, &repo.store, head_cid, max_count);
     } else if (std.mem.eql(u8, command, "status")) {
         if (!repository.Repository.exists(allocator, io, ".")) {
             std.debug.print("Not a zev repository.\n", .{});
@@ -847,19 +856,19 @@ pub fn main(init: std.process.Init) !void {
 
         if (args.len < 3 or std.mem.eql(u8, args[2], "save")) {
             const msg = if (args.len >= 4) args[3] else null;
-            try stash_mod.stashSave(allocator, &repo, msg);
+            try stash_mod.stashSave(allocator, io, &repo, msg);
         } else if (std.mem.eql(u8, args[2], "list")) {
             try stash_mod.stashList(allocator, io, &repo);
         } else if (std.mem.eql(u8, args[2], "apply")) {
             const id = if (args.len >= 4) try std.fmt.parseInt(usize, args[3], 10) else 0;
-            stash_mod.stashApply(allocator, &repo, id) catch |err| {
+            stash_mod.stashApply(allocator, io, &repo, id) catch |err| {
                 if (err == error.StashNotFound) {
                     std.debug.print("Stash@{{{}}} not found\n", .{id});
                 } else return err;
             };
         } else if (std.mem.eql(u8, args[2], "pop")) {
             const id = if (args.len >= 4) try std.fmt.parseInt(usize, args[3], 10) else 0;
-            stash_mod.stashApply(allocator, &repo, id) catch |err| {
+            stash_mod.stashApply(allocator, io, &repo, id) catch |err| {
                 if (err == error.StashNotFound) {
                     std.debug.print("Stash@{{{}}} not found\n", .{id});
                     return;
@@ -930,7 +939,7 @@ pub fn main(init: std.process.Init) !void {
             hash[idx] = (high << 4) | low;
         }
         const pick_cid = cid.CID{ .hash = hash };
-        const result = try cherrypick_mod.cherryPick(allocator, &repo, pick_cid);
+        const result = try cherrypick_mod.cherryPick(allocator, io, &repo, pick_cid);
         switch (result) {
             .success => {},
             .conflict => std.debug.print("❌ Cherry-pick failed\n", .{}),
@@ -948,7 +957,7 @@ pub fn main(init: std.process.Init) !void {
         }
         var repo = try repository.Repository.open(allocator, io, ".");
         defer repo.deinit();
-        try blame_mod.blame(allocator, &repo, args[2]);
+        try blame_mod.blame(allocator, io, &repo, args[2]);
     } else if (std.mem.eql(u8, command, "rebase")) {
         if (args.len < 3) {
             std.debug.print("Usage: zev rebase <branch>\n", .{});
@@ -963,7 +972,7 @@ pub fn main(init: std.process.Init) !void {
         defer repo.deinit();
 
         const onto = args[2];
-        const result = try rebase_mod.rebase(allocator, &repo, onto);
+        const result = try rebase_mod.rebase(allocator, io, &repo, onto);
         switch (result) {
             .success => {},
             .conflict => std.debug.print("❌ Rebase stopped due to conflicts\n", .{}),
@@ -1063,14 +1072,14 @@ pub fn main(init: std.process.Init) !void {
                 std.debug.print("Usage: zev dag put <file>\n", .{});
                 return;
             }
-            try dag_mod.dagPut(allocator, &repo, args[3]);
+            try dag_mod.dagPut(allocator, io, &repo, args[3]);
         } else if (std.mem.eql(u8, sub, "stat")) {
-            try dag_mod.dagStat(allocator, &repo);
+            try dag_mod.dagStat(allocator, io, &repo);
         } else if (std.mem.eql(u8, sub, "auto")) {
             if (args.len >= 4) {
-                try context_mod.contextAutoDetect(allocator, &repo, args[3]);
+                try context_mod.contextAutoDetect(allocator, io, env_map, &repo, args[3]);
             } else {
-                try context_mod.contextAutoDetectAll(allocator, &repo);
+                try context_mod.contextAutoDetectAll(allocator, io, env_map, &repo);
             }
         } else if (std.mem.eql(u8, sub, "export")) {
             if (args.len < 4) {
@@ -1099,6 +1108,41 @@ pub fn main(init: std.process.Init) !void {
                 return;
             }
             try car_mod.dagImport(allocator, io, &repo, args[3]);
+        } else if (std.mem.eql(u8, sub, "get")) {
+            if (args.len < 4) {
+                std.debug.print("Usage: zev dag get <cid> --output <path>\n\n", .{});
+                return;
+            }
+            var out_path: ?[]const u8 = null;
+            var gi: usize = 4;
+            while (gi < args.len) : (gi += 1) {
+                if (std.mem.eql(u8, args[gi], "--output") and gi + 1 < args.len) {
+                    gi += 1;
+                    out_path = args[gi];
+                }
+            }
+            const op = out_path orelse {
+                std.debug.print("Usage: zev dag get <cid> --output <path>\n\n", .{});
+                return;
+            };
+            var ipld_store = try ipld.BlockStore.init(allocator, io, repo.path);
+            defer ipld_store.deinit();
+            const get_cid = ipld.CID.fromHex(args[3]) catch {
+                std.debug.print("❌ Invalid CID: {s}\n\n", .{args[3]});
+                return;
+            };
+            const block_data = ipld_store.get(io, get_cid) catch {
+                std.debug.print("❌ Block not found: {s}\n\n", .{args[3]});
+                return;
+            };
+            defer allocator.free(block_data);
+            const out_file = try std.Io.Dir.cwd().createFile(io, op, .{});
+            defer out_file.close(io);
+            var out_buffer: [65536]u8 = undefined;
+            var out_writer = out_file.writer(io, &out_buffer);
+            try out_writer.interface.writeAll(block_data);
+            try out_writer.flush();
+            std.debug.print("✅ Extracted {d} bytes to {s}\n\n", .{ block_data.len, op });
         } else if (std.mem.eql(u8, sub, "query")) {
             if (args.len < 4) {
                 std.debug.print("Usage: zev dag query <query> [--format text|json|cids]\n\n", .{});
@@ -1157,13 +1201,13 @@ pub fn main(init: std.process.Init) !void {
 
         const sub = args[2];
         if (std.mem.eql(u8, sub, "list")) {
-            try dag_mod.graftList(allocator, &repo);
+            try dag_mod.graftList(allocator, io, &repo);
         } else if (std.mem.eql(u8, sub, "resolve")) {
             if (args.len < 4) {
                 std.debug.print("Usage: zev graft resolve <alias>\n", .{});
                 return;
             }
-            try dag_mod.graftResolve(allocator, &repo, args[3]);
+            try dag_mod.graftResolve(allocator, io, &repo, args[3]);
         } else {
             var alias: []const u8 = "unnamed";
             var desc: []const u8 = "";
@@ -1220,7 +1264,7 @@ pub fn main(init: std.process.Init) !void {
                     desc = args[i];
                 }
             }
-            try dataset_mod.datasetRegister(allocator, &repo, args[3], name, desc);
+            try dataset_mod.datasetRegister(allocator, io, &repo, args[3], name, desc);
         } else if (std.mem.eql(u8, sub, "split")) {
             if (args.len < 4) {
                 std.debug.print("Usage: zev dataset split <name> --shards <N> [--strategy sequential|random|stratified] [--seed <N>]\n", .{});
@@ -1273,7 +1317,7 @@ pub fn main(init: std.process.Init) !void {
                 std.debug.print("Usage: zev dataset lineage <name>\n", .{});
                 return;
             }
-            try dataset_mod.datasetLineage(allocator, &repo, args[3]);
+            try dataset_mod.datasetLineage(allocator, io, &repo, args[3]);
         } else if (std.mem.eql(u8, sub, "impact")) {
             if (args.len < 4) {
                 std.debug.print("Usage: zev dataset impact <name> --shard <N>\n", .{});
@@ -1287,7 +1331,7 @@ pub fn main(init: std.process.Init) !void {
                     shard_idx = std.fmt.parseInt(usize, args[i], 10) catch 0;
                 }
             }
-            try dataset_mod.datasetImpact(allocator, &repo, args[3], shard_idx);
+            try dataset_mod.datasetImpact(allocator, io, &repo, args[3], shard_idx);
         } else if (std.mem.eql(u8, sub, "list")) {
             try dataset_mod.datasetList(allocator, io, &repo);
         } else {
@@ -1362,9 +1406,9 @@ pub fn main(init: std.process.Init) !void {
             try context_mod.contextList(allocator, io, &repo);
         } else if (std.mem.eql(u8, sub, "auto")) {
             if (args.len >= 4) {
-                try context_mod.contextAutoDetect(allocator, &repo, args[3]);
+                try context_mod.contextAutoDetect(allocator, io, env_map, &repo, args[3]);
             } else {
-                try context_mod.contextAutoDetectAll(allocator, &repo);
+                try context_mod.contextAutoDetectAll(allocator, io, env_map, &repo);
             }
         } else if (std.mem.eql(u8, sub, "export")) {
             if (args.len < 4) {
@@ -1393,6 +1437,41 @@ pub fn main(init: std.process.Init) !void {
                 return;
             }
             try car_mod.dagImport(allocator, io, &repo, args[3]);
+        } else if (std.mem.eql(u8, sub, "get")) {
+            if (args.len < 4) {
+                std.debug.print("Usage: zev dag get <cid> --output <path>\n\n", .{});
+                return;
+            }
+            var out_path: ?[]const u8 = null;
+            var gi: usize = 4;
+            while (gi < args.len) : (gi += 1) {
+                if (std.mem.eql(u8, args[gi], "--output") and gi + 1 < args.len) {
+                    gi += 1;
+                    out_path = args[gi];
+                }
+            }
+            const op = out_path orelse {
+                std.debug.print("Usage: zev dag get <cid> --output <path>\n\n", .{});
+                return;
+            };
+            var ipld_store = try ipld.BlockStore.init(allocator, io, repo.path);
+            defer ipld_store.deinit();
+            const get_cid = ipld.CID.fromHex(args[3]) catch {
+                std.debug.print("❌ Invalid CID: {s}\n\n", .{args[3]});
+                return;
+            };
+            const block_data = ipld_store.get(io, get_cid) catch {
+                std.debug.print("❌ Block not found: {s}\n\n", .{args[3]});
+                return;
+            };
+            defer allocator.free(block_data);
+            const out_file = try std.Io.Dir.cwd().createFile(io, op, .{});
+            defer out_file.close(io);
+            var out_buffer: [65536]u8 = undefined;
+            var out_writer = out_file.writer(io, &out_buffer);
+            try out_writer.interface.writeAll(block_data);
+            try out_writer.flush();
+            std.debug.print("✅ Extracted {d} bytes to {s}\n\n", .{ block_data.len, op });
         } else if (std.mem.eql(u8, sub, "query")) {
             var model_filter: ?[]const u8 = null;
             var kind_filter: ?[]const u8 = null;
@@ -1475,7 +1554,7 @@ pub fn main(init: std.process.Init) !void {
                 include_objects = false;
             }
         }
-        try export_mod.exportRepo(allocator, &repo, args[2], snapshot_filter, since_hash, include_objects);
+        try export_mod.exportRepo(allocator, io, &repo, args[2], snapshot_filter, since_hash, include_objects);
     } else if (std.mem.eql(u8, command, "import")) {
         if (args.len < 3) {
             std.debug.print("Usage: zev import <archive.zev-archive> [target-dir] [--dry-run]\n", .{});
@@ -1491,13 +1570,13 @@ pub fn main(init: std.process.Init) !void {
                 target_dir = args[i];
             }
         }
-        try export_mod.importArchive(allocator, args[2], target_dir, dry_run);
+        try export_mod.importArchive(allocator, io, args[2], target_dir, dry_run);
     } else if (std.mem.eql(u8, command, "archive-info")) {
         if (args.len < 3) {
             std.debug.print("Usage: zev archive-info <archive.zev-archive>\n", .{});
             return;
         }
-        try export_mod.archiveInfo(allocator, args[2]);
+        try export_mod.archiveInfo(allocator, io, args[2]);
     } else if (std.mem.eql(u8, command, "reproduce")) {
         if (!repository.Repository.exists(allocator, io, ".")) {
             std.debug.print("Not a zev repository.\n", .{});
@@ -1527,7 +1606,7 @@ pub fn main(init: std.process.Init) !void {
                     limit = std.fmt.parseInt(usize, args[i], 10) catch 20;
                 }
             }
-            try reproduce_mod.reproduceStatus(allocator, &repo, limit);
+            try reproduce_mod.reproduceStatus(allocator, io, &repo, limit);
         } else if (std.mem.eql(u8, sub, "capture")) {
             if (args.len < 4) {
                 std.debug.print("Usage: zev reproduce capture \"<command>\"\n", .{});
@@ -1541,7 +1620,7 @@ pub fn main(init: std.process.Init) !void {
                     env_file = args[i];
                 }
             }
-            try reproduce_mod.capturePub(allocator, &repo, args[3], env_file);
+            try reproduce_mod.capturePub(io, allocator, &repo, args[3], env_file);
         } else {
             var tolerance: f64 = 0.01;
             var run_cmd: ?[]const u8 = null;
@@ -1561,7 +1640,7 @@ pub fn main(init: std.process.Init) !void {
             if (std.mem.eql(u8, sub, "HEAD") or sub.len == 64) {
                 try reproduce_mod.reproduceCommit(allocator, io, &repo, sub, tolerance, run_cmd, dry_run);
             } else {
-                try reproduce_mod.reproduceSnapshot(allocator, &repo, sub, tolerance, run_cmd, dry_run);
+                try reproduce_mod.reproduceSnapshot(io, allocator, &repo, sub, tolerance, run_cmd, dry_run);
             }
         }
     } else if (std.mem.eql(u8, command, "drift")) {
@@ -1637,7 +1716,7 @@ pub fn main(init: std.process.Init) !void {
             }
             try drift_mod.driftCheck(allocator, io, &repo, baseline_override);
         } else if (std.mem.eql(u8, sub, "show")) {
-            try drift_mod.driftShow(allocator, &repo);
+            try drift_mod.driftShow(io, allocator, &repo);
         } else if (std.mem.eql(u8, sub, "history")) {
             var limit: usize = 20;
             var i: usize = 3;
@@ -1647,7 +1726,7 @@ pub fn main(init: std.process.Init) !void {
                     limit = std.fmt.parseInt(usize, args[i], 10) catch 20;
                 }
             }
-            try drift_mod.driftHistory(allocator, &repo, limit);
+            try drift_mod.driftHistory(allocator, io, &repo, limit);
         } else if (std.mem.eql(u8, sub, "watch")) {
             var interval: u32 = 0;
             var i: usize = 3;
@@ -1712,7 +1791,7 @@ pub fn main(init: std.process.Init) !void {
                     dry_run = true;
                 }
             }
-            try notarize_mod.notarizeCommit(allocator, &repo, chain, dry_run);
+            try notarize_mod.notarizeCommit(allocator, io, &repo, chain, dry_run);
         } else if (std.mem.eql(u8, sub, "verify")) {
             if (args.len < 4) {
                 std.debug.print("Usage: zev notarize verify <record-id-prefix>\n", .{});
@@ -1746,7 +1825,7 @@ pub fn main(init: std.process.Init) !void {
                     keyfile = args[i];
                 }
             }
-            try notarize_mod.notarizeConfig(allocator, &repo, chain, rpc_url, private_key, from_addr, keyfile);
+            try notarize_mod.notarizeConfig(allocator, io, &repo, chain, rpc_url, private_key, from_addr, keyfile);
         } else {
             std.debug.print("Unknown notarize subcommand: {s}\n", .{sub});
         }
@@ -1856,13 +1935,13 @@ pub fn main(init: std.process.Init) !void {
 
         const sub = args[2];
         if (std.mem.eql(u8, sub, "commits")) {
-            try compare_mod.compareCommits(allocator, &repo, args[3], args[4]);
+            try compare_mod.compareCommits(allocator, io, &repo, args[3], args[4]);
         } else if (std.mem.eql(u8, sub, "experiments")) {
             try compare_mod.compareExperiments(allocator, io, &repo, args[3], args[4]);
         } else if (std.mem.eql(u8, sub, "snapshots")) {
             try compare_mod.compareSnapshots(allocator, io, &repo, args[3], args[4]);
         } else if (std.mem.eql(u8, sub, "branches")) {
-            try compare_mod.compareBranches(allocator, &repo, args[3], args[4]);
+            try compare_mod.compareBranches(allocator, io, &repo, args[3], args[4]);
         } else {
             std.debug.print("Unknown compare subcommand: {s}\n", .{sub});
         }
@@ -1898,7 +1977,7 @@ pub fn main(init: std.process.Init) !void {
                     limit = std.fmt.parseInt(usize, args[i], 10) catch 20;
                 }
             }
-            try search_mod.searchCommits(allocator, &repo, query, limit);
+            try search_mod.searchCommits(allocator, io, &repo, query, limit);
         } else if (std.mem.eql(u8, sub, "experiments")) {
             const query = if (args.len >= 4) args[3] else "";
             var status_filter: []const u8 = "";
@@ -1909,14 +1988,14 @@ pub fn main(init: std.process.Init) !void {
                     status_filter = args[i];
                 }
             }
-            try search_mod.searchExperiments(allocator, &repo, query, status_filter);
+            try search_mod.searchExperiments(allocator, io, &repo, query, status_filter);
         } else if (std.mem.eql(u8, sub, "metrics")) {
             if (args.len < 4) {
                 std.debug.print("Usage: zev search metrics <filter>\n", .{});
                 std.debug.print("Examples: accuracy>0.9   loss<0.3   epochs>=50\n", .{});
                 return;
             }
-            try search_mod.searchMetrics(allocator, &repo, args[3]);
+            try search_mod.searchMetrics(allocator, io, &repo, args[3]);
         } else if (std.mem.eql(u8, sub, "lineage")) {
             const query = if (args.len >= 4) args[3] else "";
             var type_filter: []const u8 = "";
@@ -1927,7 +2006,7 @@ pub fn main(init: std.process.Init) !void {
                     type_filter = args[i];
                 }
             }
-            try search_mod.searchLineage(allocator, &repo, query, type_filter);
+            try search_mod.searchLineage(allocator, io, &repo, query, type_filter);
         } else if (std.mem.eql(u8, sub, "snapshots")) {
             const query = if (args.len >= 4) args[3] else "";
             var permanent_only = false;
@@ -1935,10 +2014,10 @@ pub fn main(init: std.process.Init) !void {
             while (i < args.len) : (i += 1) {
                 if (std.mem.eql(u8, args[i], "--permanent")) permanent_only = true;
             }
-            try search_mod.searchSnapshots(allocator, &repo, query, permanent_only);
+            try search_mod.searchSnapshots(allocator, io, &repo, query, permanent_only);
         } else if (std.mem.eql(u8, sub, "all")) {
             const query = if (args.len >= 4) args[3] else "";
-            try search_mod.searchAll(allocator, &repo, query);
+            try search_mod.searchAll(io, allocator, &repo, query);
         } else {
             std.debug.print("Unknown search subcommand: {s}\n", .{sub});
         }
@@ -1987,7 +2066,7 @@ pub fn main(init: std.process.Init) !void {
             if (show_config) {
                 try publish_mod.publishConfigShow(allocator, io, &repo);
             } else {
-                try publish_mod.publishConfig(allocator, &repo, endpoint, token, username);
+                try publish_mod.publishConfig(allocator, io, &repo, endpoint, token, username);
             }
         } else if (std.mem.eql(u8, sub, "commit")) {
             var tags: []const u8 = "";
@@ -2009,7 +2088,7 @@ pub fn main(init: std.process.Init) !void {
                     dry_run = true;
                 }
             }
-            try publish_mod.publishCommit(allocator, &repo, tags, note, dry_run, repo_name);
+            try publish_mod.publishCommit(allocator, io, &repo, tags, note, dry_run, repo_name);
         } else if (std.mem.eql(u8, sub, "experiment")) {
             if (args.len < 4) {
                 std.debug.print("Usage: zev publish experiment <name> [--dry-run] [--repo name]\n", .{});
@@ -2026,7 +2105,7 @@ pub fn main(init: std.process.Init) !void {
                     repo_name = args[i];
                 }
             }
-            try publish_mod.publishExperiment(allocator, &repo, args[3], dry_run, repo_name);
+            try publish_mod.publishExperiment(allocator, io, &repo, args[3], dry_run, repo_name);
         } else if (std.mem.eql(u8, sub, "snapshot")) {
             if (args.len < 4) {
                 std.debug.print("Usage: zev publish snapshot <name> [--dry-run] [--repo name]\n", .{});
@@ -2043,7 +2122,7 @@ pub fn main(init: std.process.Init) !void {
                     repo_name = args[i];
                 }
             }
-            try publish_mod.publishSnapshot(allocator, &repo, args[3], dry_run, repo_name);
+            try publish_mod.publishSnapshot(allocator, io, &repo, args[3], dry_run, repo_name);
         } else {
             std.debug.print("Unknown publish subcommand: {s}\n", .{sub});
         }
@@ -2096,7 +2175,7 @@ pub fn main(init: std.process.Init) !void {
                     desc = args[i];
                 }
             }
-            try snapshot_mod.snapshotCreate(allocator, &repo, snap_name, desc, tags, experiment_ref, lineage_refs, permanent);
+            try snapshot_mod.snapshotCreate(allocator, io, &repo, snap_name, desc, tags, experiment_ref, lineage_refs, permanent);
         } else if (std.mem.eql(u8, sub, "list")) {
             try snapshot_mod.snapshotList(allocator, io, &repo);
         } else if (std.mem.eql(u8, sub, "show")) {
@@ -2104,19 +2183,19 @@ pub fn main(init: std.process.Init) !void {
                 std.debug.print("Usage: zev snapshot show <name>\n", .{});
                 return;
             }
-            try snapshot_mod.snapshotShow(allocator, &repo, args[3]);
+            try snapshot_mod.snapshotShow(io, allocator, &repo, args[3]);
         } else if (std.mem.eql(u8, sub, "restore")) {
             if (args.len < 4) {
                 std.debug.print("Usage: zev snapshot restore <name>\n", .{});
                 return;
             }
-            try snapshot_mod.snapshotRestore(allocator, &repo, args[3]);
+            try snapshot_mod.snapshotRestore(io, allocator, &repo, args[3]);
         } else if (std.mem.eql(u8, sub, "diff")) {
             if (args.len < 5) {
                 std.debug.print("Usage: zev snapshot diff <name-a> <name-b>\n", .{});
                 return;
             }
-            try snapshot_mod.snapshotDiff(allocator, &repo, args[3], args[4]);
+            try snapshot_mod.snapshotDiff(io, allocator, &repo, args[3], args[4]);
         } else {
             std.debug.print("Unknown snapshot subcommand: {s}\n", .{sub});
         }
@@ -2169,7 +2248,7 @@ pub fn main(init: std.process.Init) !void {
                     version = args[i];
                 }
             }
-            try lineage_mod.lineageAdd(allocator, &repo, id, node_type, desc, file_path, tags, version);
+            try lineage_mod.lineageAdd(allocator, io, &repo, id, node_type, desc, file_path, tags, version);
         } else if (std.mem.eql(u8, sub, "link")) {
             if (args.len < 5) {
                 std.debug.print("Usage: zev lineage link <child> <parent>\n", .{});
@@ -2182,7 +2261,7 @@ pub fn main(init: std.process.Init) !void {
                 std.debug.print("Usage: zev lineage show <id>\n", .{});
                 return;
             }
-            try lineage_mod.lineageShow(allocator, &repo, args[3]);
+            try lineage_mod.lineageShow(io, allocator, &repo, args[3]);
         } else if (std.mem.eql(u8, sub, "list")) {
             try lineage_mod.lineageList(allocator, io, &repo);
         } else if (std.mem.eql(u8, sub, "graph")) {
@@ -2234,7 +2313,7 @@ pub fn main(init: std.process.Init) !void {
                 std.debug.print("Usage: zev experiment show <name>\n", .{});
                 return;
             }
-            try experiment_mod.experimentShow(allocator, &repo, args[3]);
+            try experiment_mod.experimentShow(allocator, io, &repo, args[3]);
         } else if (std.mem.eql(u8, sub, "complete")) {
             if (args.len < 4) {
                 std.debug.print("Usage: zev experiment complete <name> [notes]\n", .{});
@@ -2254,7 +2333,7 @@ pub fn main(init: std.process.Init) !void {
                 std.debug.print("Usage: zev experiment compare <name-a> <name-b>\n", .{});
                 return;
             }
-            try experiment_mod.experimentCompare(allocator, &repo, args[3], args[4]);
+            try experiment_mod.experimentCompare(allocator, io, &repo, args[3], args[4]);
         } else {
             std.debug.print("Unknown experiment subcommand: {s}\n", .{sub});
         }
@@ -2285,25 +2364,25 @@ pub fn main(init: std.process.Init) !void {
                 std.debug.print("Usage: zev metrics set <key> <value>\n", .{});
                 return;
             }
-            try metrics_mod.setMetric(allocator, &repo, args[3], args[4]);
+            try metrics_mod.setMetric(allocator, io, &repo, args[3], args[4]);
             {
                 const mval = std.fmt.parseFloat(f64, args[4]) catch 0.0;
-                const head_h = resolveCurrentHEAD(allocator, &repo) catch "";
+                const head_h = resolveCurrentHEAD(allocator, io, &repo) catch "";
                 defer if (head_h.len > 0) allocator.free(head_h);
                 if (head_h.len > 0)
                     ipld_commit.onMetricsSet(allocator, io, &repo, head_h, args[3], mval) catch {};
             }
         } else if (std.mem.eql(u8, sub, "show")) {
             const hash_opt = if (args.len >= 4) args[3] else null;
-            try metrics_mod.showMetrics(allocator, &repo, hash_opt);
+            try metrics_mod.showMetrics(allocator, io, &repo, hash_opt);
         } else if (std.mem.eql(u8, sub, "list")) {
-            try metrics_mod.listMetrics(allocator, &repo);
+            try metrics_mod.listMetrics(allocator, io, &repo);
         } else if (std.mem.eql(u8, sub, "compare")) {
             if (args.len < 5) {
                 std.debug.print("Usage: zev metrics compare <hash-a> <hash-b>\n", .{});
                 return;
             }
-            try metrics_mod.compareMetrics(allocator, &repo, args[3], args[4]);
+            try metrics_mod.compareMetrics(allocator, io, &repo, args[3], args[4]);
         } else {
             std.debug.print("Unknown metrics subcommand: {s}\n", .{sub});
         }
@@ -2319,6 +2398,11 @@ pub fn main(init: std.process.Init) !void {
         var strategy_str: []const u8 = "metrics-max";
         var dry_run = false;
         var sign_result = false;
+        var weight_file: ?[]const u8 = null;
+        var weight_strategy_str: []const u8 = "average";
+        var weight_alpha: f64 = 0.5;
+        var weight_base: ?[]const u8 = null;
+        var weight_density: f64 = 0.2;
         var i: usize = 2;
         while (i < args.len) : (i += 1) {
             if (std.mem.eql(u8, args[i], "--from") and i + 1 < args.len) {
@@ -2331,6 +2415,21 @@ pub fn main(init: std.process.Init) !void {
                 dry_run = true;
             } else if (std.mem.eql(u8, args[i], "--sign")) {
                 sign_result = true;
+            } else if (std.mem.eql(u8, args[i], "--merge-weights") and i + 1 < args.len) {
+                i += 1;
+                weight_file = args[i];
+            } else if (std.mem.eql(u8, args[i], "--weight-strategy") and i + 1 < args.len) {
+                i += 1;
+                weight_strategy_str = args[i];
+            } else if (std.mem.eql(u8, args[i], "--weight-alpha") and i + 1 < args.len) {
+                i += 1;
+                weight_alpha = std.fmt.parseFloat(f64, args[i]) catch 0.5;
+            } else if (std.mem.eql(u8, args[i], "--weight-base") and i + 1 < args.len) {
+                i += 1;
+                weight_base = args[i];
+            } else if (std.mem.eql(u8, args[i], "--weight-density") and i + 1 < args.len) {
+                i += 1;
+                weight_density = std.fmt.parseFloat(f64, args[i]) catch 0.2;
             }
         }
         if (from_path.len == 0) {
@@ -2340,10 +2439,22 @@ pub fn main(init: std.process.Init) !void {
             std.debug.print("  metrics-min    Take lower value per metric\n", .{});
             std.debug.print("  metrics-avg    Average the values\n", .{});
             std.debug.print("  commit-union   Merge histories only\n\n", .{});
+            std.debug.print("Weight merging (operates directly on IPLD, no working directory needed):\n", .{});
+            std.debug.print("  --merge-weights <filename>       merge this file's weight tensors from both sides\n", .{});
+            std.debug.print("  --weight-strategy average|weighted|slerp\n", .{});
+            std.debug.print("  --weight-alpha <X>                mix ratio for weighted/slerp\n\n", .{});
             return;
         }
         const strategy = merge_mod.MergeStrategy.fromStr(strategy_str);
-        try merge_mod.mergeFromCar(allocator, &repo, from_path, strategy, dry_run, sign_result);
+        const weight_strategy: weight_merge.MergeStrategy = if (std.mem.eql(u8, weight_strategy_str, "weighted"))
+            .weighted
+        else if (std.mem.eql(u8, weight_strategy_str, "slerp"))
+            .slerp
+        else if (std.mem.eql(u8, weight_strategy_str, "ties"))
+            .ties
+        else
+            .average;
+        try merge_mod.mergeFromCar(allocator, io, &repo, from_path, strategy, dry_run, sign_result, weight_file, weight_strategy, weight_alpha, weight_base, weight_density);
     } else if (std.mem.eql(u8, command, "sign")) {
         if (!repository.Repository.exists(allocator, io, ".")) {
             std.debug.print("Not a zev repository.\n", .{});
@@ -2375,7 +2486,121 @@ pub fn main(init: std.process.Init) !void {
         }
         var repo = try repository.Repository.open(allocator, io, ".");
         defer repo.deinit();
-        try crypto_mod.cmdIdentity(allocator, &repo);
+        try crypto_mod.cmdIdentity(io, allocator, &repo);
+    } else if (std.mem.eql(u8, command, "wdiff")) {
+        if (args.len < 4) {
+            std.debug.print("Usage: zev wdiff <file_a> <file_b> [--all] [--format json]\n", .{});
+            std.debug.print("\nSupported formats:\n", .{});
+            std.debug.print("  .safetensors  (HuggingFace — fastest, no Python needed)\n", .{});
+            std.debug.print("  .pt .pth .bin (PyTorch — requires python3 + torch)\n", .{});
+            std.debug.print("  .npy          (NumPy — no extra deps)\n", .{});
+            std.debug.print("  .npz          (NumPy archive — requires numpy)\n", .{});
+            std.debug.print("\nExamples:\n", .{});
+            std.debug.print("  zev wdiff model_v1.safetensors model_v2.safetensors\n", .{});
+            std.debug.print("  zev wdiff weights.pt weights_ft.pt --all\n", .{});
+            std.debug.print("  zev wdiff layer.npy layer_v2.npy --format json\n\n", .{});
+            return;
+        }
+        var show_unchanged = false;
+        var fmt: []const u8 = "text";
+        var i: usize = 4;
+        while (i < args.len) : (i += 1) {
+            if (std.mem.eql(u8, args[i], "--all"))   show_unchanged = true;
+            if (std.mem.eql(u8, args[i], "--format") and i + 1 < args.len) {
+                i += 1; fmt = args[i];
+            }
+        }
+        try weight_diff.cmdWeightDiff(io, allocator, args[2], args[3], show_unchanged, fmt);
+    } else if (std.mem.eql(u8, command, "merge-weights")) {
+        if (args.len < 4) {
+            std.debug.print("Usage: zev merge-weights <model_a> <model_b> --output <out> [--strategy average|weighted|slerp] [--alpha X]\n", .{});
+            std.debug.print("\nStrategies:\n", .{});
+            std.debug.print("  average   (a+b)/2, the classic 'model soup' technique\n", .{});
+            std.debug.print("  weighted  alpha*a + (1-alpha)*b\n", .{});
+            std.debug.print("  slerp     spherical interpolation, preserves relative magnitude\n", .{});
+            std.debug.print("\nExamples:\n", .{});
+            std.debug.print("  zev merge-weights model_a.safetensors model_b.safetensors --output merged.safetensors\n", .{});
+            std.debug.print("  zev merge-weights a.safetensors b.safetensors --output m.safetensors --strategy weighted --alpha 0.7\n\n", .{});
+            return;
+        }
+        var output_path: ?[]const u8 = null;
+        var strategy: weight_merge.MergeStrategy = .average;
+        var alpha: f64 = 0.5;
+        var base_path: ?[]const u8 = null;
+        var density: f64 = 0.2;
+        var i: usize = 4;
+        while (i < args.len) : (i += 1) {
+            if (std.mem.eql(u8, args[i], "--output") and i + 1 < args.len) {
+                i += 1; output_path = args[i];
+            } else if (std.mem.eql(u8, args[i], "--strategy") and i + 1 < args.len) {
+                i += 1;
+                if (std.mem.eql(u8, args[i], "average")) strategy = .average
+                else if (std.mem.eql(u8, args[i], "weighted")) strategy = .weighted
+                else if (std.mem.eql(u8, args[i], "slerp")) strategy = .slerp
+                else if (std.mem.eql(u8, args[i], "ties")) strategy = .ties;
+            } else if (std.mem.eql(u8, args[i], "--alpha") and i + 1 < args.len) {
+                i += 1; alpha = std.fmt.parseFloat(f64, args[i]) catch 0.5;
+            } else if (std.mem.eql(u8, args[i], "--base") and i + 1 < args.len) {
+                i += 1; base_path = args[i];
+            } else if (std.mem.eql(u8, args[i], "--density") and i + 1 < args.len) {
+                i += 1; density = std.fmt.parseFloat(f64, args[i]) catch 0.2;
+            }
+        }
+        const out = output_path orelse {
+            std.debug.print("Error: --output <path> is required\n", .{});
+            return;
+        };
+
+        if (strategy == .ties) {
+            const base = base_path orelse {
+                std.debug.print("Error: --strategy ties requires --base <path-to-base-model>\n\n", .{});
+                std.debug.print("TIES-Merging needs the common base model both fine-tunes started from,\n", .{});
+                std.debug.print("to compute each model's task vector (finetuned - base) and detect\n", .{});
+                std.debug.print("sign conflicts between them.\n\n", .{});
+                return;
+            };
+            std.debug.print("🧬 TIES-Merging {s} + {s} (base: {s})...\n", .{ args[2], args[3], base });
+            const data_base = std.Io.Dir.cwd().readFileAlloc(io, base, allocator, .unlimited) catch {
+                std.debug.print("❌ Could not read base model: {s}\n\n", .{base});
+                return;
+            };
+            defer allocator.free(data_base);
+            const data_a = std.Io.Dir.cwd().readFileAlloc(io, args[2], allocator, .unlimited) catch {
+                std.debug.print("❌ Could not read: {s}\n\n", .{args[2]});
+                return;
+            };
+            defer allocator.free(data_a);
+            const data_b = std.Io.Dir.cwd().readFileAlloc(io, args[3], allocator, .unlimited) catch {
+                std.debug.print("❌ Could not read: {s}\n\n", .{args[3]});
+                return;
+            };
+            defer allocator.free(data_b);
+
+            var result = weight_merge.mergeSafetensorsBytesTies(allocator, data_base, data_a, data_b, density, alpha * 2.0) catch |err| {
+                std.debug.print("❌ TIES merge failed: {}\n\n", .{err});
+                return;
+            };
+            defer result.report.deinit(allocator);
+            defer allocator.free(result.bytes);
+
+            const out_file = try std.Io.Dir.cwd().createFile(io, out, .{});
+            defer out_file.close(io);
+            var out_buffer: [65536]u8 = undefined;
+            var out_writer = out_file.writer(io, &out_buffer);
+            try out_writer.interface.writeAll(result.bytes);
+            try out_writer.flush();
+
+            weight_merge.printMergeReport(&result.report, out);
+        } else {
+            std.debug.print("🧬 Merging {s} + {s} ({s})...\n", .{ args[2], args[3], @tagName(strategy) });
+            var report = weight_merge.mergeSafetensors(allocator, io, args[2], args[3], out, strategy, alpha) catch |err| {
+                std.debug.print("❌ Merge failed: {}\n", .{err});
+                std.debug.print("   Only .safetensors files are currently supported for merging.\n\n", .{});
+                return;
+            };
+            defer report.deinit(allocator);
+            weight_merge.printMergeReport(&report, out);
+        }
     } else if (std.mem.eql(u8, command, "threshold")) {
         if (!repository.Repository.exists(allocator, io, ".")) {
             std.debug.print("Not a zev repository.\n", .{});
@@ -2391,13 +2616,13 @@ pub fn main(init: std.process.Init) !void {
             return;
         }
         if (std.mem.eql(u8, args[2], "list")) {
-            try regression.cmdThresholdList(allocator, &repo);
+            try regression.cmdThresholdList(io, allocator, &repo);
         } else if (std.mem.eql(u8, args[2], "set")) {
             if (args.len < 4) {
                 std.debug.print("Usage: zev threshold set <metric> [--min X] [--max X] [--warn-delta X] [--warn-pct X]\n", .{});
                 return;
             }
-            try regression.cmdThresholdSet(allocator, &repo, args[3], args[4..]);
+            try regression.cmdThresholdSet(io, allocator, &repo, args[3], args[4..]);
         }
     } else if (std.mem.eql(u8, command, "check")) {
         if (!repository.Repository.exists(allocator, io, ".")) {
@@ -2421,7 +2646,7 @@ pub fn main(init: std.process.Init) !void {
             std.debug.print("Example: zev history accuracy\n\n", .{});
             return;
         }
-        try regression.cmdHistory(allocator, &repo, args[2]);
+        try regression.cmdHistory(io, allocator, &repo, args[2]);
     } else if (std.mem.eql(u8, command, "help")) {
         try printUsage();
     } else {

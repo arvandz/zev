@@ -13,6 +13,7 @@ pub const RebaseResult = enum {
 
 fn collectCommits(
     allocator: std.mem.Allocator,
+    io: std.Io,
     store: *blob_mod.BlobStore,
     start: cid_mod.CID,
     base: cid_mod.CID,
@@ -23,7 +24,7 @@ fn collectCommits(
     while (true) {
         if (current.equals(base)) break;
 
-        const data = store.get(current) catch break;
+        const data = store.get(io, current) catch break;
         defer allocator.free(data);
 
         const c = commit_mod.Commit.deserialize(allocator, data) catch break;
@@ -41,12 +42,7 @@ fn collectCommits(
     return commits;
 }
 
-fn findCommonAncestor(
-    allocator: std.mem.Allocator,
-    store: *blob_mod.BlobStore,
-    a: cid_mod.CID,
-    b: cid_mod.CID,
-) !?cid_mod.CID {
+fn findCommonAncestor(io: std.Io, allocator: std.mem.Allocator, store: *blob_mod.BlobStore, a: cid_mod.CID, b: cid_mod.CID) !?cid_mod.CID {
     var a_ancestors = std.AutoHashMap([32]u8, void).init(allocator);
     defer a_ancestors.deinit();
 
@@ -54,7 +50,7 @@ fn findCommonAncestor(
     var i: usize = 0;
     while (i < 1000) : (i += 1) {
         try a_ancestors.put(current.hash, {});
-        const data = store.get(current) catch break;
+        const data = store.get(io, current) catch break;
         defer allocator.free(data);
         const c = commit_mod.Commit.deserialize(allocator, data) catch break;
         defer allocator.free(c.author);
@@ -68,7 +64,7 @@ fn findCommonAncestor(
     var j: usize = 0;
     while (j < 1000) : (j += 1) {
         if (a_ancestors.contains(current.hash)) return current;
-        const data = store.get(current) catch break;
+        const data = store.get(io, current) catch break;
         defer allocator.free(data);
         const c = commit_mod.Commit.deserialize(allocator, data) catch break;
         defer allocator.free(c.author);
@@ -106,7 +102,7 @@ fn replayCommit(
     const new_data = try new_commit.serialize(allocator);
     defer allocator.free(new_data);
 
-    try copyTreeObjects(allocator, repo, c.tree_cid);
+    try copyTreeObjects(allocator, io, repo, c.tree_cid);
 
     return try repo.store.put(io, new_data);
 }
@@ -167,7 +163,7 @@ pub fn rebase(
         return .nothing_to_rebase;
     }
 
-    const ancestor = try findCommonAncestor(allocator, &repo.store, current_head, onto_head);
+    const ancestor = try findCommonAncestor(io, allocator, &repo.store, current_head, onto_head);
     if (ancestor == null) {
         std.debug.print("Error: No common ancestor found\n", .{});
         return .nothing_to_rebase;
@@ -195,7 +191,7 @@ pub fn rebase(
         const msg = std.mem.trim(u8, c.message, " \n\r\t");
         const short_msg = msg[0..@min(40, msg.len)];
 
-        new_head = try replayCommit(allocator, repo, commit_cid, new_head);
+        new_head = try replayCommit(allocator, io, repo, commit_cid, new_head);
         const new_hash = try new_head.toString(allocator);
         defer allocator.free(new_hash);
         std.debug.print("  ✅ {s} {s}\n", .{ new_hash[0..8], short_msg });

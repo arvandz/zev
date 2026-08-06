@@ -41,7 +41,7 @@ pub fn cherryPick(
         break :blk parent_commit.tree_cid;
     } else null;
 
-    const pick_tree = try getTree(allocator, repo, pick_commit.tree_cid);
+    const pick_tree = try getTree(allocator, io, repo, pick_commit.tree_cid);
     defer {
         var t = pick_tree;
         t.deinit();
@@ -53,7 +53,7 @@ pub fn cherryPick(
     defer allocator.free(current_commit.author);
     defer allocator.free(current_commit.message);
 
-    var current_tree = try getTree(allocator, repo, current_commit.tree_cid);
+    var current_tree = try getTree(allocator, io, repo, current_commit.tree_cid);
     defer current_tree.deinit();
 
     var new_tree = tree_mod.Tree.init(allocator);
@@ -71,7 +71,7 @@ pub fn cherryPick(
     var files_changed: usize = 0;
     for (pick_tree.entries.items) |pick_entry| {
         const changed = if (pick_parent_tree) |ppt| blk: {
-            const parent_tree = getTree(allocator, repo, ppt) catch break :blk true;
+            const parent_tree = getTree(allocator, io, repo, ppt) catch break :blk true;
             var pt = parent_tree;
             defer pt.deinit();
             const parent_entry = pt.getEntry(pick_entry.name);

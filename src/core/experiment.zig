@@ -137,7 +137,7 @@ pub fn experimentStart(
         }
     }
 
-    const existing = try loadExperiment(allocator, repo, name);
+    const existing = try loadExperiment(allocator, io, repo, name);
     if (existing != null) {
         const e = existing.?;
         freeExperiment(allocator, e);
@@ -158,7 +158,7 @@ pub fn experimentStart(
         } else return err;
     };
 
-    const now = @divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s);
+    const now: i64 = @intCast(@divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s));
 
     const exp = Experiment{
         .name = name,
@@ -191,7 +191,7 @@ pub fn experimentStart(
 
 pub fn experimentComplete(allocator: std.mem.Allocator,
     io: std.Io, repo: *Repository, name: []const u8, notes: []const u8) !void {
-    const exp = (try loadExperiment(allocator, repo, name)) orelse {
+    const exp = (try loadExperiment(allocator, io, repo, name)) orelse {
         std.debug.print("Error: Experiment '{s}' not found\n", .{name});
         return;
     };
@@ -209,7 +209,9 @@ pub fn experimentComplete(allocator: std.mem.Allocator,
     try saveExperiment(allocator, io, repo, updated);
 
     if (notes.len > 0) {
-        const results_path = try experimentPath(allocator, io, repo, try std.fmt.allocPrint(allocator, "{s}.results", .{name}));
+        const results_rel = try std.fmt.allocPrint(allocator, "{s}.results", .{name});
+        defer allocator.free(results_rel);
+        const results_path = try experimentPath(allocator, io, repo, results_rel);
         defer allocator.free(results_path);
         const f = try std.Io.Dir.cwd().createFile(io, results_path, .{});
         var f_buffer: [512]u8 = undefined;
@@ -228,7 +230,7 @@ pub fn experimentComplete(allocator: std.mem.Allocator,
 
 pub fn experimentAbandon(allocator: std.mem.Allocator,
     io: std.Io, repo: *Repository, name: []const u8, reason: []const u8) !void {
-    const exp = (try loadExperiment(allocator, repo, name)) orelse {
+    const exp = (try loadExperiment(allocator, io, repo, name)) orelse {
         std.debug.print("Error: Experiment '{s}' not found\n", .{name});
         return;
     };
@@ -251,7 +253,7 @@ pub fn experimentAbandon(allocator: std.mem.Allocator,
 }
 
 pub fn experimentShow(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, name: []const u8) !void {
-    const exp = (try loadExperiment(allocator, repo, name)) orelse {
+    const exp = (try loadExperiment(allocator, io, repo, name)) orelse {
         std.debug.print("Error: Experiment '{s}' not found\n", .{name});
         return;
     };
@@ -271,7 +273,9 @@ pub fn experimentShow(allocator: std.mem.Allocator, io: std.Io, repo: *Repositor
         std.debug.print("   Tags:        {s}\n", .{exp.tags});
     std.debug.print("   Created:     {d}\n", .{exp.created_at});
 
-    const results_path = try experimentPath(allocator, io, repo, try std.fmt.allocPrint(allocator, "{s}.results", .{name}));
+    const results_rel = try std.fmt.allocPrint(allocator, "{s}.results", .{name});
+    defer allocator.free(results_rel);
+    const results_path = try experimentPath(allocator, io, repo, results_rel);
     defer allocator.free(results_path);
     const notes = std.Io.Dir.cwd().readFileAlloc(io, results_path, allocator, .limited(64 * 1024)) catch null;
     defer if (notes) |n| allocator.free(n);
@@ -305,7 +309,7 @@ pub fn experimentList(allocator: std.mem.Allocator,
         if (std.mem.endsWith(u8, entry.name, ".results")) continue;
         if (entry.kind != .file) continue;
 
-        const exp = (try loadExperiment(allocator, repo, entry.name)) orelse continue;
+        const exp = (try loadExperiment(allocator, io, repo, entry.name)) orelse continue;
         defer freeExperiment(allocator, exp);
 
         found += 1;
@@ -332,13 +336,13 @@ pub fn experimentList(allocator: std.mem.Allocator,
 pub fn experimentCompare(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, name_a: []const u8, name_b: []const u8) !void {
     const metrics_mod = @import("metrics.zig");
 
-    const exp_a = (try loadExperiment(allocator, repo, name_a)) orelse {
+    const exp_a = (try loadExperiment(allocator, io, repo, name_a)) orelse {
         std.debug.print("Error: Experiment '{s}' not found\n", .{name_a});
         return;
     };
     defer freeExperiment(allocator, exp_a);
 
-    const exp_b = (try loadExperiment(allocator, repo, name_b)) orelse {
+    const exp_b = (try loadExperiment(allocator, io, repo, name_b)) orelse {
         std.debug.print("Error: Experiment '{s}' not found\n", .{name_b});
         return;
     };
@@ -371,5 +375,5 @@ pub fn experimentCompare(allocator: std.mem.Allocator, io: std.Io, repo: *Reposi
     std.debug.print("   A: {s} (branch: {s})\n", .{ name_a, exp_a.branch });
     std.debug.print("   B: {s} (branch: {s})\n\n", .{ name_b, exp_b.branch });
 
-    try metrics_mod.compareMetrics(allocator, repo, ha, hb);
+    try metrics_mod.compareMetrics(allocator, io, repo, ha, hb);
 }

@@ -219,13 +219,10 @@ fn addPeer(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, peer_id:
 
     const f = try std.Io.Dir.cwd().createFile(io, path, .{ .truncate = false });
     defer f.close(io);
-    var f_buffer: [512]u8 = undefined;
-    var f_writer = f.writer(io, &f_buffer);
-    try f.seekFromEnd(0);
+    const stat = try f.stat(io);
     const line = try std.fmt.allocPrint(allocator, "{s} {s}\n", .{ peer_id, meta_cid });
     defer allocator.free(line);
-    try f_writer.interface.writeAll(line);
-    try f_writer.flush();
+    try f.writePositionalAll(io, line, stat.size);
 }
 
 fn listPeers(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) !void {
@@ -402,7 +399,7 @@ pub fn peerSync(allocator: std.mem.Allocator,
             const local_path = try std.fs.path.join(allocator, &.{ local_dir, file_name });
             defer allocator.free(local_path);
 
-            std.Io.Dir.cwd().access(local_path, .{}) catch {
+            std.Io.Dir.cwd().access(io, local_path, .{}) catch {
                 const cat_endpoint = try std.fmt.allocPrint(allocator, "/cat?arg={s}", .{file_hash});
                 defer allocator.free(cat_endpoint);
                 const content = try ipfsPost(allocator, io, cat_endpoint, &.{});
@@ -426,7 +423,7 @@ pub fn peerSync(allocator: std.mem.Allocator,
 
     const node_id = try getNodeId(allocator, io);
     defer allocator.free(node_id);
-    try addPeer(allocator, repo, peer_meta_cid, peer_meta_cid);
+    try addPeer(allocator, io, repo, peer_meta_cid, peer_meta_cid);
 
     std.debug.print("\n✅ Sync complete!\n", .{});
     std.debug.print("   Synced:  {d} file(s)\n", .{synced});
@@ -453,7 +450,7 @@ pub fn peerStatus(allocator: std.mem.Allocator,
         std.debug.print("   IPFS:     ❌ Not running (start with: ipfs daemon)\n", .{});
     }
 
-    if (try loadPeerState(allocator, repo)) |state| {
+    if (try loadPeerState(allocator, io, repo)) |state| {
         defer allocator.free(state.meta_cid);
         defer allocator.free(state.node_id);
         std.debug.print("   Meta CID: {s}\n", .{state.meta_cid});
@@ -464,7 +461,7 @@ pub fn peerStatus(allocator: std.mem.Allocator,
     }
 
     std.debug.print("\n   Known peers:\n", .{});
-    try listPeers(allocator, repo);
+    try listPeers(allocator, io, repo);
 }
 
 pub fn peerConnect(allocator: std.mem.Allocator,
@@ -535,7 +532,7 @@ pub fn forkRepo(allocator: std.mem.Allocator,
         .stderr = .pipe,
     });
     var buf: [4096]u8 = undefined;
-    _ = child.stderr.?.read(&buf) catch 0;
+    _ = child.stderr.?.readPositionalAll(io, &buf, 0) catch 0;
     const term = try child.wait(io);
 
     const success = switch (term) {
@@ -634,7 +631,7 @@ pub fn peerListen(allocator: std.mem.Allocator,
         std.debug.print("\n   To sync: zev peer sync {s}\n\n", .{meta_cid});
 
         if (meta_cid.len > 0) {
-            try addPeer(allocator, repo, node_id, meta_cid);
+            try addPeer(allocator, io, repo, node_id, meta_cid);
         }
     }
 

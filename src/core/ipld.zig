@@ -648,10 +648,10 @@ pub const BlockStore = struct {
         return std.Io.Dir.cwd().readFileAlloc(io, path, self.allocator, .limited(64 * 1024 * 1024)) catch error.BlockNotFound;
     }
 
-    pub fn has(io: std.Io, self: BlockStore, c: CID) bool {
+    pub fn has(self: BlockStore, io: std.Io, c: CID) bool {
         const path = self.blockPath(io, c) catch return false;
         defer self.allocator.free(path);
-        std.Io.Dir.cwd().access(path, .{}) catch return false;
+        std.Io.Dir.cwd().access(io, path, .{}) catch return false;
         return true;
     }
 
@@ -684,7 +684,7 @@ pub const BlockStore = struct {
         return decode(allocator, data);
     }
 
-    pub fn count(io: std.Io, self: BlockStore) usize {
+    pub fn count(self: BlockStore, io: std.Io) usize {
         var total: usize = 0;
         var dir = std.Io.Dir.cwd().openDir(io, self.base_path, .{ .iterate = true }) catch return 0;
         defer dir.close(io);

@@ -61,7 +61,7 @@ fn collectCommits(
 ) !void {
     const head_path = try zevPath(allocator, repo, "HEAD");
     defer allocator.free(head_path);
-    const head_content = (try readFileSafe(allocator, head_path)) orelse return;
+    const head_content = (try readFileSafe(allocator, io, head_path)) orelse return;
     defer allocator.free(head_content);
 
     var branch_ref: []u8 = try allocator.dupe(u8, "");
@@ -73,7 +73,7 @@ fn collectCommits(
 
     const ref_path = try zevPath(allocator, repo, branch_ref);
     defer allocator.free(ref_path);
-    const ref_content = (try readFileSafe(allocator, ref_path)) orelse return;
+    const ref_content = (try readFileSafe(allocator, io, ref_path)) orelse return;
     defer allocator.free(ref_content);
 
     var current_hash = try allocator.dupe(u8, std.mem.trim(u8, ref_content, "\n\r "));
@@ -116,9 +116,11 @@ fn collectCommits(
             .status = try allocator.dupe(u8, "info"),
         });
 
-        const metrics_path = try zevPath(allocator, repo, try std.fmt.allocPrint(allocator, "metrics/{s}", .{current_hash}));
+        const metrics_rel = try std.fmt.allocPrint(allocator, "metrics/{s}", .{current_hash});
+        defer allocator.free(metrics_rel);
+        const metrics_path = try zevPath(allocator, repo, metrics_rel);
         defer allocator.free(metrics_path);
-        if (try readFileSafe(allocator, metrics_path)) |mf| {
+        if (try readFileSafe(allocator, io, metrics_path)) |mf| {
             defer allocator.free(mf);
             var metric_parts: std.ArrayList(u8) = .empty;
             defer metric_parts.deinit(allocator);
@@ -181,7 +183,7 @@ fn collectSnapshots(
         if (entry.kind != .file or std.mem.endsWith(u8, entry.name, ".name")) continue;
         const path = try std.fs.path.join(allocator, &.{ dir_path, entry.name });
         defer allocator.free(path);
-        const content = (try readFileSafe(allocator, path)) orelse continue;
+        const content = (try readFileSafe(allocator, io, path)) orelse continue;
         defer allocator.free(content);
 
         var name: []u8 = try allocator.dupe(u8, "");
@@ -250,7 +252,7 @@ fn collectNotarizations(
         if (entry.kind != .file) continue;
         const path = try std.fs.path.join(allocator, &.{ dir_path, entry.name });
         defer allocator.free(path);
-        const content = (try readFileSafe(allocator, path)) orelse continue;
+        const content = (try readFileSafe(allocator, io, path)) orelse continue;
         defer allocator.free(content);
 
         var subject_id: []u8 = try allocator.dupe(u8, "");
@@ -311,7 +313,7 @@ fn collectDriftHistory(
         if (entry.kind != .file) continue;
         const path = try std.fs.path.join(allocator, &.{ dir_path, entry.name });
         defer allocator.free(path);
-        const content = (try readFileSafe(allocator, path)) orelse continue;
+        const content = (try readFileSafe(allocator, io, path)) orelse continue;
         defer allocator.free(content);
 
         var baseline: []u8 = try allocator.dupe(u8, "");
@@ -365,7 +367,7 @@ fn collectReproductions(
         if (entry.kind != .file) continue;
         const path = try std.fs.path.join(allocator, &.{ dir_path, entry.name });
         defer allocator.free(path);
-        const content = (try readFileSafe(allocator, path)) orelse continue;
+        const content = (try readFileSafe(allocator, io, path)) orelse continue;
         defer allocator.free(content);
 
         var subject_id: []u8 = try allocator.dupe(u8, "");
@@ -426,7 +428,7 @@ fn collectExperiments(
         if (entry.kind != .file) continue;
         const path = try std.fs.path.join(allocator, &.{ dir_path, entry.name });
         defer allocator.free(path);
-        const content = (try readFileSafe(allocator, path)) orelse continue;
+        const content = (try readFileSafe(allocator, io, path)) orelse continue;
         defer allocator.free(content);
 
         var name: []u8 = try allocator.dupe(u8, "");
@@ -774,12 +776,12 @@ pub fn runAudit(
     }
 
     try collectCommits(allocator, io, repo, &events);
-    try collectSnapshots(allocator, repo, &events, filter_snapshot);
-    try collectNotarizations(allocator, repo, &events, filter_snapshot);
-    try collectDriftHistory(allocator, repo, &events);
-    try collectReproductions(allocator, repo, &events, filter_snapshot);
-    try collectExperiments(allocator, repo, &events);
-    try collectContext(allocator, repo, &events);
+    try collectSnapshots(allocator, io, repo, &events, filter_snapshot);
+    try collectNotarizations(allocator, io, repo, &events, filter_snapshot);
+    try collectDriftHistory(allocator, io, repo, &events);
+    try collectReproductions(allocator, io, repo, &events, filter_snapshot);
+    try collectExperiments(allocator, io, repo, &events);
+    try collectContext(allocator, io, repo, &events);
 
     std.mem.sort(AuditEvent, events.items, {}, sortByTimestamp);
 

@@ -162,7 +162,7 @@ fn freeSnapshot(allocator: std.mem.Allocator, snap: Snapshot) void {
 }
 
 fn resolveSnapshotId(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, name_or_id: []const u8) !?[]u8 {
-    const direct = try loadSnapshot(allocator, repo, name_or_id);
+    const direct = try loadSnapshot(allocator, io, repo, name_or_id);
     if (direct != null) {
         freeSnapshot(allocator, direct.?);
         return try allocator.dupe(u8, name_or_id);
@@ -181,7 +181,7 @@ fn resolveSnapshotId(allocator: std.mem.Allocator, io: std.Io, repo: *Repository
         defer allocator.free(full_path);
         const stored_id = std.Io.Dir.cwd().readFileAlloc(io, full_path, allocator, .limited(128)) catch continue;
         defer allocator.free(stored_id);
-        const snap = (try loadSnapshot(allocator, repo, stored_id)) orelse continue;
+        const snap = (try loadSnapshot(allocator, io, repo, stored_id)) orelse continue;
         defer freeSnapshot(allocator, snap);
         if (std.mem.eql(u8, snap.name, name_or_id)) {
             return try allocator.dupe(u8, stored_id);
@@ -253,11 +253,11 @@ pub fn snapshotCreate(
     const branch = try getCurrentBranch(allocator, io, repo);
     defer allocator.free(branch);
 
-    const now = @divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s);
+    const now: i64 = @intCast(@divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s));
     const snap_id = try computeSnapshotId(allocator, name, commit_hash, now);
     defer allocator.free(snap_id);
 
-    const existing_id = try resolveSnapshotId(allocator, repo, name);
+    const existing_id = try resolveSnapshotId(allocator, io, repo, name);
     if (existing_id != null) {
         allocator.free(existing_id.?);
         std.debug.print("Error: Snapshot '{s}' already exists\n", .{name});
@@ -265,7 +265,7 @@ pub fn snapshotCreate(
         return;
     }
 
-    const metrics = try captureMetrics(allocator, repo);
+    const metrics = try captureMetrics(allocator, io, repo);
     defer allocator.free(metrics);
 
     const config_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "config" });
@@ -337,7 +337,7 @@ pub fn snapshotList(allocator: std.mem.Allocator,
         if (entry.kind != .file) continue;
         if (std.mem.endsWith(u8, entry.name, ".name")) continue;
 
-        const snap = (try loadSnapshot(allocator, repo, entry.name)) orelse continue;
+        const snap = (try loadSnapshot(allocator, io, repo, entry.name)) orelse continue;
         defer freeSnapshot(allocator, snap);
         count += 1;
 
@@ -362,14 +362,14 @@ pub fn snapshotList(allocator: std.mem.Allocator,
     }
 }
 
-pub fn snapshotShow(allocator: std.mem.Allocator, repo: *Repository, name_or_id: []const u8) !void {
-    const snap_id = (try resolveSnapshotId(allocator, repo, name_or_id)) orelse {
+pub fn snapshotShow(io: std.Io, allocator: std.mem.Allocator, repo: *Repository, name_or_id: []const u8) !void {
+    const snap_id = (try resolveSnapshotId(allocator, io, repo, name_or_id)) orelse {
         std.debug.print("Error: Snapshot '{s}' not found\n", .{name_or_id});
         return;
     };
     defer allocator.free(snap_id);
 
-    const snap = (try loadSnapshot(allocator, repo, snap_id)) orelse {
+    const snap = (try loadSnapshot(allocator, io, repo, snap_id)) orelse {
         std.debug.print("Error: Snapshot '{s}' not found\n", .{name_or_id});
         return;
     };
@@ -403,14 +403,14 @@ pub fn snapshotShow(allocator: std.mem.Allocator, repo: *Repository, name_or_id:
     std.debug.print("\n", .{});
 }
 
-pub fn snapshotRestore(allocator: std.mem.Allocator, repo: *Repository, name_or_id: []const u8) !void {
-    const snap_id = (try resolveSnapshotId(allocator, repo, name_or_id)) orelse {
+pub fn snapshotRestore(io: std.Io, allocator: std.mem.Allocator, repo: *Repository, name_or_id: []const u8) !void {
+    const snap_id = (try resolveSnapshotId(allocator, io, repo, name_or_id)) orelse {
         std.debug.print("Error: Snapshot '{s}' not found\n", .{name_or_id});
         return;
     };
     defer allocator.free(snap_id);
 
-    const snap = (try loadSnapshot(allocator, repo, snap_id)) orelse {
+    const snap = (try loadSnapshot(allocator, io, repo, snap_id)) orelse {
         std.debug.print("Error: Snapshot data missing\n", .{});
         return;
     };
@@ -433,29 +433,29 @@ pub fn snapshotRestore(allocator: std.mem.Allocator, repo: *Repository, name_or_
     std.debug.print("   Commit: {s}\n", .{snap.commit_hash[0..8]});
     std.debug.print("   Branch: {s}\n", .{snap.branch});
 
-    try checkout_mod.checkoutCommit(allocator, repo, commit_cid);
+    try checkout_mod.checkoutCommit(allocator, io, repo, commit_cid);
 
     std.debug.print("✅ Restored to snapshot '{s}'\n", .{snap.name});
     if (snap.metrics_snapshot.len > 0)
         std.debug.print("   Metrics were: {s}\n", .{snap.metrics_snapshot});
 }
 
-pub fn snapshotDiff(allocator: std.mem.Allocator, repo: *Repository, name_a: []const u8, name_b: []const u8) !void {
-    const id_a = (try resolveSnapshotId(allocator, repo, name_a)) orelse {
+pub fn snapshotDiff(io: std.Io, allocator: std.mem.Allocator, repo: *Repository, name_a: []const u8, name_b: []const u8) !void {
+    const id_a = (try resolveSnapshotId(allocator, io, repo, name_a)) orelse {
         std.debug.print("Error: Snapshot '{s}' not found\n", .{name_a});
         return;
     };
     defer allocator.free(id_a);
 
-    const id_b = (try resolveSnapshotId(allocator, repo, name_b)) orelse {
+    const id_b = (try resolveSnapshotId(allocator, io, repo, name_b)) orelse {
         std.debug.print("Error: Snapshot '{s}' not found\n", .{name_b});
         return;
     };
     defer allocator.free(id_b);
 
-    const snap_a = (try loadSnapshot(allocator, repo, id_a)) orelse return;
+    const snap_a = (try loadSnapshot(allocator, io, repo, id_a)) orelse return;
     defer freeSnapshot(allocator, snap_a);
-    const snap_b = (try loadSnapshot(allocator, repo, id_b)) orelse return;
+    const snap_b = (try loadSnapshot(allocator, io, repo, id_b)) orelse return;
     defer freeSnapshot(allocator, snap_b);
 
     std.debug.print("\n📸 Snapshot diff: {s} → {s}\n\n", .{ name_a, name_b });

@@ -157,10 +157,12 @@ pub fn captureRun(
 
 fn captureAutoEnv(allocator: std.mem.Allocator,
     io: std.Io, capture_dir: []const u8) !void {
-    var pip_child = std.process.Child.init(io, &.{ "pip", "freeze" }, allocator);
-    pip_child.stdout_behavior = .Pipe;
-    pip_child.stderr_behavior = .Ignore;
-    if (pip_child.spawn()) |_| {
+    if (std.process.spawn(io, .{
+        .argv = &.{ "pip", "freeze" },
+        .stdout = .pipe,
+        .stderr = .ignore,
+    })) |pip_child_result| {
+        var pip_child = pip_child_result;
         var buf: [65536]u8 = undefined;
         var pip_child_scratch: [4096]u8 = undefined;
         var pip_child_reader = pip_child.stdout.?.reader(io, &pip_child_scratch);
@@ -180,10 +182,12 @@ fn captureAutoEnv(allocator: std.mem.Allocator,
         }
     } else |_| {}
 
-    var conda_child = std.process.Child.init(io, &.{ "conda", "env", "export" }, allocator);
-    conda_child.stdout_behavior = .Pipe;
-    conda_child.stderr_behavior = .Ignore;
-    if (conda_child.spawn()) |_| {
+    if (std.process.spawn(io, .{
+        .argv = &.{ "conda", "env", "export" },
+        .stdout = .pipe,
+        .stderr = .ignore,
+    })) |conda_child_result| {
+        var conda_child = conda_child_result;
         var buf: [65536]u8 = undefined;
         var conda_child_scratch: [4096]u8 = undefined;
         var conda_child_reader = conda_child.stdout.?.reader(io, &conda_child_scratch);
@@ -256,7 +260,7 @@ fn loadMetricsFromSnapshot(allocator: std.mem.Allocator, io: std.Io, repo: *Repo
     var dir = std.Io.Dir.cwd().openDir(io, dir_path, .{ .iterate = true }) catch return null;
     defer dir.close(io);
     var it = dir.iterate();
-    while (try it.next()) |entry| {
+    while (try it.next(io)) |entry| {
         if (entry.kind != .file or std.mem.endsWith(u8, entry.name, ".name")) continue;
         const path = try std.fs.path.join(allocator, &.{ dir_path, entry.name });
         defer allocator.free(path);
@@ -438,7 +442,7 @@ fn doReproduce(
     run_cmd_override: ?[]const u8,
     dry_run: bool,
 ) !void {
-    const now = @divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s);
+    const now: i64 = @intCast(@divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s));
 
     const id_raw = try std.fmt.allocPrint(allocator, "repro:{s}:{d}", .{ commit_hash, now });
     defer allocator.free(id_raw);
@@ -454,19 +458,19 @@ fn doReproduce(
     const work_dir = try std.fmt.allocPrint(allocator, "/tmp/zev-repro-{s}", .{commit_hash[0..8]});
     defer allocator.free(work_dir);
     try std.Io.Dir.cwd().createDirPath(io, work_dir);
-    defer std.fs.deleteTreeAbsolute(work_dir) catch {};
+    defer std.Io.Dir.cwd().deleteTree(io, work_dir) catch {};
 
     std.debug.print("   📁 Workspace: {s}\n", .{work_dir});
 
     std.debug.print("   📦 Checking out commit {s}...\n", .{commit_hash[0..8]});
-    const file_count = checkoutCommit(allocator, repo, commit_hash, work_dir) catch |err| {
+    const file_count = checkoutCommit(allocator, io, repo, commit_hash, work_dir) catch |err| {
         std.debug.print("   ❌ Checkout failed: {}\n", .{err});
         return;
     };
     std.debug.print("   ✅ Checked out {d} file(s)\n", .{file_count});
 
     const run_cmd = run_cmd_override orelse
-        (try loadRunCommand(allocator, repo, commit_hash)) orelse {
+        (try loadRunCommand(allocator, io, repo, commit_hash)) orelse {
         std.debug.print("\n   ⚠️  No run command found for this commit.\n", .{});
         std.debug.print("   Capture one with:\n", .{});
         std.debug.print("   zev reproduce capture \"python train.py\"\n", .{});
@@ -522,7 +526,6 @@ fn doReproduce(
         }
     }
 
-    var child = std.process.Child.init(io, argv.items, allocator);
     {
         const cap_dir_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "capture" });
         defer allocator.free(cap_dir_path);
@@ -536,24 +539,29 @@ fn doReproduce(
             defer allocator.free(src);
             const dst = try std.fs.path.join(allocator, &.{ work_dir, entry.name });
             defer allocator.free(dst);
-            std.Io.Dir.cwd().access(dst, .{}) catch {
+            std.Io.Dir.cwd().access(io, dst, .{}) catch {
                 const data = std.Io.Dir.cwd().readFileAlloc(io, src, allocator, .limited(1024 * 1024)) catch continue;
                 defer allocator.free(data);
                 const wf = std.Io.Dir.cwd().createFile(io, dst, .{}) catch continue;
                 defer wf.close(io);
-                wf.writeAll(data) catch continue;
+                var wf_buffer: [512]u8 = undefined;
+                var wf_writer = wf.writer(io, &wf_buffer);
+                wf_writer.interface.writeAll(data) catch continue;
+                wf_writer.flush() catch continue;
             };
         }
     }
-    child.cwd = work_dir;
-    child.stdout_behavior = .Pipe;
-    child.stderr_behavior = .Pipe;
-
     var exit_code: i32 = -1;
     var output_buf: [65536]u8 = undefined;
     var output_len: usize = 0;
 
-    if (child.spawn()) |_| {
+    if (std.process.spawn(io, .{
+        .argv = argv.items,
+        .cwd = .{ .path = work_dir },
+        .stdout = .pipe,
+        .stderr = .pipe,
+    })) |child_result| {
+        var child = child_result;
         var child_scratch: [4096]u8 = undefined;
         var child_reader = child.stdout.?.reader(io, &child_scratch);
         output_len = child_reader.interface.readSliceShort(&output_buf) catch 0;
@@ -644,7 +652,7 @@ fn doReproduce(
 
     const repro_status: ReproduceStatus = if (exit_code != 0)
         .error_run
-    else if (repro_metrics.count(io, ) == 0)
+    else if (repro_metrics.count() == 0)
         .no_metrics
     else if (matched == total and total > 0)
         .success
@@ -695,15 +703,8 @@ fn doReproduce(
     std.debug.print("   View history: zev reproduce status\n\n", .{});
 }
 
-pub fn reproduceSnapshot(
-    allocator: std.mem.Allocator,
-    repo: *Repository,
-    snap_name: []const u8,
-    tolerance: f64,
-    run_cmd: ?[]const u8,
-    dry_run: bool,
-) !void {
-    const snap = (try loadMetricsFromSnapshot(allocator, repo, snap_name)) orelse {
+pub fn reproduceSnapshot(io: std.Io, allocator: std.mem.Allocator, repo: *Repository, snap_name: []const u8, tolerance: f64, run_cmd: ?[]const u8, dry_run: bool) !void {
+    const snap = (try loadMetricsFromSnapshot(allocator, io, repo, snap_name)) orelse {
         std.debug.print("Snapshot '{s}' not found.\n", .{snap_name});
         return;
     };
@@ -711,7 +712,7 @@ pub fn reproduceSnapshot(
     defer freeMetricsMap(allocator, &metrics);
     defer allocator.free(snap.commit);
 
-    try doReproduce(allocator, repo, "snapshot", snap_name, snap.commit, &metrics, tolerance, run_cmd, dry_run);
+    try doReproduce(allocator, io, repo, "snapshot", snap_name, snap.commit, &metrics, tolerance, run_cmd, dry_run);
 }
 
 pub fn reproduceCommit(
@@ -732,15 +733,15 @@ pub fn reproduceCommit(
     } else try allocator.dupe(u8, commit_ref);
     defer allocator.free(commit_hash);
 
-    var metrics = try loadMetricsForHash(allocator, repo, commit_hash);
+    var metrics = try loadMetricsForHash(allocator, io, repo, commit_hash);
     defer freeMetricsMap(allocator, &metrics);
 
-    if (metrics.count(io, ) == 0) {
+    if (metrics.count() == 0) {
         std.debug.print("No metrics recorded for commit {s}.\n", .{commit_hash[0..8]});
         std.debug.print("Set metrics with: zev metrics set <key> <value>\n", .{});
     }
 
-    try doReproduce(allocator, repo, "commit", commit_hash[0..8], commit_hash, &metrics, tolerance, run_cmd, dry_run);
+    try doReproduce(allocator, io, repo, "commit", commit_hash[0..8], commit_hash, &metrics, tolerance, run_cmd, dry_run);
 }
 
 pub fn reproduceStatus(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, limit: usize) !void {
@@ -820,11 +821,6 @@ pub fn reproduceStatus(allocator: std.mem.Allocator, io: std.Io, repo: *Reposito
     if (shown == 0) std.debug.print("  No records yet.\n\n", .{});
 }
 
-pub fn capturePub(
-    allocator: std.mem.Allocator,
-    repo: *Repository,
-    run_command: []const u8,
-    env_file: ?[]const u8,
-) !void {
-    try captureRun(allocator, repo, run_command, env_file);
+pub fn capturePub(io: std.Io, allocator: std.mem.Allocator, repo: *Repository, run_command: []const u8, env_file: ?[]const u8) !void {
+    try captureRun(allocator, io, repo, run_command, env_file);
 }

@@ -121,18 +121,20 @@ pub const QueryResult = struct {
 
 pub const SelectorEngine = struct {
     allocator: std.mem.Allocator,
+    io: std.Io,
     store: *ipld.BlockStore,
     results: std.ArrayList(QueryResult),
     node_type_filter: ?[]const u8,
     max_results: usize,
-
     pub fn init(
         allocator: std.mem.Allocator,
+        io: std.Io,
         store: *ipld.BlockStore,
         node_type: ?[]const u8,
     ) SelectorEngine {
         return .{
             .allocator = allocator,
+            .io = io,
             .store = store,
             .results = std.ArrayList(QueryResult).empty,
             .node_type_filter = node_type,
@@ -162,7 +164,7 @@ pub const SelectorEngine = struct {
     ) anyerror!void {
         if (self.results.items.len >= self.max_results) return;
 
-        const value = self.store.getNode(self.allocator, c) catch return;
+        const value = self.store.getNode(self.allocator, self.io, c) catch return;
         errdefer value.deinit(self.allocator);
 
         switch (sel.*) {
@@ -351,7 +353,7 @@ fn parseHeadQuery(
     };
 
     if (steps_back > 0) {
-        head_cid = try walkBackCommits(allocator, repo, head_cid, steps_back);
+        head_cid = try walkBackCommits(allocator, io, repo, head_cid, steps_back);
     }
 
     var path_parts: std.ArrayList([]const u8) = .empty;
@@ -521,7 +523,13 @@ pub fn dagQuery(
     var store = try ipld.BlockStore.init(allocator, io, repo.path);
     defer store.deinit();
 
-    std.debug.print("🔍 Query: {s}\n\n", .{query_str});
+    const is_cids = std.mem.eql(u8, output_format, "cids");
+    const is_json = std.mem.eql(u8, output_format, "json");
+    const is_scripted = is_cids or is_json;
+
+    if (!is_scripted) {
+        std.debug.print("🔍 Query: {s}\n\n", .{query_str});
+    }
 
     var pq = parseQuery(allocator, io, &store, repo, query_str) catch |err| {
         std.debug.print("❌ Parse error: {}\n", .{err});
@@ -536,7 +544,7 @@ pub fn dagQuery(
     };
     defer pq.deinit();
 
-    var engine = SelectorEngine.init(allocator, io, io, io, &store, pq.type_filter);
+    var engine = SelectorEngine.init(allocator, io, &store, pq.type_filter);
     defer engine.deinit();
 
     if (pq.root_cid.version == 0) {
@@ -548,33 +556,47 @@ pub fn dagQuery(
     const results = engine.results.items;
 
     if (results.len == 0) {
-        std.debug.print("   No results.\n\n", .{});
+        if (!is_scripted) std.debug.print("   No results.\n\n", .{});
+        if (is_json) {
+            var stdout_buf: [64]u8 = undefined;
+            var stdout_writer = std.Io.File.stdout().writer(io, &stdout_buf);
+            try stdout_writer.interface.writeAll("[]\n");
+            try stdout_writer.flush();
+        }
         return;
     }
 
-    std.debug.print("   {d} result(s):\n\n", .{results.len});
+    if (!is_scripted) {
+        std.debug.print("   {d} result(s):\n\n", .{results.len});
+    }
 
-    if (std.mem.eql(u8, output_format, "cids")) {
+    if (is_cids) {
+        var stdout_buf: [4096]u8 = undefined;
+        var stdout_writer = std.Io.File.stdout().writer(io, &stdout_buf);
         for (results) |r| {
             const short = try r.cid.toShort(allocator);
             defer allocator.free(short);
-            std.debug.print("{s}\n", .{short});
+            try stdout_writer.interface.print("{s}\n", .{short});
         }
+        try stdout_writer.flush();
         return;
     }
 
-    if (std.mem.eql(u8, output_format, "json")) {
-        std.debug.print("[\n", .{});
+    if (is_json) {
+        var stdout_buf: [4096]u8 = undefined;
+        var stdout_writer = std.Io.File.stdout().writer(io, &stdout_buf);
+        try stdout_writer.interface.writeAll("[\n");
         for (results, 0..) |r, i| {
             const short = try r.cid.toShort(allocator);
             defer allocator.free(short);
-            std.debug.print("  {{\"cid\":\"{s}\",\"path\":\"{s}\"", .{ short, r.path });
-            if (r.value == .string) std.debug.print(",\"value\":\"{s}\"", .{r.value.string});
-            if (r.value == .float) std.debug.print(",\"value\":{d:.6}", .{r.value.float});
-            if (r.value == .int) std.debug.print(",\"value\":{d}", .{r.value.int});
-            std.debug.print("}}{s}\n", .{if (i < results.len - 1) "," else ""});
+            try stdout_writer.interface.print("  {{\"cid\":\"{s}\",\"path\":\"{s}\"", .{ short, r.path });
+            if (r.value == .string) try stdout_writer.interface.print(",\"value\":\"{s}\"", .{r.value.string});
+            if (r.value == .float) try stdout_writer.interface.print(",\"value\":{d:.6}", .{r.value.float});
+            if (r.value == .int) try stdout_writer.interface.print(",\"value\":{d}", .{r.value.int});
+            try stdout_writer.interface.print("}}{s}\n", .{if (i < results.len - 1) "," else ""});
         }
-        std.debug.print("]\n\n", .{});
+        try stdout_writer.interface.writeAll("]\n");
+        try stdout_writer.flush();
         return;
     }
 

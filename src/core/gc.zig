@@ -15,7 +15,7 @@ fn collectReachable(
     if (reachable.contains(start_cid.hash)) return;
     try reachable.put(start_cid.hash, {});
 
-    const data = store.get(start_cid) catch return;
+    const data = store.get(io, start_cid) catch return;
     defer allocator.free(data);
 
     if (commit_mod.Commit.deserialize(allocator, data)) |commit| {
@@ -127,8 +127,7 @@ pub const GCResult = struct {
     bytes_freed: usize,
 };
 
-pub fn runGC(allocator: std.mem.Allocator,
-    io: std.Io, repo: *Repository, dry_run: bool) !GCResult {
+pub fn runGC(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, dry_run: bool) !GCResult {
     var result = GCResult{
         .objects_checked = 0,
         .objects_removed = 0,
@@ -140,7 +139,7 @@ pub fn runGC(allocator: std.mem.Allocator,
 
     std.debug.print("🔍 Scanning reachable objects...\n", .{});
     try collectAllReachable(allocator, io, repo, &reachable);
-    std.debug.print("✅ Found {} reachable objects\n", .{reachable.count(io, )});
+    std.debug.print("✅ Found {} reachable objects\n", .{reachable.count()});
 
     const objects_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "objects" });
     defer allocator.free(objects_path);

@@ -168,7 +168,7 @@ pub fn lineageAdd(
         return;
     };
 
-    const existing = try loadNode(allocator, repo, id);
+    const existing = try loadNode(allocator, io, repo, id);
     if (existing != null) {
         const e = existing.?;
         freeNode(allocator, e);
@@ -188,7 +188,7 @@ pub fn lineageAdd(
                 .node_type = node_type,
                 .description = description,
                 .file_cid = "",
-                .created_at = @divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s),
+                .created_at = @intCast(@divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s)),
                 .tags = tags,
                 .parents = "",
                 .version = version,
@@ -207,7 +207,7 @@ pub fn lineageAdd(
         std.debug.print("   Stored {s} in object store\n", .{fp});
     }
 
-    const now = @divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s);
+    const now: i64 = @intCast(@divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s));
     const node = LineageNode{
         .id = id,
         .node_type = node_type,
@@ -238,13 +238,13 @@ pub fn lineageLink(
     child_id: []const u8,
     parent_id: []const u8,
 ) !void {
-    const parent = (try loadNode(allocator, repo, parent_id)) orelse {
+    const parent = (try loadNode(allocator, io, repo, parent_id)) orelse {
         std.debug.print("Error: Parent node '{s}' not found\n", .{parent_id});
         return;
     };
     freeNode(allocator, parent);
 
-    var child = (try loadNode(allocator, repo, child_id)) orelse {
+    var child = (try loadNode(allocator, io, repo, child_id)) orelse {
         std.debug.print("Error: Child node '{s}' not found\n", .{child_id});
         return;
     };
@@ -275,8 +275,8 @@ pub fn lineageLink(
     });
 }
 
-pub fn lineageShow(allocator: std.mem.Allocator, repo: *Repository, id: []const u8) !void {
-    const node = (try loadNode(allocator, repo, id)) orelse {
+pub fn lineageShow(io: std.Io, allocator: std.mem.Allocator, repo: *Repository, id: []const u8) !void {
+    const node = (try loadNode(allocator, io, repo, id)) orelse {
         std.debug.print("Error: Node '{s}' not found\n", .{id});
         return;
     };
@@ -293,23 +293,17 @@ pub fn lineageShow(allocator: std.mem.Allocator, repo: *Repository, id: []const 
 
     if (node.parents.len > 0) {
         std.debug.print("\n   Provenance chain:\n", .{});
-        try printAncestors(allocator, repo, id, 0, 10);
+        try printAncestors(io, allocator, repo, id, 0, 10);
     } else {
         std.debug.print("\n   (Root node - no parents)\n", .{});
     }
     std.debug.print("\n", .{});
 }
 
-fn printAncestors(
-    allocator: std.mem.Allocator,
-    repo: *Repository,
-    id: []const u8,
-    depth: usize,
-    max_depth: usize,
-) !void {
+fn printAncestors(io: std.Io, allocator: std.mem.Allocator, repo: *Repository, id: []const u8, depth: usize, max_depth: usize) !void {
     if (depth > max_depth) return;
 
-    const node = (try loadNode(allocator, repo, id)) orelse return;
+    const node = (try loadNode(allocator, io, repo, id)) orelse return;
     defer freeNode(allocator, node);
 
     var indent_buf: [64]u8 = undefined;
@@ -330,7 +324,7 @@ fn printAncestors(
         while (parent_iter.next()) |parent_id| {
             const trimmed = std.mem.trim(u8, parent_id, " ");
             if (trimmed.len > 0) {
-                try printAncestors(allocator, repo, trimmed, depth + 1, max_depth);
+                try printAncestors(io, allocator, repo, trimmed, depth + 1, max_depth);
             }
         }
     }
@@ -357,7 +351,7 @@ pub fn lineageList(allocator: std.mem.Allocator,
     while (try iter.next(io)) |entry| {
         if (entry.kind != .file) continue;
 
-        const node = (try loadNode(allocator, repo, entry.name)) orelse continue;
+        const node = (try loadNode(allocator, io, repo, entry.name)) orelse continue;
         defer freeNode(allocator, node);
         total += 1;
 
@@ -406,7 +400,7 @@ pub fn lineageGraph(allocator: std.mem.Allocator,
     while (try iter.next(io)) |entry| {
         if (entry.kind != .file) continue;
 
-        const node = (try loadNode(allocator, repo, entry.name)) orelse continue;
+        const node = (try loadNode(allocator, io, repo, entry.name)) orelse continue;
         defer freeNode(allocator, node);
 
         if (node.parents.len == 0) {
@@ -426,7 +420,7 @@ fn printDescendants(
 ) !void {
     if (depth > max_depth) return;
 
-    const node = (try loadNode(allocator, repo, id)) orelse return;
+    const node = (try loadNode(allocator, io, repo, id)) orelse return;
     defer freeNode(allocator, node);
 
     var indent_buf: [64]u8 = undefined;
@@ -453,7 +447,7 @@ fn printDescendants(
         if (entry.kind != .file) continue;
         if (std.mem.eql(u8, entry.name, id)) continue;
 
-        const child = (try loadNode(allocator, repo, entry.name)) orelse continue;
+        const child = (try loadNode(allocator, io, repo, entry.name)) orelse continue;
         defer freeNode(allocator, child);
 
         var parent_iter = std.mem.splitSequence(u8, child.parents, ",");
@@ -485,7 +479,7 @@ pub fn lineageProvenance(allocator: std.mem.Allocator,
     while (try iter.next(io)) |entry| {
         if (entry.kind != .file) continue;
 
-        const node = (try loadNode(allocator, repo, entry.name)) orelse continue;
+        const node = (try loadNode(allocator, io, repo, entry.name)) orelse continue;
         defer freeNode(allocator, node);
 
         if (std.mem.startsWith(u8, node.file_cid, cid_prefix)) {

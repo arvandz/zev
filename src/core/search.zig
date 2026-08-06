@@ -246,7 +246,7 @@ pub fn searchMetrics(allocator: std.mem.Allocator, io: std.Io, repo: *Repository
         const hash_str = current.toString(allocator) catch break;
         defer allocator.free(hash_str);
 
-        var metrics = try readMetricsForCommit(allocator, repo, hash_str);
+        var metrics = try readMetricsForCommit(allocator, io, repo, hash_str);
         defer freeMetricsMap(allocator, &metrics);
 
         if (metrics.get(key)) |val| {
@@ -471,19 +471,19 @@ pub fn searchSnapshots(allocator: std.mem.Allocator, io: std.Io, repo: *Reposito
     if (found == 0) std.debug.print("  No snapshots found\n", .{}) else std.debug.print("  Found {d} snapshot(s)\n", .{found});
 }
 
-pub fn searchAll(allocator: std.mem.Allocator, repo: *Repository, query: []const u8) !void {
+pub fn searchAll(io: std.Io, allocator: std.mem.Allocator, repo: *Repository, query: []const u8) !void {
     std.debug.print("🔍 Global search: \"{s}\"\n", .{query});
     std.debug.print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n", .{});
 
     std.debug.print("── Commits ─────────────────────────────\n", .{});
-    try searchCommits(allocator, repo, query, 5);
+    try searchCommits(allocator, io, repo, query, 5);
 
     std.debug.print("\n── Experiments ─────────────────────────\n", .{});
-    try searchExperiments(allocator, repo, query, "");
+    try searchExperiments(allocator, io, repo, query, "");
 
     std.debug.print("\n── Lineage ──────────────────────────────\n", .{});
-    try searchLineage(allocator, repo, query, "");
+    try searchLineage(allocator, io, repo, query, "");
 
     std.debug.print("\n── Snapshots ────────────────────────────\n", .{});
-    try searchSnapshots(allocator, repo, query, false);
+    try searchSnapshots(allocator, io, repo, query, false);
 }

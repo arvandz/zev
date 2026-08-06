@@ -211,7 +211,7 @@ pub fn migrateCommitsToIPLD(
     var store = try ipld.BlockStore.init(allocator, io, repo.path);
     defer store.deinit();
 
-    const head_hash = try resolveHEAD(allocator, repo);
+    const head_hash = try resolveHEAD(allocator, io, repo);
     defer allocator.free(head_hash);
 
     var chain: std.ArrayList([]u8) = .empty;
@@ -223,7 +223,7 @@ pub fn migrateCommitsToIPLD(
     var current = try allocator.dupe(u8, head_hash);
     while (true) {
         try chain.append(allocator, current);
-        const tc = readTextCommit(allocator, repo, current) catch break;
+        const tc = readTextCommit(allocator, io, repo, current) catch break;
         if (tc.parent) |p| {
             current = try allocator.dupe(u8, p);
             tc.deinit(allocator);
@@ -241,17 +241,17 @@ pub fn migrateCommitsToIPLD(
     var migrated: usize = 0;
 
     for (chain.items) |hash| {
-        const tc = readTextCommit(allocator, repo, hash) catch continue;
+        const tc = readTextCommit(allocator, io, repo, hash) catch continue;
         defer tc.deinit(allocator);
 
-        const metrics = readMetricsForCommit(allocator, repo, hash) catch
+        const metrics = readMetricsForCommit(allocator, io, repo, hash) catch
             try allocator.alloc(MetricEntry, 0);
         defer {
             for (metrics) |m| allocator.free(m.key);
             allocator.free(metrics);
         }
 
-        const existing_cid = loadCommitCIDMapping(allocator, repo, hash) catch null;
+        const existing_cid = loadCommitCIDMapping(allocator, io, repo, hash) catch null;
         const commit_cid = if (existing_cid) |e| e else blk: {
             const c = try textCommitToIPLD(allocator, io, &store, tc, parent_ipld_cid, metrics);
             try saveCommitCIDMapping(allocator, io, repo, hash, c);
@@ -325,7 +325,7 @@ pub fn onMetricsSet(
     var store = try ipld.BlockStore.init(allocator, io, repo.path);
     defer store.deinit();
 
-    const all_metrics = try readMetricsForCommit(allocator, repo, commit_hash);
+    const all_metrics = try readMetricsForCommit(allocator, io, repo, commit_hash);
     defer {
         for (all_metrics) |m| allocator.free(m.key);
         allocator.free(all_metrics);
@@ -353,7 +353,7 @@ pub fn onMetricsSet(
     const mn = ipld.MetricsNode{
         .commit = commit_cid_for_metrics,
         .entries = metrics.items,
-        .timestamp = @divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s),
+        .timestamp = @intCast(@divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s)),
     };
     const mv = try mn.toValue(aa);
     const metrics_cid = try store.putNode(aa, io, mv);
@@ -382,7 +382,7 @@ pub fn ipldLog(
     var store = try ipld.BlockStore.init(allocator, io, repo.path);
     defer store.deinit();
 
-    const head_cid = loadIPLDHead(allocator, repo) catch blk: {
+    const head_cid = loadIPLDHead(allocator, io, repo) catch blk: {
         var best: ?ipld.CID = null;
         var best_ts: i64 = 0;
         var root_dir = std.Io.Dir.cwd().openDir(io, store.base_path, .{ .iterate = true }) catch {

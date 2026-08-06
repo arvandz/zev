@@ -38,7 +38,7 @@ pub fn setMetric(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, ke
         };
         const k = line[0..eq];
         if (std.mem.eql(u8, k, key)) {
-            const now = @divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s);
+            const now: i64 = @intCast(@divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s));
             const new_line = try std.fmt.allocPrint(allocator, "{s}={s}\t{d}\n", .{ key, value, now });
             defer allocator.free(new_line);
             try lines.appendSlice(allocator, new_line);
@@ -50,7 +50,7 @@ pub fn setMetric(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, ke
     }
 
     if (!found) {
-        const now = @divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s);
+        const now: i64 = @intCast(@divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s));
         const new_line = try std.fmt.allocPrint(allocator, "{s}={s}\t{d}\n", .{ key, value, now });
         defer allocator.free(new_line);
         try lines.appendSlice(allocator, new_line);

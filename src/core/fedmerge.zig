@@ -4,6 +4,8 @@ const car_mod = @import("car.zig");
 const crypto = @import("crypto.zig");
 const ipld_commit = @import("ipld_commit.zig");
 const Repository = @import("repository.zig").Repository;
+const weight_merge = @import("weight_merge.zig");
+const file_diff = @import("file_diff.zig");
 
 pub const MergeNode = struct {
     parent_a: ipld.CID,
@@ -12,6 +14,8 @@ pub const MergeNode = struct {
     resolved: []ResolvedConflict,
     merged_at: i64,
     merged_by: []const u8,
+    merged_weights_cid: ?ipld.CID = null,
+    merged_weights_file: []const u8 = "",
 
     pub const ResolvedConflict = struct {
         key: []const u8,
@@ -30,6 +34,10 @@ pub const MergeNode = struct {
         try entries.append(allocator, .{ .key = try allocator.dupe(u8, "strategy"), .value = .{ .string = try allocator.dupe(u8, self.strategy) } });
         try entries.append(allocator, .{ .key = try allocator.dupe(u8, "merged_at"), .value = .{ .int = self.merged_at } });
         try entries.append(allocator, .{ .key = try allocator.dupe(u8, "merged_by"), .value = .{ .string = try allocator.dupe(u8, self.merged_by) } });
+        if (self.merged_weights_cid) |wc| {
+            try entries.append(allocator, .{ .key = try allocator.dupe(u8, "merged_weights"), .value = .{ .link = wc } });
+            try entries.append(allocator, .{ .key = try allocator.dupe(u8, "merged_weights_file"), .value = .{ .string = try allocator.dupe(u8, self.merged_weights_file) } });
+        }
 
         var resolved_list = try allocator.alloc(ipld.Value, self.resolved.len);
         for (self.resolved, 0..) |rc, i| {
@@ -268,6 +276,11 @@ pub fn mergeFromCar(
     strategy: MergeStrategy,
     dry_run: bool,
     sign_result: bool,
+    weight_file: ?[]const u8,
+    weight_strategy: weight_merge.MergeStrategy,
+    weight_alpha: f64,
+    weight_base: ?[]const u8,
+    weight_density: f64,
 ) !void {
     var store = try ipld.BlockStore.init(allocator, io, repo.path);
     defer store.deinit();
@@ -323,7 +336,7 @@ pub fn mergeFromCar(
     }
     std.debug.print("   Imported: {d} new blocks\n\n", .{imported_count});
 
-    const head_b = try findHeadInCar(allocator, &store, car_path) orelse
+    const head_b = try findHeadInCar(allocator, io, &store, car_path) orelse
         try findHeadCommit(allocator, io, &store) orelse {
         std.debug.print("❌ No commit nodes found in foreign CAR.\n\n", .{});
         return;
@@ -412,14 +425,128 @@ pub fn mergeFromCar(
         });
     }
 
+    var merged_weights_cid: ?ipld.CID = null;
+    var weight_file_name: []const u8 = "";
+
+    if (weight_file) |wf_name| {
+        weight_file_name = wf_name;
+        std.debug.print("🧬 Merging weight file: {s}\n\n", .{wf_name});
+
+        const node_a = store.getNode(allocator, io, head_a) catch null;
+        defer if (node_a) |na| @constCast(&na).deinit(allocator);
+        const node_b = store.getNode(allocator, io, head_b) catch null;
+        defer if (node_b) |nb| @constCast(&nb).deinit(allocator);
+
+        if (node_a != null and node_b != null) {
+            const tree_a_cid = node_a.?.getLink("tree");
+            const tree_b_cid = node_b.?.getLink("tree");
+
+            if (tree_a_cid != null and tree_b_cid != null) {
+                const tree_a_short = try tree_a_cid.?.toShort(allocator);
+                defer allocator.free(tree_a_short);
+                const tree_b_short = try tree_b_cid.?.toShort(allocator);
+                defer allocator.free(tree_b_short);
+
+                const entries_a = file_diff.readTree(allocator, io, repo.path, tree_a_short) catch &[_]file_diff.TreeEntry{};
+                defer {
+                    for (entries_a) |e| e.deinit(allocator);
+                    if (entries_a.len > 0) allocator.free(entries_a);
+                }
+                const entries_b = file_diff.readTree(allocator, io, repo.path, tree_b_short) catch &[_]file_diff.TreeEntry{};
+                defer {
+                    for (entries_b) |e| e.deinit(allocator);
+                    if (entries_b.len > 0) allocator.free(entries_b);
+                }
+
+                var hash_a: ?[]const u8 = null;
+                var hash_b: ?[]const u8 = null;
+                for (entries_a) |e| if (std.mem.eql(u8, e.name, wf_name)) {
+                    hash_a = e.hash;
+                    break;
+                };
+                for (entries_b) |e| if (std.mem.eql(u8, e.name, wf_name)) {
+                    hash_b = e.hash;
+                    break;
+                };
+
+                if (hash_a != null and hash_b != null) {
+                    const raw_a = file_diff.readObject(allocator, io, repo.path, hash_a.?) catch null;
+                    const raw_b = file_diff.readObject(allocator, io, repo.path, hash_b.?) catch null;
+
+                    if (raw_a != null and raw_b != null) {
+                        defer allocator.free(raw_a.?);
+                        defer allocator.free(raw_b.?);
+
+                        var merge_result = blk: {
+                            if (weight_strategy == .ties) {
+                                const base_path = weight_base orelse {
+                                    std.debug.print("   ❌ --weight-strategy ties requires --weight-base <path-to-base-model>\n\n", .{});
+                                    return;
+                                };
+                                const data_base = std.Io.Dir.cwd().readFileAlloc(io, base_path, allocator, .unlimited) catch {
+                                    std.debug.print("   ❌ Could not read base model: {s}\n\n", .{base_path});
+                                    return;
+                                };
+                                defer allocator.free(data_base);
+                                break :blk weight_merge.mergeSafetensorsBytesTies(
+                                    allocator,
+                                    data_base,
+                                    raw_a.?,
+                                    raw_b.?,
+                                    weight_density,
+                                    weight_alpha * 2.0,
+                                ) catch |err| {
+                                    std.debug.print("   ❌ TIES merge failed: {}\n\n", .{err});
+                                    return;
+                                };
+                            }
+                            break :blk weight_merge.mergeSafetensorsBytes(
+                                allocator,
+                                raw_a.?,
+                                raw_b.?,
+                                weight_strategy,
+                                weight_alpha,
+                            ) catch |err| {
+                                std.debug.print("   ❌ Weight merge failed: {}\n\n", .{err});
+                                return;
+                            };
+                        };
+                        defer merge_result.report.deinit(allocator);
+                        defer allocator.free(merge_result.bytes);
+
+                        weight_merge.printMergeReport(&merge_result.report, "(IPLD block, not a file)");
+
+                        if (!dry_run) {
+                            const raw_cid = ipld.CID.raw(merge_result.bytes);
+                            try store.put(io, raw_cid, merge_result.bytes);
+                            merged_weights_cid = raw_cid;
+
+                            const cid_str = try raw_cid.toShort(allocator);
+                            defer allocator.free(cid_str);
+                            std.debug.print("   📦 Merged weights stored: {s}\n", .{cid_str});
+                            std.debug.print("   Extract: zev dag get {s} --output merged_{s}\n\n", .{ cid_str, wf_name });
+                        }
+                    } else {
+                        std.debug.print("   ⚠️  Could not read file content from one or both commits\n\n", .{});
+                    }
+                } else {
+                    std.debug.print("   ⚠️  '{s}' not found in one or both commit trees\n", .{wf_name});
+                    std.debug.print("   Note: fedmerge CAR transport carries IPLD metadata only, not file blobs.\n", .{});
+                    std.debug.print("   The raw file content must already be present locally (e.g. via 'zev pull'\n", .{});
+                    std.debug.print("   or 'zev clone', or by merging two branches of the same repository).\n\n", .{});
+                }
+            }
+        }
+    }
+
     if (dry_run) {
         std.debug.print("🔍 Dry run complete — no changes made.\n\n", .{});
         std.debug.print("   Run without --dry-run to apply merge.\n\n", .{});
         return;
     }
 
-    const now = @divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s);
-    const identity = try crypto.Identity.loadOrCreate(allocator, repo.path);
+    const now: i64 = @intCast(@divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s));
+    const identity = try crypto.Identity.loadOrCreate(allocator, io, repo.path);
     const pk_str = identity.publicKeyB64();
 
     const mn = MergeNode{
@@ -429,6 +556,8 @@ pub fn mergeFromCar(
         .resolved = resolved.items,
         .merged_at = now,
         .merged_by = &pk_str,
+        .merged_weights_cid = merged_weights_cid,
+        .merged_weights_file = weight_file_name,
     };
 
     var arena = std.heap.ArenaAllocator.init(allocator);
@@ -436,7 +565,7 @@ pub fn mergeFromCar(
     const aa = arena.allocator();
 
     const mn_val = try mn.toValue(aa);
-    var merge_cid = try store.putNode(io, aa, mn_val);
+    var merge_cid = try store.putNode(aa, io, mn_val);
 
     if (sign_result) {
         merge_cid = try crypto.signCommitNode(allocator, io, &store, repo, merge_cid);
@@ -467,7 +596,7 @@ pub fn mergeFromCar(
             .timestamp = now,
         };
         const mmv = try merged_mn.toValue(aa);
-        _ = try store.putNode(io, aa, mmv);
+        _ = try store.putNode(aa, io, mmv);
     }
 
     std.debug.print("✅ Merge complete\n\n", .{});

@@ -11,7 +11,7 @@ Zev is a version control system built for machine learning. Every commit is a co
 ## Install
 
 ```bash
-# Requires Zig 0.16.0-dev
+# Requires Zig 0.17.0-dev
 git clone https://codeberg.org/arvand/zev
 cd zev
 zig build -Doptimize=ReleaseSafe

@@ -55,7 +55,7 @@ pub fn blame(
         errdefer allocator.free(c.author);
         errdefer allocator.free(c.message);
 
-        const file_content = getFileAtCommit(allocator, repo, c.tree_cid, filename) catch {
+        const file_content = getFileAtCommit(allocator, io, repo, c.tree_cid, filename) catch {
             allocator.free(c.author);
             allocator.free(c.message);
             if (c.parent_cid) |parent| {

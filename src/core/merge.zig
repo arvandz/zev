@@ -50,7 +50,10 @@ pub fn merge(
         defer allocator.free(cur_path);
         const f = std.Io.Dir.cwd().createFile(io, cur_path, .{}) catch return .ConflictDetected;
         defer f.close(io);
-        try f.writeAll(src_trimmed);
+        var f_buffer: [512]u8 = undefined;
+        var f_writer = f.writer(io, &f_buffer);
+        try f_writer.interface.writeAll(src_trimmed);
+        try f_writer.flush();
     }
 
     return .FastForward;

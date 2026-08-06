@@ -86,8 +86,8 @@ pub fn b64Decode64(encoded: []const u8) ![64]u8 {
 pub const Identity = struct {
     key_pair: Ed25519.KeyPair,
 
-    pub fn generate() Identity {
-        return .{ .key_pair = Ed25519.KeyPair.generate() };
+    pub fn generate(io: std.Io) Identity {
+        return .{ .key_pair = Ed25519.KeyPair.generate(io) };
     }
 
     pub fn loadOrCreate(allocator: std.mem.Allocator, io: std.Io, repo_path: []const u8) !Identity {
@@ -102,7 +102,7 @@ pub const Identity = struct {
             return .{ .key_pair = kp };
         } else |_| {}
 
-        const id = Identity.generate();
+        const id = Identity.generate(io);
         try id.save(allocator, io, repo_path);
         return id;
     }
@@ -117,7 +117,7 @@ pub const Identity = struct {
         @memcpy(&seed, sk_bytes[0..32]);
 
         const encoded = b64Encode32(seed);
-        const f = try std.Io.Dir.cwd().createFile(io, id_path, .{ .mode = 0o600 });
+        const f = try std.Io.Dir.cwd().createFile(io, id_path, .{ .permissions = .fromMode(0o600) });
         var f_buffer: [512]u8 = undefined;
         var f_writer = f.writer(io, &f_buffer);
         defer f.close(io);
@@ -142,7 +142,7 @@ pub const Identity = struct {
     }
 };
 
-pub fn verify(io: std.Io, 
+pub fn verify(
     data: []const u8,
     sig_b64: []const u8,
     pubkey_b64: []const u8,
@@ -150,18 +150,18 @@ pub fn verify(io: std.Io,
     const sig_bytes = try b64Decode64(sig_b64);
     const pk_bytes = try b64Decode32(pubkey_b64);
 
-    const sig = Ed25519.Signature.fromBytes(io, sig_bytes);
-    const pk = try Ed25519.PublicKey.fromBytes(io, pk_bytes);
-    try sig.verify(io, data, pk);
+    const sig = Ed25519.Signature.fromBytes(sig_bytes);
+    const pk = try Ed25519.PublicKey.fromBytes(pk_bytes);
+    try sig.verify(data, pk);
 }
 
-pub fn verifyHash(io: std.Io, 
+pub fn verifyHash(
     data: []const u8,
     sig_b64: []const u8,
     pubkey_b64: []const u8,
 ) !void {
     const hash = blake3(data);
-    try verify(io, &hash, sig_b64, pubkey_b64);
+    try verify(&hash, sig_b64, pubkey_b64);
 }
 
 const ipld = @import("ipld.zig");
@@ -174,9 +174,9 @@ pub fn signCommitNode(
     repo: *Repository,
     commit_cid: ipld.CID,
 ) !ipld.CID {
-    const identity = try Identity.loadOrCreate(allocator, repo.path);
+    const identity = try Identity.loadOrCreate(allocator, io, repo.path);
 
-    const block_data = try store.get(commit_cid);
+    const block_data = try store.get(io, commit_cid);
     defer allocator.free(block_data);
 
     const sig_str = try identity.signHash(block_data);
@@ -211,7 +211,7 @@ pub fn signCommitNode(
     });
 
     const signed_val = ipld.Value{ .map = try entries.toOwnedSlice(aa) };
-    return try store.putNode(io, aa, signed_val);
+    return try store.putNode(aa, io, signed_val);
 }
 
 pub fn verifyCID(
@@ -247,7 +247,7 @@ pub fn verifyCID(
     const pk_owned = try allocator.dupe(u8, pk_b64);
     errdefer allocator.free(pk_owned);
 
-    verifyHash(io, unsigned_bytes, sig_b64, pk_b64) catch |err| {
+    verifyHash(unsigned_bytes, sig_b64, pk_b64) catch |err| {
         return VerifyResult{ .invalid = .{
             .reason = @errorName(err),
             .pk = pk_owned,
@@ -287,7 +287,7 @@ pub fn cmdSign(
     const new_short = try signed_cid.toShort(allocator);
     defer allocator.free(new_short);
 
-    const identity = try Identity.loadOrCreate(allocator, repo.path);
+    const identity = try Identity.loadOrCreate(allocator, io, repo.path);
     const pk = identity.publicKeyB64();
 
     std.debug.print("✍️  Signed IPLD node\n\n", .{});
@@ -346,11 +346,8 @@ pub fn cmdVerify(
     }
 }
 
-pub fn cmdIdentity(
-    allocator: std.mem.Allocator,
-    repo: *Repository,
-) !void {
-    const identity = try Identity.loadOrCreate(allocator, repo.path);
+pub fn cmdIdentity(io: std.Io, allocator: std.mem.Allocator, repo: *Repository) !void {
+    const identity = try Identity.loadOrCreate(allocator, io, repo.path);
     const pk = identity.publicKeyB64();
 
     std.debug.print("🔑 Zev Identity\n\n", .{});

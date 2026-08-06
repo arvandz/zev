@@ -11,11 +11,11 @@ fn readFile(allocator: std.mem.Allocator, io: std.Io, path: []const u8) !?[]u8 {
     };
 }
 
-fn readMetricsForHash(allocator: std.mem.Allocator, repo: *Repository, hash: []const u8) !std.StringHashMap([]u8) {
+fn readMetricsForHash(io: std.Io, allocator: std.mem.Allocator, repo: *Repository, hash: []const u8) !std.StringHashMap([]u8) {
     var map = std.StringHashMap([]u8).init(allocator);
     const path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "metrics", hash });
     defer allocator.free(path);
-    const content = (try readFile(allocator, path)) orelse return map;
+    const content = (try readFile(allocator, io, path)) orelse return map;
     defer allocator.free(content);
     var iter = std.mem.splitSequence(u8, content, "\n");
     while (iter.next()) |line| {
@@ -104,7 +104,7 @@ fn collectTreeFiles(
 
         const is_dir = (entry.mode & 0o040000) != 0;
         if (is_dir) {
-            try collectTreeFiles(allocator, repo, entry.cid, full, out);
+            try collectTreeFiles(allocator, io, repo, entry.cid, full, out);
             allocator.free(full);
         } else {
             try out.put(full, entry.cid);
@@ -155,8 +155,8 @@ pub fn compareCommits(allocator: std.mem.Allocator, io: std.Io, repo: *Repositor
     var files_b = std.StringHashMap(cid_mod.CID).init(allocator);
     defer freeTreeMap(allocator, &files_b);
 
-    try collectTreeFiles(allocator, repo, ca.tree_cid, "", &files_a);
-    try collectTreeFiles(allocator, repo, cb.tree_cid, "", &files_b);
+    try collectTreeFiles(allocator, io, repo, ca.tree_cid, "", &files_a);
+    try collectTreeFiles(allocator, io, repo, cb.tree_cid, "", &files_b);
 
     var added: usize = 0;
     var removed: usize = 0;
@@ -176,9 +176,9 @@ pub fn compareCommits(allocator: std.mem.Allocator, io: std.Io, repo: *Repositor
     }
 
     var change_buf: [64]u8 = undefined;
-    const change_a = std.fmt.bufPrint(&change_buf, "{d} file(s)", .{files_a.count(io, )}) catch "?";
+    const change_a = std.fmt.bufPrint(&change_buf, "{d} file(s)", .{files_a.count()}) catch "?";
     var change_buf2: [64]u8 = undefined;
-    const change_b = std.fmt.bufPrint(&change_buf2, "{d} file(s)", .{files_b.count(io, )}) catch "?";
+    const change_b = std.fmt.bufPrint(&change_buf2, "{d} file(s)", .{files_b.count()}) catch "?";
     printRow("Files", change_a, change_b);
 
     if (added > 0 or removed > 0 or modified > 0) {
@@ -207,12 +207,12 @@ pub fn compareCommits(allocator: std.mem.Allocator, io: std.Io, repo: *Repositor
         std.debug.print("   (identical file trees)\n", .{});
     }
 
-    var metrics_a = try readMetricsForHash(allocator, repo, hash_a);
+    var metrics_a = try readMetricsForHash(io, allocator, repo, hash_a);
     defer freeStrMap(allocator, &metrics_a);
-    var metrics_b = try readMetricsForHash(allocator, repo, hash_b);
+    var metrics_b = try readMetricsForHash(io, allocator, repo, hash_b);
     defer freeStrMap(allocator, &metrics_b);
 
-    if (metrics_a.count(io, ) > 0 or metrics_b.count() > 0) {
+    if (metrics_a.count() > 0 or metrics_b.count() > 0) {
         std.debug.print("\n   Metrics:\n", .{});
         std.debug.print("   {s:<20} {s:<28} {s}\n", .{ "Key", hash_a[0..8], hash_b[0..8] });
         printSeparator();
@@ -235,10 +235,10 @@ pub fn compareCommits(allocator: std.mem.Allocator, io: std.Io, repo: *Repositor
     std.debug.print("\n", .{});
 }
 
-fn loadExpFields(allocator: std.mem.Allocator, repo: *Repository, name: []const u8) !?std.StringHashMap([]u8) {
+fn loadExpFields(io: std.Io, allocator: std.mem.Allocator, repo: *Repository, name: []const u8) !?std.StringHashMap([]u8) {
     const path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "experiments", name });
     defer allocator.free(path);
-    const content = (try readFile(allocator, path)) orelse return null;
+    const content = (try readFile(allocator, io, path)) orelse return null;
     defer allocator.free(content);
 
     var map = std.StringHashMap([]u8).init(allocator);
@@ -255,13 +255,13 @@ fn loadExpFields(allocator: std.mem.Allocator, repo: *Repository, name: []const 
 
 pub fn compareExperiments(allocator: std.mem.Allocator,
     io: std.Io, repo: *Repository, name_a: []const u8, name_b: []const u8) !void {
-    var exp_a = (try loadExpFields(allocator, repo, name_a)) orelse {
+    var exp_a = (try loadExpFields(io, allocator, repo, name_a)) orelse {
         std.debug.print("Error: Experiment '{s}' not found\n", .{name_a});
         return;
     };
     defer freeStrMap(allocator, &exp_a);
 
-    var exp_b = (try loadExpFields(allocator, repo, name_b)) orelse {
+    var exp_b = (try loadExpFields(io, allocator, repo, name_b)) orelse {
         std.debug.print("Error: Experiment '{s}' not found\n", .{name_b});
         return;
     };
@@ -294,20 +294,20 @@ pub fn compareExperiments(allocator: std.mem.Allocator,
         const ref_path_b = try std.fs.path.join(allocator, &.{ refs_base, branch_b });
         defer allocator.free(ref_path_b);
 
-        const hash_a_raw = (try readFile(allocator, ref_path_a)) orelse try allocator.dupe(u8, "");
+        const hash_a_raw = (try readFile(allocator, io, ref_path_a)) orelse try allocator.dupe(u8, "");
         defer allocator.free(hash_a_raw);
-        const hash_b_raw = (try readFile(allocator, ref_path_b)) orelse try allocator.dupe(u8, "");
+        const hash_b_raw = (try readFile(allocator, io, ref_path_b)) orelse try allocator.dupe(u8, "");
         defer allocator.free(hash_b_raw);
 
         const hash_a = std.mem.trim(u8, hash_a_raw, " \n\r\t");
         const hash_b = std.mem.trim(u8, hash_b_raw, " \n\r\t");
 
-        var metrics_a = try readMetricsForHash(allocator, repo, hash_a);
+        var metrics_a = try readMetricsForHash(io, allocator, repo, hash_a);
         defer freeStrMap(allocator, &metrics_a);
-        var metrics_b = try readMetricsForHash(allocator, repo, hash_b);
+        var metrics_b = try readMetricsForHash(io, allocator, repo, hash_b);
         defer freeStrMap(allocator, &metrics_b);
 
-        if (metrics_a.count(io, ) > 0 or metrics_b.count() > 0) {
+        if (metrics_a.count() > 0 or metrics_b.count() > 0) {
             std.debug.print("\n   Metrics:\n", .{});
             std.debug.print("   {s:<20} {s:<28} {s}\n", .{ "Key", name_a, name_b });
             printSeparator();
@@ -343,11 +343,11 @@ fn findSnapshotById(allocator: std.mem.Allocator,
         if (!std.mem.endsWith(u8, entry.name, ".name")) continue;
         const full = try std.fs.path.join(allocator, &.{ dir_path, entry.name });
         defer allocator.free(full);
-        const stored_id = (try readFile(allocator, full)) orelse continue;
+        const stored_id = (try readFile(allocator, io, full)) orelse continue;
         defer allocator.free(stored_id);
         const snap_path = try std.fs.path.join(allocator, &.{ dir_path, stored_id });
         defer allocator.free(snap_path);
-        const content = (try readFile(allocator, snap_path)) orelse continue;
+        const content = (try readFile(allocator, io, snap_path)) orelse continue;
         defer allocator.free(content);
 
         var found_name = false;
@@ -458,12 +458,12 @@ pub fn compareBranches(allocator: std.mem.Allocator, io: std.Io, repo: *Reposito
     const path_b = try std.fs.path.join(allocator, &.{ refs_base, branch_b });
     defer allocator.free(path_b);
 
-    const raw_a = (try readFile(allocator, path_a)) orelse {
+    const raw_a = (try readFile(allocator, io, path_a)) orelse {
         std.debug.print("Error: Branch '{s}' not found\n", .{branch_a});
         return;
     };
     defer allocator.free(raw_a);
-    const raw_b = (try readFile(allocator, path_b)) orelse {
+    const raw_b = (try readFile(allocator, io, path_b)) orelse {
         std.debug.print("Error: Branch '{s}' not found\n", .{branch_b});
         return;
     };

@@ -217,7 +217,7 @@ fn saveAssignment(
     try f_writer.flush();
 }
 
-fn detectFormat(path: []const u8) []const u8 {
+fn detectFormat(io: std.Io, path: []const u8) []const u8 {
     if (std.mem.endsWith(u8, path, ".csv")) return "csv";
     if (std.mem.endsWith(u8, path, ".tsv")) return "csv";
     if (std.mem.endsWith(u8, path, ".jsonl")) return "jsonl";
@@ -225,7 +225,7 @@ fn detectFormat(path: []const u8) []const u8 {
     if (std.mem.endsWith(u8, path, ".txt")) return "text";
     if (std.mem.endsWith(u8, path, ".bin")) return "binary";
     if (std.mem.endsWith(u8, path, ".parquet")) return "parquet";
-    const stat = std.Io.Dir.cwd().statFile(path) catch return "unknown";
+    const stat = std.Io.Dir.cwd().statFile(io, path, .{}) catch return "unknown";
     if (stat.kind == .directory) return "directory";
     return "binary";
 }
@@ -241,8 +241,8 @@ fn countLines(allocator: std.mem.Allocator, io: std.Io, path: []const u8) !usize
     return count;
 }
 
-fn getFileSize(path: []const u8) u64 {
-    const stat = std.Io.Dir.cwd().statFile(path) catch return 0;
+fn getFileSize(io: std.Io, path: []const u8) u64 {
+    const stat = std.Io.Dir.cwd().statFile(io, path, .{}) catch return 0;
     return @intCast(stat.size);
 }
 
@@ -259,9 +259,9 @@ pub fn datasetRegister(
         return;
     };
 
-    const now = @divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s);
-    const format = detectFormat(source_path);
-    const byte_size = getFileSize(source_path);
+    const now: i64 = @intCast(@divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s));
+    const format = detectFormat(io, source_path);
+    const byte_size = getFileSize(io, source_path);
 
     const src_content = std.Io.Dir.cwd().readFileAlloc(io, source_path, allocator, .limited(64 * 1024 * 1024)) catch blk: {
         const fake = try std.fmt.allocPrint(allocator, "{s}:{d}", .{ source_path, byte_size });
@@ -276,7 +276,7 @@ pub fn datasetRegister(
     const total_rows = if (std.mem.eql(u8, format, "csv") or
         std.mem.eql(u8, format, "jsonl") or
         std.mem.eql(u8, format, "text"))
-        try countLines(allocator, source_path)
+        try countLines(allocator, io, source_path)
     else
         0;
 
@@ -316,14 +316,14 @@ pub fn datasetSplit(
     strategy_str: []const u8,
     seed: u64,
 ) !void {
-    const now = @divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s);
+    const now: i64 = @intCast(@divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s));
 
     const dir = try datasetDir(allocator, io, repo);
     defer allocator.free(dir);
     const meta_path = try std.fs.path.join(allocator, &.{ dir, dataset_name, "dataset.meta" });
     defer allocator.free(meta_path);
 
-    var ds = (try loadDatasetRecord(allocator, meta_path)) orelse {
+    var ds = (try loadDatasetRecord(allocator, io, meta_path)) orelse {
         std.debug.print("❌ Dataset '{s}' not found.\n", .{dataset_name});
         std.debug.print("   Register first: zev dataset register <path> --name {s}\n", .{dataset_name});
         return;
@@ -516,7 +516,7 @@ pub fn datasetAssign(
     shard_indices: []const usize,
     notes: []const u8,
 ) !void {
-    const now = @divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s);
+    const now: i64 = @intCast(@divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s));
 
     const head = repo.getHeadCommit(io) catch {
         std.debug.print("❌ No commits yet. Commit first.\n", .{});
@@ -721,7 +721,7 @@ pub fn datasetList(allocator: std.mem.Allocator,
         if (entry.kind != .directory) continue;
         const meta_path = try std.fs.path.join(allocator, &.{ dir_path, entry.name, "dataset.meta" });
         defer allocator.free(meta_path);
-        const ds = (try loadDatasetRecord(allocator, meta_path)) orelse continue;
+        const ds = (try loadDatasetRecord(allocator, io, meta_path)) orelse continue;
         count += 1;
 
         std.debug.print("  📂 {s}\n", .{ds.name});

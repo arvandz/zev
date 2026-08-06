@@ -76,7 +76,7 @@ pub fn exportRepo(
     since_hash: ?[]const u8,
     include_objects: bool,
 ) !void {
-    const now = @divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s);
+    const now: i64 = @intCast(@divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s));
 
     std.debug.print("📦 Exporting repository...\n\n", .{});
 
@@ -109,10 +109,10 @@ pub fn exportRepo(
     };
     for (config_files) |cf| {
         const abs = try std.fs.path.join(allocator, &.{ zev_path, cf });
-        if (std.Io.Dir.cwd().access(abs, .{}) catch null == null or
-            std.Io.Dir.cwd().access(abs, .{}) catch unreachable == {})
+        if (std.Io.Dir.cwd().access(io, abs, .{}) catch null == null or
+            std.Io.Dir.cwd().access(io, abs, .{}) catch unreachable == {})
         {
-            _ = std.Io.Dir.cwd().statFile(abs) catch {
+            _ = std.Io.Dir.cwd().statFile(io, abs, .{}) catch {
                 allocator.free(abs);
                 continue;
             };
@@ -199,7 +199,7 @@ pub fn exportRepo(
     var written_files: usize = 0;
 
     for (export_files) |fi| {
-        const content = (try readFileSafe(allocator, fi.abs)) orelse continue;
+        const content = (try readFileSafe(allocator, io, fi.abs)) orelse continue;
         defer allocator.free(content);
 
         const checksum = try computeChecksum(allocator, content);
@@ -372,7 +372,7 @@ pub fn importArchive(
         const parent = std.fs.path.dirname(out_path) orelse out_path;
         std.Io.Dir.cwd().createDirPath(io, parent) catch {};
 
-        const existing = readFileSafe(allocator, out_path) catch null;
+        const existing = readFileSafe(allocator, io, out_path) catch null;
         if (existing) |ex| {
             defer allocator.free(ex);
             if (std.mem.eql(u8, ex, file_content)) {
@@ -387,7 +387,10 @@ pub fn importArchive(
             continue;
         };
         defer wf.close(io);
-        try wf.writeAll(file_content);
+        var wf_buffer: [512]u8 = undefined;
+        var wf_writer = wf.writer(io, &wf_buffer);
+        try wf_writer.interface.writeAll(file_content);
+        try wf_writer.flush();
         std.debug.print("   ✅ {s}\n", .{rel_path});
         restored += 1;
     }
@@ -395,7 +398,7 @@ pub fn importArchive(
     if (!dry_run) {
         const head_path = try std.fs.path.join(allocator, &.{ zev_target, "HEAD" });
         defer allocator.free(head_path);
-        std.Io.Dir.cwd().access(head_path, .{}) catch {
+        std.Io.Dir.cwd().access(io, head_path, .{}) catch {
             const hf = try std.Io.Dir.cwd().createFile(io, head_path, .{});
             var hf_buffer: [512]u8 = undefined;
             var hf_writer = hf.writer(io, &hf_buffer);

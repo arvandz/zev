@@ -294,7 +294,12 @@ fn runDriftCheck(
 
 fn printDriftResults(results: []const DriftResult, baseline_ref: []const u8, current_ref: []const u8, any_drift: bool) void {
     std.debug.print("\n   {s:<22} {s:<14} {s:<14} {s:<12} {s}\n", .{ "Metric", baseline_ref[0..@min(12, baseline_ref.len)], current_ref[0..@min(12, current_ref.len)], "Change", "Status" });
-    std.debug.print("   {s}\n", .{"─"**70});
+    const dash = comptime blk: {
+        var s: []const u8 = "";
+        for (0..70) |_| s = s ++ "─";
+        break :blk s;
+    };
+    std.debug.print("   {s}\n", .{dash});
     for (results) |r| {
         const status: []const u8 = if (r.drifted) "🚨 DRIFT" else "✅ OK";
         std.debug.print("   {s:<22} {d:<14.4} {d:<14.4} {s}{d:<8.4} {s}\n", .{ r.metric, r.baseline_val, r.current_val, r.direction, @abs(r.delta), status });
@@ -361,7 +366,7 @@ fn fireWebhook(allocator: std.mem.Allocator,
 
 pub fn driftBaseline(allocator: std.mem.Allocator,
     io: std.Io, repo: *Repository, baseline_ref: []const u8) !void {
-    var cfg = (try loadConfig(allocator, repo)) orelse DriftConfig{
+    var cfg = (try loadConfig(allocator, io, repo)) orelse DriftConfig{
         .baseline_ref = try allocator.dupe(u8, ""),
         .webhook_url = try allocator.dupe(u8, ""),
         .watch_interval = 300,
@@ -384,7 +389,7 @@ pub fn driftConfig(
     webhook_url: ?[]const u8,
     watch_interval: ?u32,
 ) !void {
-    var cfg = (try loadConfig(allocator, repo)) orelse DriftConfig{
+    var cfg = (try loadConfig(allocator, io, repo)) orelse DriftConfig{
         .baseline_ref = try allocator.dupe(u8, ""),
         .webhook_url = try allocator.dupe(u8, ""),
         .watch_interval = 300,
@@ -435,7 +440,7 @@ pub fn driftConfig(
 
 pub fn driftCheck(allocator: std.mem.Allocator,
     io: std.Io, repo: *Repository, baseline_override: ?[]const u8) !void {
-    var cfg = (try loadConfig(allocator, repo)) orelse {
+    var cfg = (try loadConfig(allocator, io, repo)) orelse {
         std.debug.print("No drift config. Set up with:\n", .{});
         std.debug.print("  zev drift baseline <snapshot-name>\n", .{});
         std.debug.print("  zev drift config --metric accuracy --delta 0.05 --direction hib\n", .{});
@@ -449,11 +454,11 @@ pub fn driftCheck(allocator: std.mem.Allocator,
         return;
     }
 
-    var baseline_metrics = (try loadMetricsFromSnapshot(allocator, repo, baseline_ref)) orelse
-        try loadMetricsForHash(allocator, repo, baseline_ref);
+    var baseline_metrics = (try loadMetricsFromSnapshot(allocator, io, repo, baseline_ref)) orelse
+        try loadMetricsForHash(allocator, io, repo, baseline_ref);
     defer freeMetricsMap(allocator, &baseline_metrics);
 
-    if (baseline_metrics.count(io, ) == 0) {
+    if (baseline_metrics.count() == 0) {
         std.debug.print("No metrics found for baseline '{s}'\n", .{baseline_ref});
         return;
     }
@@ -465,10 +470,10 @@ pub fn driftCheck(allocator: std.mem.Allocator,
     const current_hash = try head.toString(allocator);
     defer allocator.free(current_hash);
 
-    var current_metrics = try loadMetricsForHash(allocator, repo, current_hash);
+    var current_metrics = try loadMetricsForHash(allocator, io, repo, current_hash);
     defer freeMetricsMap(allocator, &current_metrics);
 
-    if (current_metrics.count(io, ) == 0) {
+    if (current_metrics.count() == 0) {
         std.debug.print("No metrics on current HEAD ({s})\n", .{current_hash[0..8]});
         return;
     }
@@ -506,7 +511,7 @@ pub fn driftCheck(allocator: std.mem.Allocator,
     const any_drift = try runDriftCheck(allocator, &baseline_metrics, &current_metrics, effective, &results);
     printDriftResults(results.items, baseline_ref, current_hash[0..8], any_drift);
 
-    const now = @divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s);
+    const now: i64 = @intCast(@divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s));
     try saveHistory(allocator, io, repo, baseline_ref, current_hash, results.items, any_drift, now);
 
     if (any_drift and cfg.webhook_url.len > 0) {
@@ -579,7 +584,7 @@ pub fn driftHistory(allocator: std.mem.Allocator, io: std.Io, repo: *Repository,
 
 pub fn driftWatch(allocator: std.mem.Allocator,
     io: std.Io, repo: *Repository, interval_secs: u32) !void {
-    var cfg = (try loadConfig(allocator, repo)) orelse {
+    var cfg = (try loadConfig(allocator, io, repo)) orelse {
         std.debug.print("No drift config. Set baseline: zev drift baseline <ref>\n", .{});
         return;
     };
@@ -596,12 +601,12 @@ pub fn driftWatch(allocator: std.mem.Allocator,
         n += 1;
         std.debug.print("─── Check #{d} ─────────────────────────────\n", .{n});
         try driftCheck(allocator, io, repo, baseline);
-        std.posix.nanosleep(effective_interval, 0);
+        try std.Io.sleep(io, .{ .nanoseconds = @as(i96, effective_interval) * std.time.ns_per_s }, .real);
     }
 }
 
-pub fn driftShow(allocator: std.mem.Allocator, repo: *Repository) !void {
-    var cfg = (try loadConfig(allocator, repo)) orelse {
+pub fn driftShow(io: std.Io, allocator: std.mem.Allocator, repo: *Repository) !void {
+    var cfg = (try loadConfig(allocator, io, repo)) orelse {
         std.debug.print("No drift config yet.\n", .{});
         std.debug.print("Start with: zev drift baseline <snapshot-name>\n", .{});
         return;

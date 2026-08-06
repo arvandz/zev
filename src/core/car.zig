@@ -4,20 +4,23 @@ const Repository = @import("repository.zig").Repository;
 
 pub const CarWriter = struct {
     allocator: std.mem.Allocator,
-    file: std.fs.File,
+    io: std.Io,
+    file: std.Io.File,
     roots: std.ArrayList(ipld.CID),
     written: std.StringHashMap(void),
     block_count: usize,
     byte_count: u64,
-
-    pub fn init(allocator: std.mem.Allocator, file: std.fs.File) CarWriter {
+    write_offset: u64,
+    pub fn init(allocator: std.mem.Allocator, io: std.Io, file: std.Io.File) CarWriter {
         return .{
             .allocator = allocator,
+            .io = io,
             .file = file,
             .roots = std.ArrayList(ipld.CID).empty,
             .written = std.StringHashMap(void).init(allocator),
             .block_count = 0,
             .byte_count = 0,
+            .write_offset = 0,
         };
     }
 
@@ -32,24 +35,26 @@ pub const CarWriter = struct {
         try self.roots.append(self.allocator, c);
     }
 
+    fn writeBytes(self: *CarWriter, bytes: []const u8) !void {
+        try self.file.writePositionalAll(self.io, bytes, self.write_offset);
+        self.write_offset += bytes.len;
+    }
+
     pub fn writeHeader(self: *CarWriter) !void {
         var root_vals = try self.allocator.alloc(ipld.Value, self.roots.items.len);
         defer self.allocator.free(root_vals);
         for (self.roots.items, 0..) |c, i| root_vals[i] = .{ .link = c };
-
         var entries = try self.allocator.alloc(ipld.Value.MapEntry, 2);
         defer self.allocator.free(entries);
         entries[0] = .{ .key = "version", .value = .{ .uint = 1 } };
         entries[1] = .{ .key = "roots", .value = .{ .list = root_vals } };
-
         const header_val = ipld.Value{ .map = entries };
         const header_bytes = try ipld.encode(self.allocator, header_val);
         defer self.allocator.free(header_bytes);
-
         var vbuf: [16]u8 = undefined;
         const vlen = encodeVarint(&vbuf, header_bytes.len);
-        try self.file.writeAll(vbuf[0..vlen]);
-        try self.file.writeAll(header_bytes);
+        try self.writeBytes(vbuf[0..vlen]);
+        try self.writeBytes(header_bytes);
     }
 
     pub fn writeBlock(self: *CarWriter, c: ipld.CID, data: []const u8) !void {
@@ -66,10 +71,9 @@ pub const CarWriter = struct {
         const total = cid_bytes.len + data.len;
         var vbuf: [16]u8 = undefined;
         const vlen = encodeVarint(&vbuf, total);
-        try self.file.writeAll(vbuf[0..vlen]);
-        try self.file.writeAll(cid_bytes);
-        try self.file.writeAll(data);
-
+        try self.writeBytes(vbuf[0..vlen]);
+        try self.writeBytes(cid_bytes);
+        try self.writeBytes(data);
         self.block_count += 1;
         self.byte_count += @intCast(vlen + total);
     }
@@ -168,7 +172,7 @@ pub fn dagExport(
     if (std.mem.eql(u8, root_spec, "all")) {
         try collectAllCIDs(allocator, io, &store, &root_cids);
     } else if (std.mem.eql(u8, root_spec, "HEAD")) {
-        const head = resolveHEAD(allocator, repo) catch {
+        const head = resolveHEAD(allocator, io, repo) catch {
             std.debug.print("❌ No commits yet.\n", .{});
             return;
         };
@@ -192,7 +196,7 @@ pub fn dagExport(
     };
     defer f.close(io);
 
-    var writer = CarWriter.init(allocator, f);
+    var writer = CarWriter.init(allocator, io, f);
     defer writer.deinit();
 
     for (root_cids.items) |c| try writer.addRoot(c);
@@ -210,7 +214,7 @@ pub fn dagExport(
     }
 
     const file_size = blk: {
-        const st = std.Io.Dir.cwd().statFile(io, output_path) catch break :blk @as(u64, 0);
+        const st = std.Io.Dir.cwd().statFile(io, output_path, .{}) catch break :blk @as(u64, 0);
         break :blk @as(u64, @intCast(st.size));
     };
 
@@ -256,7 +260,7 @@ fn walkAndWrite(
     allocator.free(short);
     try seen.put(short_owned, {});
 
-    const data = store.get(c) catch return;
+    const data = store.get(io, c) catch return;
     defer allocator.free(data);
 
     try writer.writeBlock(c, data);
@@ -298,7 +302,7 @@ pub fn dagImport(
 
     std.debug.print("📥 Importing CAR: {s}\n\n", .{car_path});
 
-    var car = readCar(allocator, car_path) catch |err| {
+    var car = readCar(allocator, io, car_path) catch |err| {
         std.debug.print("❌ Failed to read CAR: {}\n", .{err});
         return;
     };
@@ -398,8 +402,7 @@ fn resolveHEAD(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) !ipl
     return ipld.CID.fromHex(std.mem.trim(u8, head, "\n\r "));
 }
 
-fn importToIPFS(allocator: std.mem.Allocator,
-    io: std.Io, car_path: []const u8) !void {
+fn importToIPFS(allocator: std.mem.Allocator, io: std.Io, car_path: []const u8) !void {
     _ = allocator;
     const argv = [_][]const u8{ "ipfs", "dag", "import", car_path };
     var child = std.process.spawn(io, .{

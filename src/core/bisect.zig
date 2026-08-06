@@ -43,7 +43,7 @@ fn loadState(allocator: std.mem.Allocator,
     const stat = try file.stat(io);
     const content = try allocator.alloc(u8, @intCast(stat.size));
     defer allocator.free(content);
-    _ = try file.read(content);
+    _ = try file.readPositionalAll(io, content, 0);
 
     var good: []u8 = try allocator.dupe(u8, "");
     var bad: []u8 = try allocator.dupe(u8, "");
@@ -117,7 +117,7 @@ fn checkoutForBisect(allocator: std.mem.Allocator, io: std.Io, repo: *Repository
     defer allocator.free(c.author);
     defer allocator.free(c.message);
 
-    checkout_mod.checkoutCommit(allocator, repo, commit_cid) catch {};
+    checkout_mod.checkoutCommit(allocator, io, repo, commit_cid) catch {};
 
     const hash = try commit_cid.toString(allocator);
     defer allocator.free(hash);
@@ -155,7 +155,7 @@ pub fn bisectGood(allocator: std.mem.Allocator,
 
     std.debug.print("✅ Marked {s} as good\n", .{good_hash[0..8]});
     try saveState(allocator, io, repo, good_hash, state.bad, state.current);
-    try bisectStep(allocator, repo, good_hash, state.bad);
+    try bisectStep(allocator, io, repo, good_hash, state.bad);
 }
 
 pub fn bisectBad(allocator: std.mem.Allocator,
@@ -173,7 +173,7 @@ pub fn bisectBad(allocator: std.mem.Allocator,
 
     std.debug.print("❌ Marked {s} as bad\n", .{bad_hash[0..8]});
     try saveState(allocator, io, repo, state.good, bad_hash, state.current);
-    try bisectStep(allocator, repo, state.good, bad_hash);
+    try bisectStep(allocator, io, repo, state.good, bad_hash);
 }
 
 fn bisectStep(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, good_str: []const u8, bad_str: []const u8) !void {
@@ -189,7 +189,7 @@ fn bisectStep(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, good_
     const bad_cid = cid_mod.CID{ .hash = bad_hash };
     const good_cid = cid_mod.CID{ .hash = good_hash };
 
-    var history = try collectHistory(allocator, repo, bad_cid);
+    var history = try collectHistory(allocator, io, repo, bad_cid);
     defer history.deinit(allocator);
 
     var good_pos: ?usize = null;
@@ -228,7 +228,7 @@ fn bisectStep(allocator: std.mem.Allocator, io: std.Io, repo: *Repository, good_
     defer allocator.free(mid_str);
 
     try saveState(allocator, io, repo, good_str, bad_str, mid_str);
-    try checkoutForBisect(allocator, repo, mid_cid);
+    try checkoutForBisect(allocator, io, repo, mid_cid);
 
     std.debug.print("  ~{} commits remaining to test\n", .{range / 2});
 }

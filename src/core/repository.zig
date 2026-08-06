@@ -233,7 +233,7 @@ pub const Repository = struct {
         return null;
     }
 
-    pub fn saveConfig(io: std.Io, self: *Repository) !void {
+    pub fn saveConfig(self: *Repository, io: std.Io) !void {
         if (self.config) |*cfg| {
             try cfg.save(io, self.path);
         }

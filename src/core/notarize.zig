@@ -229,7 +229,7 @@ fn loadEthConfig(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) !s
 
 fn submitEthereum(allocator: std.mem.Allocator,
     io: std.Io, repo: *Repository, payload: []const u8) !NotarizeResult {
-    const eth = loadEthConfig(allocator, repo) catch {
+    const eth = loadEthConfig(allocator, io, repo) catch {
         return error.EthNotConfigured;
     };
     defer allocator.free(eth.rpc_url);
@@ -457,10 +457,10 @@ pub fn notarizeSnapshot(
     defer allocator.free(snap.metrics);
     defer allocator.free(snap.commit);
 
-    const author = try getAuthor(allocator, repo);
+    const author = try getAuthor(allocator, io, repo);
     defer allocator.free(author);
 
-    const now = @divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s);
+    const now: i64 = @intCast(@divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s));
 
     const payload = try buildPayload(allocator, "snapshot", snap_name, snap.cid, snap.metrics, author, now);
     defer allocator.free(payload);
@@ -496,7 +496,7 @@ pub fn notarizeSnapshot(
                 break :blk try notarizeLocal(allocator, io, payload, now);
             };
         } else if (std.mem.eql(u8, chain, "arweave")) {
-            break :blk submitArweave(allocator, repo, payload) catch |err| {
+            break :blk submitArweave(allocator, io, repo, payload) catch |err| {
                 if (err == error.ArweaveNotConfigured or err == error.ArkbNotFound) {
                     std.debug.print("❌ Arweave not configured or arkb not found.\n", .{});
                     std.debug.print("   Install arkb: npm install -g arkb\n", .{});
@@ -582,9 +582,9 @@ pub fn notarizeCommit(
         metrics_str = try result.toOwnedSlice(allocator);
     }
 
-    const author = try getAuthor(allocator, repo);
+    const author = try getAuthor(allocator, io, repo);
     defer allocator.free(author);
-    const now = @divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s);
+    const now: i64 = @intCast(@divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s));
 
     const payload = try buildPayload(allocator, "commit", commit_hash, commit_hash, metrics_str, author, now);
     defer allocator.free(payload);
@@ -641,7 +641,7 @@ pub fn notarizeVerify(allocator: std.mem.Allocator,
     var it = d.iterate();
     while (try it.next(io)) |entry| {
         if (std.mem.startsWith(u8, entry.name, rec_id_prefix)) {
-            found_rec = try loadRecord(allocator, repo, entry.name);
+            found_rec = try loadRecord(allocator, io, repo, entry.name);
             break;
         }
     }
@@ -698,7 +698,7 @@ pub fn notarizeList(allocator: std.mem.Allocator,
     var it = d.iterate();
     while (try it.next(io)) |entry| {
         if (entry.kind != .file) continue;
-        const rec = (try loadRecord(allocator, repo, entry.name)) orelse continue;
+        const rec = (try loadRecord(allocator, io, repo, entry.name)) orelse continue;
         defer freeRecord(allocator, rec);
         count += 1;
 

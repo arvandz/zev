@@ -222,7 +222,10 @@ fn httpPost(allocator: std.mem.Allocator,
     io: std.Io, endpoint: []const u8, token: []const u8, payload: []const u8) !struct { status: u32, body: []u8 } {
     const tmp_path = "/tmp/zev_publish_payload.json";
     const tmp_file = try std.Io.Dir.cwd().createFile(io, tmp_path, .{});
-    try tmp_file.writeAll(payload);
+    var tmp_file_buffer: [512]u8 = undefined;
+    var tmp_file_writer = tmp_file.writer(io, &tmp_file_buffer);
+    try tmp_file_writer.interface.writeAll(payload);
+    try tmp_file_writer.flush();
     tmp_file.close(io);
 
     const auth_header = if (token.len > 0)
@@ -243,15 +246,18 @@ fn httpPost(allocator: std.mem.Allocator,
     }
     try argv.append(allocator, endpoint);
 
-    var child = std.process.Child.init(io, argv.items, allocator);
-    child.stdout_behavior = .Pipe;
-    child.stderr_behavior = .Pipe;
-    try child.spawn();
+    var child = try std.process.spawn(io, .{
+        .argv = argv.items,
+        .stdout = .pipe,
+        .stderr = .pipe,
+    });
 
     var out_buf: [65536]u8 = undefined;
-    const bytes_read = try child.stdout.?.read(&out_buf);
+    var child_scratch: [4096]u8 = undefined;
+    var child_reader = child.stdout.?.reader(io, &child_scratch);
+    const bytes_read = child_reader.interface.readSliceShort(&out_buf) catch 0;
     const stdout = try allocator.dupe(u8, out_buf[0..bytes_read]);
-    _ = try child.wait();
+    _ = try child.wait(io);
 
     var status: u32 = 0;
     var body: []u8 = stdout;
@@ -303,10 +309,10 @@ pub fn publishCommit(
     const branch = try getCurrentBranch(allocator, io, repo);
     defer allocator.free(branch);
 
-    const metrics = try readMetrics(allocator, repo, commit_hash);
+    const metrics = try readMetrics(allocator, io, repo, commit_hash);
     defer allocator.free(metrics);
 
-    const author = try getAuthor(allocator, repo);
+    const author = try getAuthor(allocator, io, repo);
     defer allocator.free(author);
 
     const payload = try buildCommitPayload(allocator, commit_hash, commit.message, author, branch, metrics, tags, note, cfg.username, repo_name);
@@ -409,7 +415,7 @@ pub fn publishExperiment(
     defer allocator.free(branch_head);
     const head_hash = std.mem.trim(u8, branch_head, " \n\r\t");
 
-    const metrics = try readMetrics(allocator, repo, head_hash);
+    const metrics = try readMetrics(allocator, io, repo, head_hash);
     defer allocator.free(metrics);
 
     const payload = try buildExperimentPayload(allocator, exp_name, description, hypothesis, status, exp_branch, tags, metrics, cfg.username, repo_name);

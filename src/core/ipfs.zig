@@ -105,7 +105,7 @@ pub const IPFSClient = struct {
         return try self.allocator.dupe(u8, key.string);
     }
 
-    pub fn blockStat(io: std.Io, self: *IPFSClient, ipfs_cid: []const u8) !BlockStat {
+    pub fn blockStat(self: *IPFSClient, io: std.Io, ipfs_cid: []const u8) !BlockStat {
         const url = try std.fmt.allocPrint(self.allocator, "{s}/api/v0/block/stat?arg={s}", .{ self.api_url, ipfs_cid });
         defer self.allocator.free(url);
 
@@ -114,7 +114,7 @@ pub const IPFSClient = struct {
             .stdout = .pipe,
             .stderr = .ignore,
         });
-        const stdout = try procutil.readAllStdout(self.allocator, child.stdout.?, 1024 * 1024);
+        const stdout = try procutil.readAllStdout(io, self.allocator, child.stdout.?, 1024 * 1024);
         defer self.allocator.free(stdout);
 
         const term = try child.wait(io);
@@ -132,7 +132,7 @@ pub const IPFSClient = struct {
         };
     }
 
-    pub fn pin(io: std.Io, self: *IPFSClient, ipfs_cid: []const u8) !void {
+    pub fn pin(self: *IPFSClient, io: std.Io, ipfs_cid: []const u8) !void {
         const url = try std.fmt.allocPrint(self.allocator, "{s}/api/v0/pin/add?arg={s}", .{ self.api_url, ipfs_cid });
         defer self.allocator.free(url);
 
@@ -145,7 +145,7 @@ pub const IPFSClient = struct {
         if (term != .exited or term.exited != 0) return error.IPFSFailed;
     }
 
-    pub fn unpin(io: std.Io, self: *IPFSClient, ipfs_cid: []const u8) !void {
+    pub fn unpin(self: *IPFSClient, io: std.Io, ipfs_cid: []const u8) !void {
         const url = try std.fmt.allocPrint(self.allocator, "{s}/api/v0/pin/rm?arg={s}", .{ self.api_url, ipfs_cid });
         defer self.allocator.free(url);
 
@@ -158,7 +158,7 @@ pub const IPFSClient = struct {
         if (term != .exited or term.exited != 0) return error.IPFSFailed;
     }
 
-    pub fn version(io: std.Io, self: *IPFSClient) ![]const u8 {
+    pub fn version(self: *IPFSClient, io: std.Io) ![]const u8 {
         const url = try std.fmt.allocPrint(self.allocator, "{s}/api/v0/version", .{self.api_url});
         defer self.allocator.free(url);
 
@@ -167,7 +167,7 @@ pub const IPFSClient = struct {
             .stdout = .pipe,
             .stderr = .ignore,
         });
-        const stdout = try procutil.readAllStdout(self.allocator, child.stdout.?, 1024 * 1024);
+        const stdout = try procutil.readAllStdout(io, self.allocator, child.stdout.?, 1024 * 1024);
         defer self.allocator.free(stdout);
 
         const term = try child.wait(io);
@@ -180,7 +180,7 @@ pub const IPFSClient = struct {
         return try self.allocator.dupe(u8, version_obj.string);
     }
 
-    pub fn id(io: std.Io, self: *IPFSClient) !NodeID {
+    pub fn id(self: *IPFSClient, io: std.Io) !NodeID {
         const url = try std.fmt.allocPrint(self.allocator, "{s}/api/v0/id", .{self.api_url});
         defer self.allocator.free(url);
 
@@ -189,7 +189,7 @@ pub const IPFSClient = struct {
             .stdout = .pipe,
             .stderr = .ignore,
         });
-        const stdout = try procutil.readAllStdout(self.allocator, child.stdout.?, 1024 * 1024);
+        const stdout = try procutil.readAllStdout(io, self.allocator, child.stdout.?, 1024 * 1024);
         defer self.allocator.free(stdout);
 
         const term = try child.wait(io);

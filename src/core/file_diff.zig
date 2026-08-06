@@ -1,5 +1,6 @@
 const std = @import("std");
 const ipld = @import("ipld.zig");
+const weight_diff = @import("weight_diff.zig");
 
 pub const TreeEntry = struct {
     name: []u8,
@@ -94,24 +95,52 @@ fn findObject(
 
 const FileType = enum {
     python,
+    code,
     json,
     yaml,
     toml,
     markdown,
     text,
+    weights,
     binary,
 
     fn fromName(name: []const u8) FileType {
         if (std.mem.endsWith(u8, name, ".py")) return .python;
-        if (std.mem.endsWith(u8, name, ".json")) return .json;
-        if (std.mem.endsWith(u8, name, ".yaml")) return .yaml;
-        if (std.mem.endsWith(u8, name, ".yml")) return .yaml;
+
+        const code_ext = [_][]const u8{
+            ".js",   ".ts",  ".jsx",  ".tsx",   ".go",    ".rs",    ".c",
+            ".h",    ".cpp", ".hpp",  ".cc",    ".java",  ".rb",    ".php",
+            ".cs",   ".kt",  ".swift",".scala", ".lua",   ".r",     ".jl",
+            ".ex",   ".exs", ".erl",  ".hs",    ".clj",   ".zig",   ".dart",
+            ".m",    ".mm",  ".v",    ".sol",   ".ps1",
+        };
+        for (code_ext) |e| if (std.mem.endsWith(u8, name, e)) return .code;
+
+        const json_ext = [_][]const u8{ ".json", ".ipynb", ".jsonl" };
+        for (json_ext) |e| if (std.mem.endsWith(u8, name, e)) return .json;
+
+        const yaml_ext = [_][]const u8{ ".yaml", ".yml" };
+        for (yaml_ext) |e| if (std.mem.endsWith(u8, name, e)) return .yaml;
+
         if (std.mem.endsWith(u8, name, ".toml")) return .toml;
-        if (std.mem.endsWith(u8, name, ".md")) return .markdown;
-        if (std.mem.endsWith(u8, name, ".txt")) return .text;
-        if (std.mem.endsWith(u8, name, ".cfg")) return .text;
-        if (std.mem.endsWith(u8, name, ".ini")) return .text;
-        if (std.mem.endsWith(u8, name, ".sh")) return .text;
+
+        const md_ext = [_][]const u8{ ".md", ".markdown", ".rst" };
+        for (md_ext) |e| if (std.mem.endsWith(u8, name, e)) return .markdown;
+
+        const weight_ext = [_][]const u8{
+            ".safetensors", ".npy", ".npz", ".pt", ".pth",
+            ".ckpt",        ".bin", ".gguf", ".onnx", ".msgpack",
+            ".h5",          ".pb",
+        };
+        for (weight_ext) |e| if (std.mem.endsWith(u8, name, e)) return .weights;
+
+        const text_ext = [_][]const u8{
+            ".txt",  ".cfg", ".ini",  ".sh",   ".env",  ".properties",
+            ".conf", ".csv", ".tsv",  ".xml",  ".html", ".css",
+            ".sql",  ".log", ".gitignore", ".dockerfile", ".makefile",
+        };
+        for (text_ext) |e| if (std.mem.endsWith(u8, name, e)) return .text;
+
         return .binary;
     }
 };
@@ -135,6 +164,9 @@ pub const SemanticChange = struct {
         line_added,
         line_removed,
         binary_changed,
+        weight_added,
+        weight_removed,
+        weight_modified,
     };
 };
 
@@ -158,6 +190,132 @@ pub const FileDiff = struct {
         allocator.free(self.semantic);
     }
 };
+
+fn diffGenericCode(
+    allocator: std.mem.Allocator,
+    content_a: []const u8,
+    content_b: []const u8,
+    out: *std.ArrayList(SemanticChange),
+) !void {
+    const defs_a = try extractGenericDefs(allocator, content_a);
+    defer {
+        for (defs_a) |d| allocator.free(d);
+        allocator.free(defs_a);
+    }
+    const defs_b = try extractGenericDefs(allocator, content_b);
+    defer {
+        for (defs_b) |d| allocator.free(d);
+        allocator.free(defs_b);
+    }
+
+    for (defs_b) |def| {
+        var found = false;
+        for (defs_a) |da| if (std.mem.eql(u8, da, def)) {
+            found = true;
+            break;
+        };
+        if (!found) try out.append(allocator, .{
+            .kind = .function_added,
+            .what = try allocator.dupe(u8, def),
+            .detail = try allocator.dupe(u8, "added"),
+        });
+    }
+    for (defs_a) |def| {
+        var found = false;
+        for (defs_b) |db| if (std.mem.eql(u8, db, def)) {
+            found = true;
+            break;
+        };
+        if (!found) try out.append(allocator, .{
+            .kind = .function_removed,
+            .what = try allocator.dupe(u8, def),
+            .detail = try allocator.dupe(u8, "removed"),
+        });
+    }
+
+    const imports_a = try extractGenericImports(allocator, content_a);
+    defer {
+        for (imports_a) |i| allocator.free(i);
+        allocator.free(imports_a);
+    }
+    const imports_b = try extractGenericImports(allocator, content_b);
+    defer {
+        for (imports_b) |i| allocator.free(i);
+        allocator.free(imports_b);
+    }
+
+    for (imports_b) |imp| {
+        var found = false;
+        for (imports_a) |ia| if (std.mem.eql(u8, ia, imp)) {
+            found = true;
+            break;
+        };
+        if (!found) try out.append(allocator, .{
+            .kind = .import_added,
+            .what = try allocator.dupe(u8, imp),
+            .detail = try allocator.dupe(u8, "added"),
+        });
+    }
+    for (imports_a) |imp| {
+        var found = false;
+        for (imports_b) |ib| if (std.mem.eql(u8, ib, imp)) {
+            found = true;
+            break;
+        };
+        if (!found) try out.append(allocator, .{
+            .kind = .import_removed,
+            .what = try allocator.dupe(u8, imp),
+            .detail = try allocator.dupe(u8, "removed"),
+        });
+    }
+
+    try diffNumericAssignments(allocator, content_a, content_b, out);
+}
+
+fn extractGenericDefs(allocator: std.mem.Allocator, content: []const u8) ![][]u8 {
+    var defs = std.ArrayList([]u8).empty;
+    const keywords = [_][]const u8{
+        "def ",    "class ",  "fn ",       "func ",      "function ",
+        "struct ", "trait ",  "interface ","impl ",      "namespace ",
+        "module ", "public class ", "private class ", "protected class ",
+        "public void ", "public static ", "async fn ",  "async function ",
+        "export function ", "export class ", "pub fn ",  "pub struct ",
+    };
+    var lines = std.mem.splitSequence(u8, content, "\n");
+    while (lines.next()) |line| {
+        const trimmed = std.mem.trimStart(u8, line, " \t");
+        for (keywords) |kw| {
+            if (std.mem.startsWith(u8, trimmed, kw)) {
+                const end = std.mem.indexOf(u8, trimmed, "(") orelse
+                    std.mem.indexOf(u8, trimmed, "{") orelse
+                    std.mem.indexOf(u8, trimmed, ":") orelse trimmed.len;
+                const piece = std.mem.trim(u8, trimmed[0..end], " ");
+                if (piece.len > 0) try defs.append(allocator, try allocator.dupe(u8, piece));
+                break;
+            }
+        }
+    }
+    return defs.toOwnedSlice(allocator);
+}
+
+fn extractGenericImports(allocator: std.mem.Allocator, content: []const u8) ![][]u8 {
+    var imports = std.ArrayList([]u8).empty;
+    const keywords = [_][]const u8{
+        "import ", "from ", "require(", "use ", "#include",
+        "using ", "package ", "extern crate ",
+    };
+    var lines = std.mem.splitSequence(u8, content, "\n");
+    while (lines.next()) |line| {
+        const trimmed = std.mem.trim(u8, line, " \t");
+        for (keywords) |kw| {
+            if (std.mem.startsWith(u8, trimmed, kw)) {
+                try imports.append(allocator, try allocator.dupe(u8, trimmed));
+                break;
+            }
+        }
+    }
+    return imports.toOwnedSlice(allocator);
+}
 
 fn diffPython(
     allocator: std.mem.Allocator,
@@ -433,6 +591,79 @@ fn extractConfigPairs(
     }
 }
 
+
+fn diffWeights(
+    allocator: std.mem.Allocator,
+    content_a: []const u8,
+    content_b: []const u8,
+    name: []const u8,
+    out: *std.ArrayList(SemanticChange),
+) !void {
+    var wf_a = weight_diff.parseWeightFileFromBytes(allocator, name, content_a) catch {
+        try out.append(allocator, .{
+            .kind = .binary_changed,
+            .what = try allocator.dupe(u8, "weight file"),
+            .detail = try allocator.dupe(u8, "could not parse tensor format"),
+        });
+        return;
+    };
+    defer wf_a.deinit(allocator);
+
+    var wf_b = weight_diff.parseWeightFileFromBytes(allocator, name, content_b) catch {
+        wf_a.deinit(allocator);
+        try out.append(allocator, .{
+            .kind = .binary_changed,
+            .what = try allocator.dupe(u8, "weight file"),
+            .detail = try allocator.dupe(u8, "could not parse tensor format"),
+        });
+        return;
+    };
+    defer wf_b.deinit(allocator);
+
+    var diff = try weight_diff.computeWeightDiff(allocator, &wf_a, &wf_b, content_a, content_b, name, name);
+    defer diff.deinit(allocator);
+
+    for (diff.tensors) |t| {
+        switch (t.change) {
+            .added => {
+                try out.append(allocator, .{
+                    .kind = .weight_added,
+                    .what = try allocator.dupe(u8, t.name),
+                    .detail = try std.fmt.allocPrint(allocator, "{d} params", .{t.params_b}),
+                });
+            },
+            .removed => {
+                try out.append(allocator, .{
+                    .kind = .weight_removed,
+                    .what = try allocator.dupe(u8, t.name),
+                    .detail = try std.fmt.allocPrint(allocator, "{d} params", .{t.params_a}),
+                });
+            },
+            .modified => {
+                const shape_note = if (t.params_a != t.params_b) " shape changed," else "";
+                try out.append(allocator, .{
+                    .kind = .weight_modified,
+                    .what = try allocator.dupe(u8, t.name),
+                    .detail = detail_blk: {
+                        const nsign: []const u8 = if (t.norm_delta_pct >= 0) "+" else "";
+                        break :detail_blk try std.fmt.allocPrint(allocator,
+                            "{s} norm {s}{d:.1}%  cosine {d:.4}", .{ shape_note, nsign, t.norm_delta_pct, t.cosine_sim });
+                    },
+                });
+            },
+            .unchanged => {},
+        }
+    }
+
+    if (diff.arch_changed) {
+        try out.append(allocator, .{
+            .kind = .weight_modified,
+            .what = try allocator.dupe(u8, "architecture"),
+            .detail = try allocator.dupe(u8, "changed — not backward compatible"),
+        });
+    }
+}
+
 fn diffText(
     allocator: std.mem.Allocator,
     content_a: []const u8,
@@ -551,6 +782,7 @@ pub fn diffTrees(
         if (content_a != null and content_b != null) {
             switch (ftype) {
                 .python => try diffPython(allocator, content_a.?, content_b.?, &semantic),
+                .code => try diffGenericCode(allocator, content_a.?, content_b.?, &semantic),
                 .json, .yaml, .toml => try diffConfig(allocator, content_a.?, content_b.?, &semantic),
                 .text, .markdown => try diffText(allocator, content_a.?, content_b.?, &semantic),
                 .binary => try semantic.append(allocator, .{
@@ -558,6 +790,7 @@ pub fn diffTrees(
                     .what = try allocator.dupe(u8, "binary content"),
                     .detail = try std.fmt.allocPrint(allocator, "{d} → {d} bytes", .{ ea.size, eb.size }),
                 }),
+                .weights => try diffWeights(allocator, content_a.?, content_b.?, eb.name, &semantic),
             }
         }
 
@@ -639,6 +872,9 @@ pub fn printFileDiffs(
                 .line_added => "   ＋",
                 .line_removed => "   －",
                 .binary_changed => "   ≈ ",
+                .weight_added => "   ＋ layer",
+                .weight_removed => "   － layer",
+                .weight_modified => "   ⚖️  layer",
             };
             std.debug.print("      {s} {s}  {s}\n", .{ sc_icon, sc.what, sc.detail });
         }
@@ -659,5 +895,7 @@ fn extIcon(ft: FileType) []const u8 {
         .markdown => "📝",
         .text => "📄",
         .binary => "📦",
+        .weights => "⚖️ ",
+        .code => "💻",
     };
 }

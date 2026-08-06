@@ -147,13 +147,15 @@ pub fn dagStat(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) !voi
     var store = try ipld.BlockStore.init(allocator, io, repo.path);
     defer store.deinit();
 
-    const block_count = store.count(io, );
+    const block_count = store.count(
+        io,
+    );
 
     var total_bytes: u64 = 0;
     var by_type = std.StringHashMap(usize).init(allocator);
     defer {
         var it = by_type.iterator();
-        while (it.next(io)) |e| allocator.free(e.key_ptr.*);
+        while (it.next()) |e| allocator.free(e.key_ptr.*);
         by_type.deinit();
     }
 
@@ -181,7 +183,7 @@ pub fn dagStat(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) !voi
             if (block_entry.kind != .file) continue;
             const block_path = try std.fs.path.join(allocator, &.{ shard_path, block_entry.name });
             defer allocator.free(block_path);
-            const stat = std.Io.Dir.cwd().statFile(io, block_path) catch continue;
+            const stat = std.Io.Dir.cwd().statFile(io, block_path, .{}) catch continue;
             total_bytes += @intCast(stat.size);
 
             const data = std.Io.Dir.cwd().readFileAlloc(io, block_path, allocator, .limited(4096)) catch continue;
@@ -214,10 +216,10 @@ pub fn dagStat(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) !voi
         std.debug.print("   Total size: {d} KB\n\n", .{total_bytes / 1024});
     }
 
-    if (by_type.count(io, ) > 0) {
+    if (by_type.count() > 0) {
         std.debug.print("   By type:\n", .{});
         var it = by_type.iterator();
-        while (it.next(io)) |entry| {
+        while (it.next()) |entry| {
             std.debug.print("   {s:<20} {d}\n", .{ entry.key_ptr.*, entry.value_ptr.* });
         }
         std.debug.print("\n", .{});
@@ -233,7 +235,7 @@ pub fn graftAdd(
     description: []const u8,
     fetch_from_ipfs: bool,
 ) !void {
-    const now = @divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s);
+    const now: i64 = @intCast(@divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s));
 
     const c = parseCID(cid_str) catch {
         std.debug.print("❌ Invalid CID: {s}\n", .{cid_str});
@@ -245,7 +247,7 @@ pub fn graftAdd(
 
     const config_path = try std.fs.path.join(allocator, &.{ repo.path, ".zev", "config" });
     defer allocator.free(config_path);
-    const author = try loadConfigField(allocator, config_path, "user.name");
+    const author = try loadConfigField(allocator, io, config_path, "user.name");
     defer allocator.free(author);
 
     if (fetch_from_ipfs and !store.has(io, c)) {
@@ -267,7 +269,7 @@ pub fn graftAdd(
     defer arena.deinit();
     const aa = arena.allocator();
     const graft_val = try graft.toValue(aa);
-    const graft_cid = try store.putNode(io, aa, graft_val);
+    const graft_cid = try store.putNode(aa, io, graft_val);
 
     try saveGraftAlias(allocator, io, repo, alias, cid_str, graft_cid);
 
@@ -311,7 +313,13 @@ pub fn graftList(allocator: std.mem.Allocator, io: std.Io, repo: *Repository) !v
 
     std.debug.print("🔗 Grafted External Links:\n\n", .{});
     std.debug.print("   {s:<30} {s:<20} {s}\n", .{ "Alias", "Target CID", "Description" });
-    std.debug.print("   {s}\n", .{"─"**72});
+    const dash = comptime blk: {
+        var s: []const u8 = "";
+        for (0..72) |_| s = s ++ "─";
+        break :blk s;
+    };
+    std.debug.print("   {s}\n", .{dash});
+    std.debug.print("   {s}\n", .{dash});
 
     var count: usize = 0;
     var it = dir.iterate();
@@ -501,7 +509,7 @@ fn saveGraftAlias(
     const graft_short = try graft_cid.toShort(allocator);
     defer allocator.free(graft_short);
 
-    const now = @divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s);
+    const now: i64 = @intCast(@divTrunc(std.Io.Timestamp.now(io, .real).nanoseconds, std.time.ns_per_s));
 
     const content = try std.fmt.allocPrint(allocator, "alias={s}\ntarget={s}\ngraft_cid={s}\nts={d}\n", .{ alias, target_cid, graft_short, now });
     defer allocator.free(content);
