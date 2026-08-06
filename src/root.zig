@@ -1,5 +1,6 @@
 const std = @import("std");
 pub const checkout = @import("core/checkout.zig");
+pub const crypto = @import("core/crypto.zig");
 
 pub fn bufferedPrint() !void {
     var stdout_buffer: [1024]u8 = undefined;
