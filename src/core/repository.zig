@@ -117,12 +117,63 @@ pub const Repository = struct {
         var commit_tree = tree.Tree.init(self.allocator);
         defer commit_tree.deinit();
 
+        const parent_cid = self.getHeadCommit(io) catch null;
+
+        var base_entries = std.StringHashMap(tree.FileEntry).init(self.allocator);
+        defer {
+            var vit = base_entries.valueIterator();
+            while (vit.next()) |v| self.allocator.free(v.name);
+            base_entries.deinit();
+        }
+
+        if (parent_cid) |pcid| {
+            const parent_data = self.store.get(io, pcid) catch null;
+            if (parent_data) |pd| {
+                defer self.allocator.free(pd);
+                if (commit.Commit.deserialize(self.allocator, pd)) |pc| {
+                    defer self.allocator.free(pc.author);
+                    defer self.allocator.free(pc.message);
+                    const parent_tree_data = self.store.get(io, pc.tree_cid) catch null;
+                    if (parent_tree_data) |ptd| {
+                        defer self.allocator.free(ptd);
+                        if (tree.Tree.deserialize(self.allocator, ptd)) |pt_const| {
+                            var pt = pt_const;
+                            defer pt.deinit();
+                            for (pt.entries.items) |entry| {
+                                const name_copy = try self.allocator.dupe(u8, entry.name);
+                                try base_entries.put(name_copy, .{
+                                    .name = name_copy,
+                                    .cid = entry.cid,
+                                    .size = entry.size,
+                                    .mode = entry.mode,
+                                });
+                            }
+                        } else |_| {}
+                    }
+                } else |_| {}
+            }
+        }
+
         for (self.index.entries.items) |entry| {
-            const tree_entry = tree.FileEntry{
-                .name = try self.allocator.dupe(u8, entry.path),
+            if (base_entries.fetchRemove(entry.path)) |kv| {
+                self.allocator.free(kv.value.name);
+            }
+            const name_copy = try self.allocator.dupe(u8, entry.path);
+            try base_entries.put(name_copy, .{
+                .name = name_copy,
                 .cid = entry.cid,
                 .size = entry.size,
                 .mode = entry.mode,
+            });
+        }
+
+        var it = base_entries.valueIterator();
+        while (it.next()) |v| {
+            const tree_entry = tree.FileEntry{
+                .name = try self.allocator.dupe(u8, v.name),
+                .cid = v.cid,
+                .size = v.size,
+                .mode = v.mode,
             };
             try commit_tree.entries.append(self.allocator, tree_entry);
         }
@@ -137,8 +188,6 @@ pub const Repository = struct {
             defer self.allocator.free(ipfs_tree_cid);
             std.debug.print("🌲 Tree stored in IPFS: {s}\n", .{ipfs_tree_cid});
         }
-
-        const parent_cid = self.getHeadCommit(io) catch null;
 
         const new_commit = commit.Commit.init(io, tree_cid, parent_cid, author, message);
         const commit_data = try new_commit.serialize(self.allocator);
