@@ -46,6 +46,8 @@ const sdiff = @import("core/semantic_diff.zig");
 const regression = @import("core/regression.zig");
 const weight_diff = @import("core/weight_diff.zig");
 const weight_merge = @import("core/weight_merge.zig");
+const remote_http = @import("core/remote_http.zig");
+const weight_diff_api_cli = @import("core/weight_diff_api_cli.zig");
 
 pub fn main(init: std.process.Init) !void {
     const io = init.io;
@@ -2601,6 +2603,108 @@ pub fn main(init: std.process.Init) !void {
             defer report.deinit(allocator);
             weight_merge.printMergeReport(&report, out);
         }
+    } else if (std.mem.eql(u8, command, "push-api")) {
+        if (!repository.Repository.exists(allocator, io, ".")) {
+            std.debug.print("Not a zev repository.\n", .{});
+            return;
+        }
+        var repo = try repository.Repository.open(allocator, io, ".");
+        defer repo.deinit();
+
+        if (args.len < 4) {
+            std.debug.print("Usage: zev push-api <zevapi://host:port/owner/repo> <branch> --token <pat>\n\n", .{});
+            std.debug.print("Example:\n", .{});
+            std.debug.print("  zev push-api zevapi://localhost:8080/arvand/my-model main --token zev_pat_...\n\n", .{});
+            return;
+        }
+
+        const remote_url: []const u8 = args[2];
+        const branch_name: []const u8 = args[3];
+        var token: []const u8 = "";
+        var i: usize = 4;
+        while (i < args.len) : (i += 1) {
+            if (std.mem.eql(u8, args[i], "--token") and i + 1 < args.len) {
+                i += 1;
+                token = args[i];
+            }
+        }
+
+        if (token.len == 0) {
+            std.debug.print("Error: --token <pat> is required\n\n", .{});
+            return;
+        }
+
+        try remote_http.pushToApi(allocator, io, &repo, remote_url, branch_name, token);
+    } else if (std.mem.eql(u8, command, "pull-api")) {
+        if (!repository.Repository.exists(allocator, io, ".")) {
+            std.debug.print("Not a zev repository. Run 'zev init' first, or use 'zev clone-api'.\n", .{});
+            return;
+        }
+        if (args.len < 4) {
+            std.debug.print("Usage: zev pull-api <zevapi://host:port/owner/repo> <branch> [--token <pat>]\n\n", .{});
+            return;
+        }
+        const remote_url_p: []const u8 = args[2];
+        const branch_p: []const u8 = args[3];
+        var token_p: ?[]const u8 = null;
+        var pi: usize = 4;
+        while (pi < args.len) : (pi += 1) {
+            if (std.mem.eql(u8, args[pi], "--token") and pi + 1 < args.len) {
+                pi += 1;
+                token_p = args[pi];
+            }
+        }
+        try remote_http.pullFromApi(allocator, io, ".", remote_url_p, branch_p, token_p);
+    } else if (std.mem.eql(u8, command, "clone-api")) {
+        if (args.len < 4) {
+            std.debug.print("Usage: zev clone-api <zevapi://host:port/owner/repo> <dir> [--branch <name>] [--token <pat>]\n\n", .{});
+            return;
+        }
+        const remote_url_c: []const u8 = args[2];
+        const dest_dir: []const u8 = args[3];
+        var branch_c: []const u8 = "main";
+        var token_c: ?[]const u8 = null;
+        var ci: usize = 4;
+        while (ci < args.len) : (ci += 1) {
+            if (std.mem.eql(u8, args[ci], "--branch") and ci + 1 < args.len) {
+                ci += 1;
+                branch_c = args[ci];
+            } else if (std.mem.eql(u8, args[ci], "--token") and ci + 1 < args.len) {
+                ci += 1;
+                token_c = args[ci];
+            }
+        }
+
+        try std.Io.Dir.cwd().createDirPath(io, dest_dir);
+        var new_repo = try repository.Repository.init(allocator, io, dest_dir, false);
+        defer new_repo.deinit();
+
+        try remote_http.pullFromApi(allocator, io, dest_dir, remote_url_c, branch_c, token_c);
+
+        std.debug.print("Cloned into '{s}'. Run 'cd {s} && zev checkout {s}' to materialize files.\n\n", .{ dest_dir, dest_dir, branch_c });
+    } else if (std.mem.eql(u8, command, "weight-diff-api")) {
+        if (args.len < 8) {
+            std.debug.print("Usage: zev weight-diff-api <base_url> <owner> <repo> <branch> <hash_a> <hash_b> <filename> [--token <pat>]\n\n", .{});
+            std.debug.print("Example:\n", .{});
+            std.debug.print("  zev weight-diff-api http://localhost:8090 arvand my-model main abc123 HEAD model.safetensors --token zev_pat_...\n\n", .{});
+            return;
+        }
+        const wd_base_url = args[2];
+        const wd_owner = args[3];
+        const wd_repo = args[4];
+        const wd_branch = args[5];
+        const wd_hash_a = args[6];
+        const wd_hash_b = args[7];
+        const wd_filename = args[8];
+        var wd_token: ?[]const u8 = null;
+        var wi: usize = 9;
+        while (wi < args.len) : (wi += 1) {
+            if (std.mem.eql(u8, args[wi], "--token") and wi + 1 < args.len) {
+                wi += 1;
+                wd_token = args[wi];
+            }
+        }
+        try weight_diff_api_cli.cmdWeightDiffApi(allocator, io, wd_base_url, wd_owner, wd_repo, wd_branch, wd_hash_a, wd_hash_b, wd_filename, wd_token);
     } else if (std.mem.eql(u8, command, "threshold")) {
         if (!repository.Repository.exists(allocator, io, ".")) {
             std.debug.print("Not a zev repository.\n", .{});
