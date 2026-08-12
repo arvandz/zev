@@ -48,6 +48,7 @@ const weight_diff = @import("core/weight_diff.zig");
 const weight_merge = @import("core/weight_merge.zig");
 const remote_http = @import("core/remote_http.zig");
 const weight_diff_api_cli = @import("core/weight_diff_api_cli.zig");
+const repo_dashboard_cli = @import("core/repo_dashboard_cli.zig");
 
 pub fn main(init: std.process.Init) !void {
     const io = init.io;
@@ -2705,6 +2706,25 @@ pub fn main(init: std.process.Init) !void {
             }
         }
         try weight_diff_api_cli.cmdWeightDiffApi(allocator, io, wd_base_url, wd_owner, wd_repo, wd_branch, wd_hash_a, wd_hash_b, wd_filename, wd_token);
+    } else if (std.mem.eql(u8, command, "repo-dashboard")) {
+        if (args.len < 5) {
+            std.debug.print("Usage: zev repo-dashboard <base_url> <owner> <repo> [--token <pat>]\n\n", .{});
+            std.debug.print("Example:\n", .{});
+            std.debug.print("  zev repo-dashboard http://localhost:8090 arvand my-model --token zev_pat_...\n\n", .{});
+            return;
+        }
+        const rd_base_url = args[2];
+        const rd_owner = args[3];
+        const rd_repo = args[4];
+        var rd_token: ?[]const u8 = null;
+        var ri: usize = 5;
+        while (ri < args.len) : (ri += 1) {
+            if (std.mem.eql(u8, args[ri], "--token") and ri + 1 < args.len) {
+                ri += 1;
+                rd_token = args[ri];
+            }
+        }
+        try repo_dashboard_cli.cmdRepoDashboard(allocator, io, rd_base_url, rd_owner, rd_repo, rd_token);
     } else if (std.mem.eql(u8, command, "threshold")) {
         if (!repository.Repository.exists(allocator, io, ".")) {
             std.debug.print("Not a zev repository.\n", .{});
