@@ -49,6 +49,7 @@ const weight_merge = @import("core/weight_merge.zig");
 const remote_http = @import("core/remote_http.zig");
 const weight_diff_api_cli = @import("core/weight_diff_api_cli.zig");
 const repo_dashboard_cli = @import("core/repo_dashboard_cli.zig");
+const dependency_graph_cli = @import("core/dependency_graph_cli.zig");
 
 pub fn main(init: std.process.Init) !void {
     const io = init.io;
@@ -2725,6 +2726,26 @@ pub fn main(init: std.process.Init) !void {
             }
         }
         try repo_dashboard_cli.cmdRepoDashboard(allocator, io, rd_base_url, rd_owner, rd_repo, rd_token);
+    } else if (std.mem.eql(u8, command, "dependency-graph")) {
+        if (args.len < 6) {
+            std.debug.print("Usage: zev dependency-graph <base_url> <owner> <repo> <commit_hash> [--token <pat>]\n\n", .{});
+            std.debug.print("Example:\n", .{});
+            std.debug.print("  zev dependency-graph http://localhost:8090 arvand chat-agent abc123... --token zev_pat_...\n\n", .{});
+            return;
+        }
+        const dg_base_url = args[2];
+        const dg_owner = args[3];
+        const dg_repo = args[4];
+        const dg_commit = args[5];
+        var dg_token: ?[]const u8 = null;
+        var dgi: usize = 6;
+        while (dgi < args.len) : (dgi += 1) {
+            if (std.mem.eql(u8, args[dgi], "--token") and dgi + 1 < args.len) {
+                dgi += 1;
+                dg_token = args[dgi];
+            }
+        }
+        try dependency_graph_cli.cmdDependencyGraph(allocator, io, dg_base_url, dg_owner, dg_repo, dg_commit, dg_token);
     } else if (std.mem.eql(u8, command, "threshold")) {
         if (!repository.Repository.exists(allocator, io, ".")) {
             std.debug.print("Not a zev repository.\n", .{});
