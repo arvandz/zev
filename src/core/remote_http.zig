@@ -1,5 +1,6 @@
 const std = @import("std");
 const Repository = @import("repository.zig").Repository;
+const crypto = @import("crypto.zig");
 
 const HttpResult = struct { status: u32, body: []u8 };
 
@@ -504,4 +505,102 @@ pub fn pullFromApi(
 
     std.debug.print("Pull complete — {s} is now at {s}\n", .{ branch, head_local_hash[0..16] });
     std.debug.print("   Run 'zev checkout {s}' to materialize working directory files.\n\n", .{branch});
+}
+
+/// Fetches and independently verifies a release's full provenance chain:
+/// the Zev server's provenance attestation, plus any organization
+/// endorsements. Every signature is checked LOCALLY against the public
+/// key returned in the response - this command trusts no claim it
+/// cannot itself verify cryptographically.
+pub fn verifyRelease(allocator: std.mem.Allocator, io: std.Io, base_url: []const u8, cid: []const u8) !void {
+    std.debug.print("Verifying release provenance for CID: {s}\n\n", .{cid});
+
+    const prov_url = try std.fmt.allocPrint(allocator, "{s}/v1/pins/{s}/provenance", .{ base_url, cid });
+    defer allocator.free(prov_url);
+    const prov_result = try httpGetBinary(allocator, io, prov_url, null);
+    defer allocator.free(prov_result.body);
+
+    if (prov_result.status != 200) {
+        std.debug.print("No provenance record found for this CID.\n", .{});
+        return;
+    }
+
+    const message = (try jsonGetString(allocator, prov_result.body, "message_to_verify")) orelse {
+        std.debug.print("Malformed provenance response.\n", .{});
+        return;
+    };
+    defer allocator.free(message);
+    const sig = (try jsonGetString(allocator, prov_result.body, "signature")) orelse {
+        std.debug.print("Malformed provenance response (missing signature).\n", .{});
+        return;
+    };
+    defer allocator.free(sig);
+    const server_pubkey = (try jsonGetString(allocator, prov_result.body, "server_public_key")) orelse {
+        std.debug.print("Malformed provenance response (missing server_public_key).\n", .{});
+        return;
+    };
+    defer allocator.free(server_pubkey);
+    const repo = (try jsonGetString(allocator, prov_result.body, "repo")) orelse try allocator.dupe(u8, "?");
+    defer allocator.free(repo);
+    const commit_hash = (try jsonGetString(allocator, prov_result.body, "commit_hash")) orelse try allocator.dupe(u8, "?");
+    defer allocator.free(commit_hash);
+    const asserted_by = (try jsonGetString(allocator, prov_result.body, "asserted_by")) orelse try allocator.dupe(u8, "?");
+    defer allocator.free(asserted_by);
+    const created_at = (try jsonGetString(allocator, prov_result.body, "created_at")) orelse try allocator.dupe(u8, "?");
+    defer allocator.free(created_at);
+
+    crypto.verify(message, sig, server_pubkey) catch {
+        std.debug.print("PROVENANCE SIGNATURE INVALID - do not trust this claim!\n", .{});
+        return;
+    };
+
+    std.debug.print("[VERIFIED] Provenance signature valid (Zev server identity)\n", .{});
+    std.debug.print("  Repo:        {s}\n", .{repo});
+    std.debug.print("  Commit:      {s}\n", .{commit_hash});
+    std.debug.print("  Asserted by: {s}\n", .{asserted_by});
+    std.debug.print("  At:          {s}\n", .{created_at});
+    std.debug.print("  (this proves a chain-of-custody claim, not a reproducible build)\n\n", .{});
+
+    const endorse_url = try std.fmt.allocPrint(allocator, "{s}/v1/pins/{s}/org-endorsement", .{ base_url, cid });
+    defer allocator.free(endorse_url);
+    const endorse_result = try httpGetBinary(allocator, io, endorse_url, null);
+    defer allocator.free(endorse_result.body);
+
+    if (endorse_result.status != 200) {
+        std.debug.print("No organization endorsements found for this release.\n", .{});
+        return;
+    }
+
+    const parsed = std.json.parseFromSlice(std.json.Value, allocator, endorse_result.body, .{}) catch {
+        std.debug.print("Could not parse endorsement response.\n", .{});
+        return;
+    };
+    defer parsed.deinit();
+
+    if (parsed.value != .object) return;
+    const endorsements_val = parsed.value.object.get("org_endorsements") orelse return;
+    if (endorsements_val != .array) return;
+
+    if (endorsements_val.array.items.len == 0) {
+        std.debug.print("No organization endorsements found for this release.\n", .{});
+        return;
+    }
+
+    std.debug.print("Organization endorsements:\n", .{});
+    for (endorsements_val.array.items) |entry| {
+        if (entry != .object) continue;
+        const org_name = if (entry.object.get("org")) |v| (if (v == .string) v.string else "?") else "?";
+        const org_pubkey = if (entry.object.get("org_public_key")) |v| (if (v == .string) v.string else "") else "";
+        const e_sig = if (entry.object.get("signature")) |v| (if (v == .string) v.string else "") else "";
+        const e_msg = if (entry.object.get("message_to_verify")) |v| (if (v == .string) v.string else "") else "";
+        const note = if (entry.object.get("note")) |v| (if (v == .string) v.string else "") else "";
+
+        crypto.verify(e_msg, e_sig, org_pubkey) catch {
+            std.debug.print("  [INVALID] {s}: SIGNATURE INVALID - do not trust this endorsement!\n", .{org_name});
+            continue;
+        };
+        std.debug.print("  [VERIFIED] {s} endorses this release", .{org_name});
+        if (note.len > 0) std.debug.print(": \"{s}\"", .{note});
+        std.debug.print("\n", .{});
+    }
 }

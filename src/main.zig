@@ -2684,6 +2684,16 @@ pub fn main(init: std.process.Init) !void {
         try remote_http.pullFromApi(allocator, io, dest_dir, remote_url_c, branch_c, token_c);
 
         std.debug.print("Cloned into '{s}'. Run 'cd {s} && zev checkout {s}' to materialize files.\n\n", .{ dest_dir, dest_dir, branch_c });
+    } else if (std.mem.eql(u8, command, "verify-release")) {
+        if (args.len < 4) {
+            std.debug.print("Usage: zev verify-release <base_url> <cid>\n\n", .{});
+            std.debug.print("Example:\n", .{});
+            std.debug.print("  zev verify-release http://localhost:8090 QmSomeArtifactCID\n\n", .{});
+            return;
+        }
+        const vr_base_url = args[2];
+        const vr_cid = args[3];
+        try remote_http.verifyRelease(allocator, io, vr_base_url, vr_cid);
     } else if (std.mem.eql(u8, command, "weight-diff-api")) {
         if (args.len < 8) {
             std.debug.print("Usage: zev weight-diff-api <base_url> <owner> <repo> <branch> <hash_a> <hash_b> <filename> [--token <pat>]\n\n", .{});
